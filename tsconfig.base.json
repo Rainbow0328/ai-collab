@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "declaration": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@ai-collab/core": ["apps/core/src/index.ts"],
+      "@ai-collab/protocol": ["packages/protocol/src/index.ts"],
+      "@ai-collab/store": ["packages/store/src/index.ts"],
+      "@ai-collab/sdk": ["packages/sdk/src/index.ts"],
+      "@ai-collab/shared": ["packages/shared/src/index.ts"]
+    }
+  }
+}

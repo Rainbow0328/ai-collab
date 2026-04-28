@@ -1,0 +1,40 @@
+{
+  "name": "ai-collab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local AI collaboration hub with TypeScript core and unified CLI collaboration flow.",
+  "packageManager": "pnpm@10.10.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "link:cli": "npm run build && npm link --workspace apps/cli",
+    "pack:user": "npm run build && node scripts/pack-user-package.mjs && npm pack ./release/ai-collab --json --cache .npm-cache --pack-destination ./release/ai-collab",
+    "unlink:cli": "npm unlink -g ai-collab",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "smoke": "npm run build && node scripts/smoke.mjs",
+    "smoke:named": "npm run build && node scripts/smoke-named.mjs",
+    "smoke:cli:loop": "npm run build && node scripts/smoke-cli-loop.mjs",
+    "smoke:cli:wait-continuation": "npm run build && node scripts/smoke-cli-wait-continuation.mjs",
+    "smoke:cli:wait-takeover": "npm run build && node scripts/smoke-cli-wait-takeover.mjs",
+    "smoke:cli:message-handoff": "npm run build && node scripts/smoke-cli-message-handoff.mjs",
+    "smoke:cli:host-execute": "npm run build && node scripts/smoke-cli-host-execute.mjs",
+    "smoke:cli:attach-reset": "npm run build && node scripts/smoke-cli-attach-reset.mjs",
+    "smoke:cli:batch-dispatch": "npm run build && node scripts/smoke-cli-batch-dispatch.mjs",
+    "smoke:message:fail": "npm run build && node scripts/smoke-message-fail.mjs",
+    "smoke:duplicate-agent-name": "npm run build && node scripts/smoke-duplicate-agent-name.mjs",
+    "smoke:inbox:filters": "npm run build && node scripts/smoke-inbox-filters.mjs",
+    "smoke:session:release": "npm run build && node scripts/smoke-session-release.mjs",
+    "smoke:session:lifecycle": "npm run build && node scripts/smoke-session-lifecycle.mjs",
+    "smoke:cli:stale-identity": "npm run build && node scripts/smoke-cli-stale-identity.mjs",
+    "smoke:regression": "npm run build && node scripts/smoke-message-fail.mjs && node scripts/smoke-duplicate-agent-name.mjs && node scripts/smoke-inbox-filters.mjs",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}

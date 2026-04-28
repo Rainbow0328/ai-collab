@@ -1,0 +1,15 @@
+{
+  "name": "@ai-collab/store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/store/src/index.js",
+  "types": "dist/store/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-collab/protocol": "0.1.0"
+  }
+}

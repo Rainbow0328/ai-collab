@@ -1,0 +1,21 @@
+{
+  "name": "@ai-collab/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/sdk/src/index.js",
+  "types": "dist/sdk/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk/src/index.d.ts",
+      "default": "./dist/sdk/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-collab/protocol": "0.1.0"
+  }
+}

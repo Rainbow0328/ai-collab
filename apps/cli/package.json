@@ -1,0 +1,33 @@
+{
+  "name": "ai-collab",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Local AI collaboration hub CLI with unified member-session execution commands.",
+  "type": "module",
+  "bin": {
+    "ai-collab": "dist/apps/cli/src/index.js"
+  },
+  "main": "dist/apps/cli/src/index.js",
+  "types": "dist/apps/cli/src/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "bundledDependencies": [
+    "@ai-collab/core",
+    "@ai-collab/protocol",
+    "@ai-collab/shared",
+    "@ai-collab/sdk",
+    "@ai-collab/store"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-collab/core": "0.1.0",
+    "@ai-collab/protocol": "0.1.0",
+    "@ai-collab/shared": "0.1.0",
+    "@ai-collab/sdk": "0.1.0",
+    "commander": "^13.1.0"
+  }
+}

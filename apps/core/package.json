@@ -1,0 +1,27 @@
+{
+  "name": "@ai-collab/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/apps/core/src/index.js",
+  "types": "dist/apps/core/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/apps/core/src/index.d.ts",
+      "default": "./dist/apps/core/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-collab/protocol": "0.1.0",
+    "@ai-collab/shared": "0.1.0",
+    "@ai-collab/store": "0.1.0",
+    "@fastify/websocket": "^11.0.2",
+    "fastify": "^5.8.5",
+    "pino": "^9.6.0",
+    "zod": "^3.25.76"
+  }
+}

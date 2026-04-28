@@ -1,0 +1,65 @@
+{
+  "name": "@ai-collab/vscode-extension",
+  "version": "0.1.0",
+  "private": true,
+  "displayName": "AI Collab",
+  "description": "VS Code integration for the local ai-collab collaboration hub.",
+  "publisher": "ai-collab",
+  "type": "module",
+  "main": "dist/adapters/vscode-extension/src/extension.js",
+  "types": "dist/adapters/vscode-extension/src/extension.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/adapters/vscode-extension/src/extension.d.ts",
+      "default": "./dist/adapters/vscode-extension/src/extension.js"
+    }
+  },
+  "engines": {
+    "vscode": "^1.103.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:aiCollab.hostSession",
+    "onCommand:aiCollab.joinSession",
+    "onCommand:aiCollab.showStatus",
+    "onCommand:aiCollab.openInbox",
+    "onCommand:aiCollab.leaveSession"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiCollab.hostSession",
+        "title": "AI Collab: Host Session"
+      },
+      {
+        "command": "aiCollab.joinSession",
+        "title": "AI Collab: Join Session"
+      },
+      {
+        "command": "aiCollab.showStatus",
+        "title": "AI Collab: Show Status"
+      },
+      {
+        "command": "aiCollab.openInbox",
+        "title": "AI Collab: Open Inbox"
+      },
+      {
+        "command": "aiCollab.leaveSession",
+        "title": "AI Collab: Leave Session"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-collab/sdk": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.103.0"
+  }
+}

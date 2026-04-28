@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+.DS_Store
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.ai-collab/
+.ai-collab-test
+.idea
+/docs/
+.npm-cache/
