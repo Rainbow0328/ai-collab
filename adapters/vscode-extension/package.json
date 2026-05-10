@@ -57,7 +57,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-collab/sdk": "0.1.0"
+    "@ai-collab/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/vscode": "^1.103.0"

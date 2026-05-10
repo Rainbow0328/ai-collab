@@ -1,26 +1,9 @@
-/*
- * Copyright 2024 Cloud Skill Team
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-export type CoreConfig = {
-  host: string;
-  port: number;
-  databasePath: string;
+import { loadConfig, type CoreConfig, defaultCoreConfig as sharedDefaultCoreConfig } from "@ai-collab/shared";
+
+export { type CoreConfig };
+
+export const getCoreConfig = (): CoreConfig => {
+  return loadConfig();
 };
 
-export const defaultCoreConfig: CoreConfig = {
-  host: "127.0.0.1",
-  port: 42688,
-  databasePath: ".ai-collab/ai-collab.sqlite"
-};
-
+export const defaultCoreConfig = sharedDefaultCoreConfig;

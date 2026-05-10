@@ -159,7 +159,7 @@ const main = async () => {
       "the superseded wait chain should stop silently instead of failing or claiming work"
     );
     assert(
-      secondAwait.op === "PROCESS_CLAIMED_MESSAGE" &&
+      secondAwait.op === "PROCESS_CLAIMED_MESSAGES" &&
         secondAwait.status === "task_claimed" &&
         secondAwait.message?.content === "请确认：新的等待链接管成功",
       "the newer wait chain should take over and claim the incoming task"

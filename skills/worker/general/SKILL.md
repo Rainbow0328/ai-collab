@@ -7,7 +7,7 @@ description: 任意支持 skill 的宿主 AI 作为 worker 接入 ai-collab 时�
 
 优先遵守：
 
-- [skills/worker/SKILL.md](/D:/ai-collab/skills/worker/SKILL.md)
+- [../SKILL.md](../SKILL.md)
 
 通用额外约束：
 
@@ -22,6 +22,6 @@ description: 任意支持 skill 的宿主 AI 作为 worker 接入 ai-collab 时�
 静默要求：
 
 - cmd 未返回最终 JSON 前持续等待
-- 不输出“已进入等待”“等待链已在运行中”“已提交结果，等待下一个任务中”
+- 不输出"已进入等待""等待链已在运行中""已提交结果，等待下一个任务中"
 - 不把内部 `cmd` 展示给用户
 - 不使用任何旧隐藏命令或纯等待命令

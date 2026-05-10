@@ -16,7 +16,6 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
-import { startCoreServer } from "@ai-collab/core";
 
 type RuntimeMetadata = {
   pid: number;
@@ -42,6 +41,10 @@ const defaultHost = "127.0.0.1";
 const defaultPort = 42688;
 const windowsPowerShellPath =
   "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+
+export const getDashboardUrl = (metadata?: RuntimeMetadata | null): string => {
+  return `http://${metadata?.host ?? defaultHost}:${metadata?.port ?? defaultPort}/`;
+};
 
 const ensureRuntimeDir = (projectRoot: string): string => {
   const runtimeDir = join(projectRoot, ".ai-collab", "runtime");
@@ -210,6 +213,7 @@ export const runCoreForeground = async (
     throw new Error("ai-collab core is already running on 127.0.0.1:42688.");
   }
 
+  const { startCoreServer } = await import("@ai-collab/core");
   const instance = await startCoreServer();
   const metadata: RuntimeMetadata = {
     pid: process.pid,

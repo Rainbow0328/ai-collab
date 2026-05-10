@@ -7,8 +7,8 @@ description: Trae 作为 host 接入 ai-collab 时使用。
 
 优先遵守：
 
-- [skills/host/SKILL.md](/D:/ai-collab/skills/host/SKILL.md)
-- [skills/host/harness-engineering/SKILL.md](/D:/ai-collab/skills/host/harness-engineering/SKILL.md)
+- [../SKILL.md](../SKILL.md)
+- [../harness-engineering/SKILL.md](../harness-engineering/SKILL.md)
 
 Trae 额外约束：
 

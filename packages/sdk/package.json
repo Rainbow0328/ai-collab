@@ -16,6 +16,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-collab/protocol": "0.1.0"
+    "@ai-collab/protocol": "workspace:*"
   }
 }

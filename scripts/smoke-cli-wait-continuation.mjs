@@ -191,7 +191,7 @@ const main = async () => {
     });
 
     assert(
-      continuedWorkerWait.op === "PROCESS_CLAIMED_MESSAGE" &&
+      continuedWorkerWait.op === "PROCESS_CLAIMED_MESSAGES" &&
         continuedWorkerWait.status === "task_claimed" &&
         continuedWorkerWait.message?.content === "请确认：续等链已接到任务",
       "continued wait command should be directly executable and claim the task"

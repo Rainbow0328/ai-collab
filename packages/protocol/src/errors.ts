@@ -22,15 +22,14 @@ export const errorCodes = {
   duplicateAgentName: "DUPLICATE_AGENT_NAME",
   agentNotFound: "AGENT_NOT_FOUND",
   messageNotFound: "MESSAGE_NOT_FOUND",
+  knowledgeDocumentNotFound: "KNOWLEDGE_DOCUMENT_NOT_FOUND",
   messageDispatchConflict: "MESSAGE_DISPATCH_CONFLICT",
   messageAlreadyClaimed: "MESSAGE_ALREADY_CLAIMED",
   messageNotClaimedByAgent: "MESSAGE_NOT_CLAIMED_BY_AGENT",
   messageAlreadyFinished: "MESSAGE_ALREADY_FINISHED",
   identityBusy: "IDENTITY_BUSY",
   waitChainSuperseded: "WAIT_CHAIN_SUPERSEDED",
-  taskNotFound: "TASK_NOT_FOUND",
   crossSessionAgent: "CROSS_SESSION_AGENT",
-  invalidTaskAssignee: "INVALID_TASK_ASSIGNEE",
   permissionDenied: "PERMISSION_DENIED",
   invalidAgentRemoval: "INVALID_AGENT_REMOVAL"
 } as const;

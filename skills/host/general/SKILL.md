@@ -7,8 +7,8 @@ description: 任意支持 skill 的宿主 AI 作为 host 接入 ai-collab 时使
 
 优先遵守：
 
-- [skills/host/SKILL.md](/D:/ai-collab/skills/host/SKILL.md)
-- [skills/host/harness-engineering/SKILL.md](/D:/ai-collab/skills/host/harness-engineering/SKILL.md)
+- [../SKILL.md](../SKILL.md)
+- [../harness-engineering/SKILL.md](../harness-engineering/SKILL.md)
 
 通用额外约束：
 
@@ -27,4 +27,4 @@ description: 任意支持 skill 的宿主 AI 作为 host 接入 ai-collab 时使
 - cmd 未返回最终 JSON 前持续等待
 - 返回 `EXECUTE_INTERNAL_CMD` 时立刻执行 `cmd`
 - 返回 `END_TURN_SILENTLY` 时直接静默结束
-- 不输出“已进入等待”“等待链已在运行中”“我继续监听”
+- 不输出"已进入等待""等待链已在运行中""我继续监听"

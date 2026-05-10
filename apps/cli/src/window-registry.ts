@@ -19,7 +19,7 @@ import type { WindowProfile } from "./window-profile.js";
 export type WindowRegistryEntry = {
   windowName: string;
   identity: string;
-  role: "host" | "worker";
+  role: "host" | "worker" | "knowledge_keeper";
   roleDescription: string | null;
   platform: AgentPlatform;
   agentName: string;
@@ -48,21 +48,21 @@ export const resolveWindowRegistryEntry = (
   sessionName: string,
   windowName: string,
   profile?: WindowProfile,
-  expectedRole?: "host" | "worker"
+  expectedRole?: "host" | "worker" | "knowledge_keeper"
 ): WindowRegistryEntry => {
   void projectRoot;
 
   if (profile) {
     if (profile.sessionName !== sessionName) {
       throw new Error(
-        `name="${windowName}" 当前绑定的 session="${profile.sessionName}" 与请求的 session="${sessionName}" 不一致。请先执行 ai-collab reset ${windowName} --session ${sessionName}，再重新接入。`
+        `name="${windowName}" is bound to session="${profile.sessionName}" but requested session="${sessionName}". Run ai-collab reset ${windowName} --session ${sessionName} first, then re-attach.`
       );
     }
 
     return {
       windowName: profile.windowName,
       identity: profile.identity,
-      role: profile.role === "host" ? "host" : "worker",
+      role: profile.role === "host" ? "host" : profile.role === "knowledge_keeper" ? "knowledge_keeper" : "worker",
       roleDescription: profile.roleDescription,
       platform: profile.platform,
       agentName: profile.agentName,
@@ -77,7 +77,7 @@ export const resolveWindowRegistryEntry = (
   const role = expectedRole ?? inferLegacyRole(windowName);
   if (!role) {
     throw new Error(
-      `name="${windowName}" 当前没有可用的本地绑定，也无法从旧兼容命令推断角色。请改用 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。`
+      `name="${windowName}" has no local binding and role cannot be inferred. Use ai-collab attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<description>" instead.`
     );
   }
 

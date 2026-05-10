@@ -19,7 +19,8 @@ import type {
   AgentQueueStats,
   MessageRecord,
   MessageType,
-  SendMessageInput
+  SendMessageInput,
+  WsInboxMessageNotification
 } from "@ai-collab/protocol";
 import {
   AgentRepository,
@@ -29,18 +30,30 @@ import {
 } from "@ai-collab/store";
 
 import { coreErrors } from "../errors.js";
+import type { TraceService } from "./trace-service.js";
 
 const now = (): string => {
   return new Date().toISOString();
 };
 
 export class MessageService {
+  private websocketService: {
+    sendToAgent: (agentId: string, message: WsInboxMessageNotification) => void;
+  } | null = null;
+
   public constructor(
     private readonly sessions: SessionRepository,
     private readonly agents: AgentRepository,
     private readonly messages: MessageRepository,
-    private readonly identityLeases: IdentityLeaseRepository
+    private readonly identityLeases: IdentityLeaseRepository,
+    private readonly traceService: TraceService
   ) {}
+
+  public setWebSocketService(service: {
+    sendToAgent: (agentId: string, message: WsInboxMessageNotification) => void;
+  }): void {
+    this.websocketService = service;
+  }
 
   public sendMessage(input: SendMessageInput): MessageRecord {
     const session = this.sessions.findById(input.sessionId);
@@ -91,6 +104,27 @@ export class MessageService {
       throw coreErrors.messageDispatchConflict(input.supersedeMessageIds ?? []);
     }
 
+    if (this.websocketService && inserted.message.toAgentId) {
+      const notification: WsInboxMessageNotification = {
+        type: "inbox:new-message",
+        messageId: inserted.message.id,
+        fromAgentId: inserted.message.fromAgentId,
+        toAgentId: inserted.message.toAgentId,
+        messageType: inserted.message.type,
+        createdAt: inserted.message.createdAt
+      };
+      this.websocketService.sendToAgent(inserted.message.toAgentId, notification);
+    }
+
+    this.traceService.record({
+      sessionId: inserted.message.sessionId,
+      messageId: inserted.message.id,
+      agentId: inserted.message.fromAgentId,
+      traceType: "sent",
+      correlationId: inserted.message.correlationId ?? undefined,
+      metadata: { type: inserted.message.type }
+    });
+
     return inserted.message;
   }
 
@@ -116,6 +150,15 @@ export class MessageService {
     }
 
     return message;
+  }
+
+  public listMessagesBySession(sessionId: string): MessageRecord[] {
+    const session = this.sessions.findById(sessionId);
+    if (!session) {
+      throw coreErrors.sessionNotFound(sessionId);
+    }
+
+    return this.messages.listBySessionId(sessionId);
   }
 
   public getSessionQueueStats(sessionId: string): AgentQueueStats[] {
@@ -145,7 +188,51 @@ export class MessageService {
 
     this.assertCurrentWaitChain(options);
 
-    return this.messages.claimNextForAgent(agentId, now(), options);
+    const claimed = this.messages.claimNextForAgent(agentId, now(), options);
+    if (claimed) {
+      this.traceService.record({
+        sessionId: claimed.sessionId,
+        messageId: claimed.id,
+        agentId,
+        traceType: "claimed",
+        correlationId: claimed.correlationId ?? undefined,
+        metadata: { type: claimed.type }
+      });
+    }
+    return claimed;
+  }
+
+  public claimMany(
+    agentId: string,
+    options: {
+      types?: MessageType[];
+      fromAgentId?: string;
+      correlationId?: string;
+      maxMessages?: number;
+      identity?: string;
+      flow?: "host" | "worker";
+      ownerToken?: string;
+    } = {}
+  ): MessageRecord[] {
+    const agent = this.agents.findById(agentId);
+    if (!agent) {
+      throw coreErrors.agentNotFound(agentId);
+    }
+
+    this.assertCurrentWaitChain(options);
+
+    const claimed = this.messages.claimManyForAgent(agentId, now(), options);
+    for (const message of claimed) {
+      this.traceService.record({
+        sessionId: message.sessionId,
+        messageId: message.id,
+        agentId,
+        traceType: "claimed",
+        correlationId: message.correlationId ?? undefined,
+        metadata: { type: message.type, batch: true }
+      });
+    }
+    return claimed;
   }
 
   public completeMessage(
@@ -166,6 +253,14 @@ export class MessageService {
 
     const completed = this.messages.markProcessed(messageId, agentId, now());
     if (completed) {
+      this.traceService.record({
+        sessionId: completed.sessionId,
+        messageId: completed.id,
+        agentId,
+        traceType: "submitted",
+        correlationId: completed.correlationId ?? undefined,
+        metadata: { type: completed.type, processingStatus: "processed" }
+      });
       return completed;
     }
 
@@ -191,6 +286,14 @@ export class MessageService {
 
     const failed = this.messages.markFailed(messageId, agentId, now(), reason);
     if (failed) {
+      this.traceService.record({
+        sessionId: failed.sessionId,
+        messageId: failed.id,
+        agentId,
+        traceType: "failed",
+        correlationId: failed.correlationId ?? undefined,
+        metadata: { type: failed.type, reason: reason ?? null }
+      });
       return failed;
     }
 

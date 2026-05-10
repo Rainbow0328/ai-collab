@@ -228,7 +228,7 @@ export const requireWindowProfile = async (
   const profile = await readWindowProfile(projectRoot, sessionName, windowName);
   if (!profile) {
     throw new Error(
-      `当前未找到 session="${sessionName}" 下 name="${windowName}" 的成员绑定。请先执行 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。当前绑定来源为 "${bindingStoreDescriptor}"。`
+      `No binding found for session="${sessionName}" name="${windowName}". Run ai-collab attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<description>" first. Binding source: "${bindingStoreDescriptor}".`
     );
   }
 

@@ -153,13 +153,13 @@ const main = async () => {
     assert(worker.op === "SESSION_READY", "worker attach should succeed");
     assert(dispatch.op === "EXECUTE_INTERNAL_CMD", "dispatch-many should hand off to await");
     assert(
-      workerAwait.op === "PROCESS_CLAIMED_MESSAGE" &&
+      workerAwait.op === "PROCESS_CLAIMED_MESSAGES" &&
         workerAwait.kind === "task",
       "worker await should claim one task"
     );
     assert(workerSubmit.op === "EXECUTE_INTERNAL_CMD", "submit should hand off back to await");
     assert(
-      hostAwait.op === "PROCESS_CLAIMED_MESSAGE" &&
+      hostAwait.op === "PROCESS_CLAIMED_MESSAGES" &&
         hostAwait.kind === "report" &&
         hostAwait.message?.content === "cli submit 测试成功",
       "host await should receive the worker report"

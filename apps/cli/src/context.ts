@@ -55,7 +55,7 @@ const parseIdentity = (
   const separator = identity.indexOf("::");
   if (separator <= 0 || separator >= identity.length - 2) {
     throw new Error(
-      `identity="${identity}" 不符合 "<sessionName>::<agentName>" 规范。`
+      `identity="${identity}" does not match the "<sessionName>::<agentName>" format.`
     );
   }
 
@@ -172,7 +172,7 @@ export const requireCliIdentity = async (
   const context = await readCliIdentity(projectRoot, identity);
   if (!context) {
     throw new Error(
-      `当前系统内不存在 identity="${identity}" 的绑定，请先执行 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。当前绑定来源为 "${bindingStoreDescriptor}"。`
+      `No binding found for identity="${identity}". Run ai-collab attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<description>" first. Binding source: "${bindingStoreDescriptor}".`
     );
   }
 

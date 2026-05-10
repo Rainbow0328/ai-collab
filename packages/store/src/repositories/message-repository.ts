@@ -399,6 +399,105 @@ export class MessageRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  public claimManyForAgent(
+    agentId: string,
+    claimedAt: string,
+    options: {
+      types?: MessageType[];
+      fromAgentId?: string;
+      correlationId?: string;
+      maxMessages?: number;
+    } = {}
+  ): MessageRecord[] {
+    const sessionStatement = this.database.prepare(`
+      SELECT session_id AS sessionId
+      FROM agents
+      WHERE id = ?
+    `);
+    const agentRow = sessionStatement.get(agentId) as
+      | { sessionId: string }
+      | undefined;
+    if (!agentRow) {
+      return [];
+    }
+
+    if (options.types && options.types.length === 0) {
+      return [];
+    }
+
+    const maxMessages = Math.max(1, Math.min(options.maxMessages ?? 10, 50));
+    const typeFilter = options.types
+      ? `AND type IN (${options.types
+          .map((_, index) => `@type${index}`)
+          .join(", ")})`
+      : "";
+    const fromAgentFilter = options.fromAgentId
+      ? "AND from_agent_id = @fromAgentId"
+      : "";
+    const correlationFilter = options.correlationId
+      ? "AND correlation_id = @correlationId"
+      : "";
+
+    const statement = this.database.prepare(`
+      WITH target AS (
+        SELECT id
+        FROM messages
+        WHERE session_id = @sessionId
+          AND to_agent_id = @agentId
+          AND processing_status = 'pending'
+          ${typeFilter}
+          ${fromAgentFilter}
+          ${correlationFilter}
+        ORDER BY created_at ASC
+        LIMIT @maxMessages
+      )
+      UPDATE messages
+      SET processing_status = 'claimed',
+          delivery_status = 'delivered',
+          claimed_by_agent_id = @agentId,
+          claimed_at = @claimedAt
+      WHERE id IN (SELECT id FROM target)
+      RETURNING
+        id,
+        session_id AS sessionId,
+        from_agent_id AS fromAgentId,
+        to_agent_id AS toAgentId,
+        type,
+        payload_json AS payloadJson,
+        idempotency_key AS idempotencyKey,
+        correlation_id AS correlationId,
+        delivery_status AS deliveryStatus,
+        processing_status AS processingStatus,
+        claimed_by_agent_id AS claimedByAgentId,
+        claimed_at AS claimedAt,
+        processed_at AS processedAt,
+        failed_at AS failedAt,
+        failure_reason AS failureReason,
+        created_at AS createdAt
+    `);
+
+    const statementInput: Record<string, string | number> = {
+      sessionId: agentRow.sessionId,
+      agentId,
+      claimedAt,
+      maxMessages
+    };
+
+    for (const [index, type] of (options.types ?? []).entries()) {
+      statementInput[`type${index}`] = type;
+    }
+    if (options.fromAgentId) {
+      statementInput.fromAgentId = options.fromAgentId;
+    }
+    if (options.correlationId) {
+      statementInput.correlationId = options.correlationId;
+    }
+
+    const rows = statement.all(statementInput) as MessageRow[];
+
+    return rows.map((row) => this.mapRow(row));
+  }
+
   public listQueueStatsForSession(sessionId: string): AgentQueueStats[] {
     const statement = this.database.prepare(`
       SELECT
@@ -572,6 +671,34 @@ export class MessageRepository {
     statement.run({
       agentId
     });
+  }
+
+  public listBySessionId(sessionId: string): MessageRecord[] {
+    const statement = this.database.prepare(`
+      SELECT
+        id,
+        session_id AS sessionId,
+        from_agent_id AS fromAgentId,
+        to_agent_id AS toAgentId,
+        type,
+        payload_json AS payloadJson,
+        idempotency_key AS idempotencyKey,
+        correlation_id AS correlationId,
+        delivery_status AS deliveryStatus,
+        processing_status AS processingStatus,
+        claimed_by_agent_id AS claimedByAgentId,
+        claimed_at AS claimedAt,
+        processed_at AS processedAt,
+        failed_at AS failedAt,
+        failure_reason AS failureReason,
+        created_at AS createdAt
+      FROM messages
+      WHERE session_id = ?
+      ORDER BY created_at DESC
+    `);
+
+    const rows = statement.all(sessionId) as MessageRow[];
+    return rows.map((row) => this.mapRow(row));
   }
 
   private mapRow(row: MessageRow): MessageRecord {

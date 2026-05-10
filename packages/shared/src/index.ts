@@ -149,3 +149,6 @@ export const appendProjectLogEntry = (
   mkdirSync(dirname(logPath), { recursive: true });
   appendFileSync(logPath, `${JSON.stringify(entry)}\n`, "utf8");
 };
+
+export * from "./config.js";
+export * from "./logger.js";

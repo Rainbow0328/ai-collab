@@ -7,7 +7,7 @@ description: Codex 作为 worker 接入 ai-collab 时使用。
 
 优先遵守：
 
-- [skills/worker/SKILL.md](/D:/ai-collab/skills/worker/SKILL.md)
+- [../SKILL.md](../SKILL.md)
 
 Codex 额外约束：
 

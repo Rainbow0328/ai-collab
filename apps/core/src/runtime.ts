@@ -19,25 +19,65 @@ import {
   MessageRepository,
   SessionRepository,
   SessionInsightRepository,
-  TaskEventRepository,
-  TaskRepository
+  ModelConfigRepository,
+  AgentProfileRepository,
+  SkillRepository,
+  SessionBindingRepository,
+  KnowledgeBuildJudgementRepository,
+  MessageTraceRepository
 } from "@ai-collab/store";
 
-import type { CoreConfig } from "./config.js";
-import { defaultCoreConfig } from "./config.js";
+import type { CoreConfig } from "@ai-collab/shared";
+import { loadConfig } from "@ai-collab/shared";
 import { createServer } from "./server/create-server.js";
 import {
   AgentService,
+  GuardService,
   IdentityLeaseService,
+  KnowledgeFileStore,
+  KnowledgeService,
   MessageService,
+  ProgressService,
+  SessionConsoleService,
   SessionService,
   SessionInsightService,
-  TaskService,
-  WindowBindingService
+  WebSocketService,
+  WindowBindingService,
+  ModelConfigService,
+  AgentProfileService,
+  SkillService,
+  HostKnowledgeBuildService,
+  TraceService,
+  AnalyticsService,
+  UserProfileService
 } from "./services/index.js";
 
-export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) => {
-  const databaseManager = new DatabaseManager(config.databasePath);
+export const startCoreServer = async (
+  config: Partial<CoreConfig> = {}
+) => {
+  const defaultConfig = loadConfig();
+  const resolvedConfig: CoreConfig = {
+    ...defaultConfig,
+    ...config,
+    websocket: {
+      ...defaultConfig.websocket,
+      ...config.websocket
+    },
+    waitChain: {
+      ...defaultConfig.waitChain,
+      ...config.waitChain
+    },
+    logging: {
+      ...defaultConfig.logging,
+      ...config.logging
+    },
+    console: {
+      ...defaultConfig.console,
+      ...config.console
+    }
+  };
+
+  const databaseManager = new DatabaseManager(resolvedConfig.databasePath);
   databaseManager.migrate();
 
   const sessionRepository = new SessionRepository(databaseManager.connection);
@@ -46,10 +86,21 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
   const identityLeaseRepository = new IdentityLeaseRepository(
     databaseManager.connection
   );
-  const taskRepository = new TaskRepository(databaseManager.connection);
-  const taskEventRepository = new TaskEventRepository(databaseManager.connection);
   const sessionInsightRepository = new SessionInsightRepository(
     databaseManager.connection
+  );
+  const modelConfigRepository = new ModelConfigRepository(databaseManager.connection);
+  const agentProfileRepository = new AgentProfileRepository(databaseManager.connection);
+  const skillRepository = new SkillRepository(databaseManager.connection);
+  const sessionBindingRepository = new SessionBindingRepository(databaseManager.connection);
+  const knowledgeBuildJudgementRepository = new KnowledgeBuildJudgementRepository(databaseManager.connection);
+  const messageTraceRepository = new MessageTraceRepository(databaseManager.connection);
+
+  const traceService = new TraceService(messageTraceRepository);
+  const analyticsService = new AnalyticsService(
+    messageTraceRepository,
+    messageRepository,
+    agentRepository
   );
 
   const sessionService = new SessionService(
@@ -57,10 +108,12 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     sessionRepository,
     agentRepository,
     messageRepository,
-    taskRepository,
-    taskEventRepository,
     sessionInsightRepository,
-    identityLeaseRepository
+    identityLeaseRepository,
+    sessionBindingRepository,
+    skillRepository,
+    agentProfileRepository,
+    modelConfigRepository
   );
   const agentService = new AgentService(agentRepository, sessionService);
   const sessionInsightService = new SessionInsightService(
@@ -73,31 +126,62 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     sessionRepository,
     agentRepository,
     messageRepository,
-    identityLeaseRepository
+    identityLeaseRepository,
+    traceService
   );
   const identityLeaseService = new IdentityLeaseService(identityLeaseRepository);
   const windowBindingService = new WindowBindingService(agentRepository);
-  const taskService = new TaskService(
-    sessionRepository,
-    agentRepository,
-    taskRepository,
-    taskEventRepository
+  const knowledgeFileStore = new KnowledgeFileStore(process.cwd());
+  const knowledgeService = new KnowledgeService(knowledgeFileStore);
+  const guardService = new GuardService();
+
+  const modelConfigService = new ModelConfigService(modelConfigRepository);
+  const agentProfileService = new AgentProfileService(agentProfileRepository);
+  const skillService = new SkillService(skillRepository);
+  const hostKnowledgeBuildService = new HostKnowledgeBuildService(knowledgeBuildJudgementRepository);
+
+  const userProfileService = new UserProfileService();
+
+  const websocketService = new WebSocketService();
+  const progressService = new ProgressService();
+  const sessionConsoleService = new SessionConsoleService(
+    sessionService,
+    messageService,
+    progressService,
+    knowledgeService,
+    resolvedConfig.console
   );
 
-  const server = await createServer(config, {
+  const server = await createServer(resolvedConfig, {
     sessionService,
     agentService,
     identityLeaseService,
     messageService,
-    taskService,
     sessionInsightService,
-    windowBindingService
+    windowBindingService,
+    websocketService,
+    progressService,
+    sessionConsoleService,
+    knowledgeService,
+    guardService,
+    modelConfigService,
+    agentProfileService,
+    skillService,
+    hostKnowledgeBuildService,
+    traceService,
+    analyticsService,
+    userProfileService
   });
 
+  messageService.setWebSocketService(websocketService);
+
   await server.listen({
-    host: config.host,
-    port: config.port
+    host: resolvedConfig.host,
+    port: resolvedConfig.port
   });
+
+  const frontendUrl = `http://${resolvedConfig.host}:${resolvedConfig.port}`;
+  console.log(`\nai-collab started\n  URL: ${frontendUrl}\n`);
 
   return {
     server,

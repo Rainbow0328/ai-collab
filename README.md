@@ -2,7 +2,7 @@
 
 > 让多个 AI 在同一个项目里稳定协作的运行
 
-[English README](./README.md) | [中文说明](./README.zh-CN.md)
+[English README](./README-EN.md) | [中文说明](./README.md)
 
 ---
 
@@ -10,10 +10,10 @@
 
 当你有 Trae、Cursor、Claude Desktop 多个 AI 客户端共同维护同一个项目的时候，你会遇到这些问题：
 
-- 🤯 每个 AI 都不知道别人在做什么
-- 📋 你需要手动复制粘贴任务和结果
-- 🔄 上下文同步全靠你人肉维护
-- 🚫 没有统一的会话状态管理
+- 每个 AI 都不知道别人在做什么
+- 你需要手动复制粘贴任务和结果
+- 上下文同步全靠你人肉维护
+- 没有统一的会话状态管理
 
 `ai-collab` 解决的就是这个问题：让一个 AI 当 Host 统筹，其他 AI 当 Worker 各司其职，形成稳定的协作闭环。
 
@@ -32,22 +32,37 @@
 
 | 角色 | 推荐人选 | 职责 |
 |-----|---------|-----|
-| **Host** | Trae AI | 任务拆分、派发、结果整合、进度把控 |
-| **Worker** | Cursor / Claude | 专注执行具体任务、提交结果 |
+| **Host** | Trae AI | 任务拆分、派发、结果整合、知识库构建与裁定 |
+| **Worker** | Cursor / Claude | 专注执行具体任务、提交结构化回报 |
+| **Knowledge Keeper** | 任意 AI | 受 Host 委托维护知识库与用户习惯 |
+
+### 知识库（L1/L2/L3）
+
+- **L1 — 项目宪章**：长期原则、当前方向、需求约束
+- **L2 — 领域规则**：模块边界、协议、状态机、跨模块协作规则
+- **L3 — 字段对齐**：字段、接口参数、数据结构、错误码
+
+Host 构建和裁定知识库，Worker 读取并在回报中提交候选更新。知识引用使用片段级格式（`l2/current#message-protocol`），精准投递不浪费 token。
 
 ### 协作闭环
 
 ```
 Host 理解需求
     ↓
-拆解任务 → 分发给合适的 Worker
+知识裁定 → 构建/校准 L1/L2/L3
     ↓
-Worker 领取任务 → 执行 → 提交结果
+拆解任务 → dispatch-many 批量派发给 Worker
     ↓
-Host 收到结果 → 整合 → 派发下一轮
+Worker 领取任务 → 读取知识引用 → 执行 → submit 结构化回报
+    ↓
+Host resolve 消耗回报 → 裁定知识候选更新 → 继续派发
     ↓
 （循环直到项目完成）
 ```
+
+### 等待链
+
+Worker 通过 `await` 命令进入等待链，自动领取任务、执行、回报、再次等待。超时自动续接不丢消息，静默运行不打扰用户。
 
 ---
 
@@ -58,9 +73,9 @@ Host 收到结果 → 整合 → 派发下一轮
 ### 安装依赖并构建
 
 ```powershell
-npm install
-npm run build
-npm run link:cli
+pnpm install
+pnpm run build
+pnpm run link:cli
 ```
 
 这样会把本地构建好的 `ai-collab` CLI 安装到当前环境里，后续就可以直接使用 `ai-collab` 命令。
@@ -71,10 +86,13 @@ npm run link:cli
 ai-collab start
 ```
 
-### 在host IDE/CLI和worker IDE/CLI中导入Skill
+启动后会同时运行后端服务（Fastify, port 42688）和前端管理后台（Vite, port 5173）。用 `--no-web` 可跳过前端，`--daemon` 可后台运行。
+
+### 在 Host IDE/CLI 和 Worker IDE/CLI 中导入 Skill
 
 ```tex
-在本项目中的Skills文件夹中,有按照host和worker以及不同的ide进行区分的skill,如果没有,可以用general中的skill,后续会持续更新,力求全面
+在本项目的 skills/ 文件夹中，按角色（host/worker/knowledge-keeper）和 IDE（claude/codex/cursor/trae/general）分类。
+如果没有对应 IDE 的 skill，使用 general/ 中的通用版本。
 ```
 
 ### Rule(可选)
@@ -82,16 +100,22 @@ ai-collab start
 **这步是可选的,只用Skill理论上来说已经足够支撑整个流程了,但是有的AI编程工具会抽风,导致异常中断会话或者其他情况,所以可以用Rule在进行一次限制**
 
 ```tex
-在本项目中的rule中有按照host和worker进行区分的rule,分别导入就行了
+在本项目的 rule/ 文件夹中，按角色区分（rule/host/ 和 rule/worker/），分别导入即可。
 ```
 
 ### 用Host建立一个协作会话
 
 ```tex
-你是当前项目 host。创建并加入会话为demo-school-collab-01,先理解需求，再根据成员职责拆任务。能并行就同轮一次性派发。派发后进入等待链，收到回报后继续推进，直到达到验收点。
+你是当前项目 host。你的名字是trae,创建并加入会话为demo-collab-01
 ```
 
-### 查看当前会话成员
+### Worker加入会话
+
+```tex
+你是当前项目的worker,你得名字是cursor,加入会话demo-collab-01,你的职责是前端开发
+```
+
+### Host查看当前会话成员
 
 ```tex
 查看当前项目成员
@@ -118,7 +142,7 @@ Skill 是软约束，AI 可能会"忘记"或者"灵活处理"。
 
 ---
 
-## 💡 最佳实践
+## 最佳实践
 
 **最佳的可以用openclaw或者hermes agent当做host,指挥各个worker进行工作**
 
@@ -153,24 +177,57 @@ Skill 是软约束，AI 可能会"忘记"或者"灵活处理"。
 
 ---
 
-## 🔧 命令参考
+## 命令参考
 
-### 会话管理
+### 服务管理
 
 ```bash
-# 启动服务
-ai-collab start
+ai-collab start [--no-web] [--daemon]   # 启动服务（含前端）
+ai-collab stop                           # 停止服务
+ai-collab status                         # 查看状态
+ai-collab doctor                         # 诊断检查
+ai-collab logs                           # 查看日志
+```
 
-# 查看状态
-ai-collab status
+### 会话与 Agent
 
-# 删除会话
-ai-collab session delete --session <name>
+```bash
+ai-collab attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<职责>"
+ai-collab reset <name> --session <session>
+ai-collab members --session <session>
+```
+
+### 任务派发与执行
+
+```bash
+ai-collab dispatch-many --session <session> --tasks '[...]'
+ai-collab await <name> --session <session>
+ai-collab submit <name> --session <session> --content "<结果>"
+ai-collab resolve --session <session> --message-id <id> --action <approve|reject|revise>
+```
+
+### 知识库
+
+```bash
+ai-collab knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
+ai-collab knowledge list --session <session>
+ai-collab knowledge judge --session <session> --message-id <id>
+ai-collab knowledge fulfil-judgement --session <session> --judgement-id <id>
+ai-collab knowledge read-current --session <session>
+ai-collab knowledge update-current --session <session>
+```
+
+### 用户习惯
+
+```bash
+ai-collab profile get <name> --session <session> [key]
+ai-collab profile set <name> --session <session> <key> <value>
+ai-collab profile delete <name> --session <session> <key>
 ```
 
 ---
 
-## 📊 数据与状态
+## 数据与状态
 
 所有数据都存在本地，不上云端。
 
@@ -192,26 +249,32 @@ ai-collab session delete --session <name>
 
 ---
 
-## 🗂️ 仓库结构
+## 仓库结构
 
 ```text
 ai-collab/
 ├── apps/
-│   ├── cli/           # 命令行入口
-│   └── core/          # 本地协作服务
+│   ├── cli/           # 命令行入口（23 个命令）
+│   ├── core/          # 本地协作服务（Fastify HTTP 服务）
+│   └── web/           # Web 管理后台（React + Vite）
 │
 ├── packages/
-│   ├── protocol/      # 类型定义与协议
+│   ├── protocol/      # 类型定义与协议（Zod schema）
 │   ├── sdk/           # Core HTTP 客户端 SDK
 │   ├── store/         # SQLite 持久化层
-│   └── shared/        # 公共工具
+│   └── shared/        # 公共工具与配置
+│
+├── adapters/
+│   └── vscode-extension/  # VS Code 扩展适配器
 │
 ├── skills/            # AI 行为约束模板（软约束）
-│   ├── host/
-│   └── worker/
+│   ├── host/          # Host 技能（claude/codex/cursor/trae/general）
+│   ├── worker/        # Worker 技能（claude/codex/cursor/trae/general）
+│   └── knowledge-keeper/  # 知识管理员技能
 │
 ├── rule/              # 强制执行规则（硬约束，优先级最高）
-│   └── ai-collab-强制执行规则.md
+│   ├── host/
+│   └── worker/
 │
 ├── docs/              # 设计文档与联调指南
 │
@@ -220,21 +283,26 @@ ai-collab/
 
 ---
 
-## 🚧 当前状态
+## 当前状态
 
 项目还在持续开发中，但核心流程已经稳定可用：
 
-- ✅ 命名会话管理
-- ✅ Host / Worker 角色分离
-- ✅ 单任务 / 批量任务派发
-- ✅ 可续接等待链（超时不丢）
-- ✅ SQLite 持久化消息流转
-- ✅ Skill / Rule 双层 AI 行为约束
-- ✅ Trae 专属优化规则
+- 命名会话管理
+- Host / Worker / Knowledge Keeper 三角色分离
+- 单任务 / 批量任务派发
+- 可续接等待链（超时不丢）
+- SQLite 持久化消息流转
+- Skill / Rule 双层 AI 行为约束
+- 知识库 L1/L2/L3 架构
+- 片段级知识引用
+- 用户协作习惯管理
+- Web 管理后台（会话/成员/消息/知识库可视化）
+- 前端国际化（中文/英文）
+- VS Code 扩展适配器
 
 ---
 
-## ❓ 常见问题
+## 常见问题
 
 ### Q: 为什么不做成全自动 Agent？
 
@@ -275,7 +343,7 @@ ai-collab/
 
 ---
 
-## 📝 最后一句
+## 最后一句
 
 `ai-collab` 不是让 AI 取代你，而是让你同时指挥多个 AI 干活的时候，不用那么累。
 
@@ -283,4 +351,5 @@ ai-collab/
 
 ## License
 
+Licensed under the [Apache License 2.0](./LICENSE).
 

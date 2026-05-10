@@ -14,7 +14,7 @@
  */
 import type { DatabaseSync } from "node:sqlite";
 
-import type { Session } from "@ai-collab/protocol";
+import type { Session, SessionSummary } from "@ai-collab/protocol";
 
 export class SessionRepository {
   public constructor(private readonly database: DatabaseSync) {}
@@ -112,5 +112,33 @@ export class SessionRepository {
 
     const row = statement.get() as { total: number };
     return row.total;
+  }
+
+  public listAllSummaries(): SessionSummary[] {
+    const statement = this.database.prepare(`
+      SELECT
+        s.id,
+        s.name,
+        s.host_agent_id AS hostAgentId,
+        s.status,
+        COUNT(a.id) AS memberCount,
+        SUM(CASE WHEN a.status != 'offline' THEN 1 ELSE 0 END) AS onlineMemberCount,
+        COALESCE(MAX(a.last_heartbeat_at), s.updated_at) AS lastActivityAt,
+        s.created_at AS createdAt,
+        s.updated_at AS updatedAt
+      FROM sessions s
+      LEFT JOIN agents a ON a.session_id = s.id
+      GROUP BY s.id
+      ORDER BY s.updated_at DESC
+    `);
+
+    const rows = statement.all() as (SessionSummary & {
+      onlineMemberCount: number;
+    })[];
+
+    return rows.map((row) => ({
+      ...row,
+      onlineMemberCount: row.onlineMemberCount ?? 0
+    }));
   }
 }

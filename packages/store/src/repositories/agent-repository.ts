@@ -280,6 +280,37 @@ export class AgentRepository {
     return row.total;
   }
 
+  public listHeartbeatsBySessionId(sessionId: string): Array<{
+    id: string;
+    agentName: string;
+    displayName: string;
+    role: string;
+    status: string;
+    lastHeartbeatAt: string;
+  }> {
+    const statement = this.database.prepare(`
+      SELECT
+        id,
+        agent_name AS agentName,
+        display_name AS displayName,
+        role,
+        status,
+        last_heartbeat_at AS lastHeartbeatAt
+      FROM agents
+      WHERE session_id = ?
+      ORDER BY created_at ASC
+    `);
+
+    return statement.all(sessionId) as Array<{
+      id: string;
+      agentName: string;
+      displayName: string;
+      role: string;
+      status: string;
+      lastHeartbeatAt: string;
+    }>;
+  }
+
   public refreshExistingAgent(input: {
     agentId: string;
     displayName: string;
@@ -469,7 +500,9 @@ export class AgentRepository {
       "runtime_last_workflow_step = @lastWorkflowStep",
       "runtime_last_automation_state = @lastAutomationState",
       "runtime_last_turn_disposition = @lastTurnDisposition",
-      "runtime_updated_at = @updatedAt"
+      "runtime_updated_at = @updatedAt",
+      "last_heartbeat_at = @updatedAt",
+      "status = 'idle'"
     ];
     const statement = this.database.prepare(`
       UPDATE agents

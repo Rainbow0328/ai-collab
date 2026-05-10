@@ -13,15 +13,17 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@ai-collab/protocol": "0.1.0",
-    "@ai-collab/shared": "0.1.0",
-    "@ai-collab/store": "0.1.0",
+    "@ai-collab/protocol": "workspace:*",
+    "@ai-collab/shared": "workspace:*",
+    "@ai-collab/store": "workspace:*",
     "@fastify/websocket": "^11.0.2",
-    "fastify": "^5.8.5",
-    "pino": "^9.6.0",
-    "zod": "^3.25.76"
+    "fastify": "^5.8.5"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.5"
   }
 }

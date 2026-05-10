@@ -2,7 +2,7 @@
 
 > A runtime for stable collaboration of multiple AI agents on the same project
 
-[English README](./README.md) | [中文说明](./README.zh-CN.md)
+[English README](./README-EN.md) | [中文说明](./README.md)
 
 ---
 
@@ -10,19 +10,19 @@
 
 When you have multiple AI clients like Trae, Cursor, and Claude Desktop working on the same project together, you'll encounter these problems:
 
-- 🤯 Each AI doesn't know what others are doing
-- 📋 You need to manually copy-paste tasks and results
-- 🔄 Context synchronization relies entirely on human effort
-- 🚫 No unified session state management
+- Each AI doesn't know what others are doing
+- You need to manually copy-paste tasks and results
+- Context synchronization relies entirely on human effort
+- No unified session state management
 
 `ai-collab` solves this exact problem: let one AI act as Host to orchestrate, while other AI agents act as Workers specializing in their respective areas, forming a stable collaboration loop.
 
 #### Use Cases
 
 - **Modular development**: When different modules are developed by different AI tools without an orchestrator, developers have to act as coordinators and repeatedly copy-paste prompts.
-- **Frontend-backend separation**: Developing with the same AI can easily cause context explosion. Without an orchestrator, frontend and backend API interfaces often become misaligned. Different AI tools have varying capabilities in frontend vs backend development—this tool enables parallel development.
-- **Cost optimization**: Different priced AI tools handle different modules. Use free AI as orchestrator, premium AI as architect—maximize each AI's strengths.
-- **Desktop AI orchestration**: Use openclaw or hermes agent as host to schedule work for local desktop AI applications—significantly boosts productivity.
+- **Frontend-backend separation**: Developing with the same AI can easily cause context explosion. Without an orchestrator, frontend and backend API interfaces often become misaligned. Different AI tools have varying capabilities in frontend vs backend development -- this tool enables parallel development.
+- **Cost optimization**: Different priced AI tools handle different modules. Use free AI as orchestrator, premium AI as architect -- maximize each AI's strengths.
+- **Desktop AI orchestration**: Use openclaw or hermes agent as host to schedule work for local desktop AI applications -- significantly boosts productivity.
 
 ---
 
@@ -32,107 +32,134 @@ When you have multiple AI clients like Trae, Cursor, and Claude Desktop working 
 
 | Role | Recommended AI | Responsibilities |
 |------|---------------|------------------|
-| **Host** | Trae AI | Task breakdown, distribution, result integration, progress management |
-| **Worker** | Cursor / Claude | Focus on executing specific tasks, submitting results |
+| **Host** | Trae AI | Task breakdown, distribution, result integration, knowledge base construction and adjudication |
+| **Worker** | Cursor / Claude | Focus on executing specific tasks, submitting structured reports |
+| **Knowledge Keeper** | Any AI | Maintains knowledge base and user profiles on Host's delegation |
+
+### Knowledge Base (L1/L2/L3)
+
+- **L1 -- Project Constitution**: Long-term principles, current direction, requirement constraints
+- **L2 -- Domain Rules**: Module boundaries, protocols, state machines, cross-module collaboration rules
+- **L3 -- Field Alignment**: Fields, interface parameters, data structures, error codes
+
+Host builds and adjudicates the knowledge base. Workers read it and provide candidate updates in their reports. Knowledge references use fragment-level format (`l2/current#message-protocol`) for precise delivery without wasting tokens.
 
 ### Collaboration Loop
 
 ```
 Host understands requirements
     ↓
-Break down tasks → Distribute to appropriate Workers
+Knowledge judge → Build/calibrate L1/L2/L3
     ↓
-Worker claims task → Executes → Submits results
+Break down tasks → dispatch-many to Workers
     ↓
-Host receives results → Integrates → Distributes next batch
+Worker claims task → Reads knowledge refs → Executes → submit structured report
+    ↓
+Host resolve consumes report → Adjudicates knowledge candidate updates → Continues dispatching
     ↓
 (Repeat until project completion)
 ```
+
+### Wait Chain
+
+Workers enter the wait chain via the `await` command, automatically claiming tasks, executing, reporting, and waiting again. Timeout auto-resumes without losing messages. Runs silently without interrupting the user.
+
+---
+
+## Technical Architecture
+
+```
+ai-collab/
+├── apps/
+│   ├── cli/           # CLI entry (23 commands)
+│   ├── core/          # Local collaboration service (Fastify HTTP)
+│   └── web/           # Web console (React + Vite)
+├── packages/
+│   ├── protocol/      # Type definitions and protocol (Zod schema)
+│   ├── sdk/           # Core HTTP client SDK
+│   ├── store/         # SQLite persistence layer
+│   └── shared/        # Shared utilities
+├── adapters/
+│   └── vscode-extension/  # VS Code extension adapter
+├── skills/            # AI behavior constraint templates (soft constraints)
+│   ├── host/          # Host skills (claude/codex/cursor/trae/general)
+│   ├── worker/        # Worker skills (claude/codex/cursor/trae/general)
+│   └── knowledge-keeper/
+└── rule/              # Enforced rules (hard constraints, highest priority)
+```
+
+- **Fully local**: All data stored in local SQLite, never uploaded to cloud
+- **Monorepo**: pnpm workspaces, TypeScript, Fastify HTTP server
+- **Skill + Rule dual-layer**: Skill is behavioral template (AI may reference), Rule is hard law (must obey)
 
 ---
 
 ## Quick Start
 
-After downloading the repository locally, here's the fastest way to get started.
-
-### Install Dependencies and Build
-
 ```powershell
-npm install
-npm run build
-npm run link:cli
-```
+# Clone repository
+git clone https://github.com/<owner>/ai-collab.git
+cd ai-collab
 
-This installs the built local `ai-collab` CLI into your environment, so you can use the `ai-collab` command directly afterwards.
+# Install dependencies and build
+pnpm install
+pnpm run build
+pnpm run link:cli
 
-### Start Local Runtime
-
-```cmd
+# Start service (backend + web dashboard)
 ai-collab start
 ```
 
-### Import Skills in Host IDE/CLI and Worker IDE/CLI
+After startup, both the backend service (Fastify, port 42688) and the web dashboard (Vite, port 5173) will be running. Use `--no-web` to skip the frontend, `--daemon` to run in background.
 
-```tex
-In the Skills folder of this project, there are skills categorized by host/worker and different IDEs. If none match your tool, use the skills in the general folder. We'll continue updating and expanding coverage.
+### In Host IDE (e.g., Trae)
+
+```
+You are the host for this project. Your name is trae. Create and join session demo-collab-01.
 ```
 
-### Rule (Optional)
+### In Worker IDE (e.g., Cursor)
 
-**This step is optional. Using Skills alone should theoretically support the entire workflow. However, some AI coding tools can occasionally behave erratically, causing unexpected session interruptions or anomalies. Rule provides an additional layer of constraint.**
-
-```tex
-In the rule folder of this project, there are separate rules for host and worker. Import them respectively.
+```
+You are a worker for this project. Your name is cursor. Join session demo-collab-01. Your responsibility is frontend development.
 ```
 
-### Let Host Establish a Collaboration Session
+### Host Views Session Members
 
-```tex
-You are the host for this project. Create and join session demo-school-collab-01. First understand requirements, then break down tasks based on member responsibilities. Distribute parallel tasks together in the same round. Enter wait chain after dispatching. When receiving reports, continue progressing until reaching acceptance criteria.
 ```
-
-### View Current Session Members
-
-```tex
 View current project members
 ```
 
-### Let Host Start Distributing Tasks
+Then break down tasks based on member capabilities and use `dispatch-many` to distribute.
 
-**This step should happen after finalizing the plan with Host and ready to start work. The example shows telling the host to begin—you don't need to be this complex. You can also define the workflow with host before this step based on member roles.**
+### Import Skills
 
-```
-Basic workflow: First distribute tasks to both frontend and backend at the same time, then enter wait chain for worker messages.
-When receiving messages from both sides, distribute review tasks to reviewer, and new tasks to frontend/backend accordingly.
-Note: When frontend finishes, frontend reviewer handles review and distributes next frontend tasks. Same for backend—don't mix them up.
+In the `skills/` folder, skills are organized by role (host/worker/knowledge-keeper) and by IDE (claude/codex/cursor/trae/general). Use `general/` if no specific match exists.
 
-Now break down tasks in more granular detail, don't distribute one huge task at a time. Start distributing tasks to each worker.
-```
+### Rule (Optional)
 
-### Let Worker Continuously Wait, Execute, and Report
+**Using Skills alone should support the entire workflow. However, some AI tools can behave erratically, causing unexpected session interruptions. Rule provides an additional constraint layer.**
 
-```tex
-Enter wait chain
-```
+In the `rule/` folder, there are separate rules for host and worker (`rule/host/` and `rule/worker/`). Import them respectively.
 
 ### Why Rule Has Highest Priority
 
-Skill is a soft constraint—AI might "forget" or "flexibly handle".
+Skill is a soft constraint -- AI might "forget" or "flexibly handle" it.
 But Rule is a hard law that must not be violated under any circumstances. This is the key to ensuring collaborative stability.
 
 ---
 
-## 💡 Best Practices
+## Best Practices
 
 **Optimal approach: Use openclaw or hermes agent as host to direct all workers**
 
 ### For Host
 
 1.  **Load Rule first, then Skill**
-    Rule is the foundational constraint—it must be established first.
+    Rule is the foundational constraint -- it must be established first.
 
 2.  **Use clear session names**
-    Like `ecommerce-v2` or `blog-system`—avoid `test` or `session-1`.
+    Like `ecommerce-v2` or `blog-system` -- avoid `test` or `session-1`.
 
 3.  **Worker roles should be stable**
     `--worker-role` describes long-term responsibilities, not one-off tasks like "help me write a page".
@@ -142,12 +169,12 @@ But Rule is a hard law that must not be violated under any circumstances. This i
     Distribute multiple independent tasks in a single batch for maximum efficiency.
 
 5.  **Never manually assemble parameters**
-    All parameters like `--token`, `--continue-*`, etc. are returned by CLI—execute them directly.
+    All parameters like `--token`, `--continue-*`, etc. are returned by CLI -- execute them directly.
 
 ### For Worker
 
 1.  **Focus on execution, don't overstep authority**
-    Workers only execute tasks—don't try to do overall planning.
+    Workers only execute tasks -- don't try to do overall planning.
 
 2.  **Submit clear results**
     Explain what was done, which files were modified, and any notes.
@@ -157,24 +184,57 @@ But Rule is a hard law that must not be violated under any circumstances. This i
 
 ---
 
-## 🔧 Command Reference
+## Command Reference
 
-### Session Management
+### Service Management
 
 ```bash
-# Start service
-ai-collab start
+ai-collab start [--no-web] [--daemon]   # Start service (with web dashboard)
+ai-collab stop                           # Stop service
+ai-collab status                         # Check status
+ai-collab doctor                         # Diagnostic check
+ai-collab logs                           # View logs
+```
 
-# Check status
-ai-collab status
+### Session & Agent
 
-# Delete session
-ai-collab session delete --session <name>
+```bash
+ai-collab attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<duty>"
+ai-collab reset <name> --session <session>
+ai-collab members --session <session>
+```
+
+### Task Dispatch & Execution
+
+```bash
+ai-collab dispatch-many --session <session> --tasks '[...]'
+ai-collab await <name> --session <session>
+ai-collab submit <name> --session <session> --content "<result>"
+ai-collab resolve --session <session> --message-id <id> --action <approve|reject|revise>
+```
+
+### Knowledge Base
+
+```bash
+ai-collab knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
+ai-collab knowledge list --session <session>
+ai-collab knowledge judge --session <session> --message-id <id>
+ai-collab knowledge fulfil-judgement --session <session> --judgement-id <id>
+ai-collab knowledge read-current --session <session>
+ai-collab knowledge update-current --session <session>
+```
+
+### User Profile
+
+```bash
+ai-collab profile get <name> --session <session> [key]
+ai-collab profile set <name> --session <session> <key> <value>
+ai-collab profile delete <name> --session <session> <key>
 ```
 
 ---
 
-## 📊 Data and State
+## Data and State
 
 All data is stored locally, never uploaded to cloud.
 
@@ -196,13 +256,14 @@ All data is stored locally, never uploaded to cloud.
 
 ---
 
-## 🗂️ Repository Structure
+## Repository Structure
 
 ```text
 ai-collab/
 ├── apps/
 │   ├── cli/           # Command line entry
-│   └── core/          # Local collaboration service
+│   ├── core/          # Local collaboration service
+│   └── web/           # Web console
 │
 ├── packages/
 │   ├── protocol/      # Type definitions and protocol
@@ -212,33 +273,36 @@ ai-collab/
 │
 ├── skills/            # AI behavior constraint templates (soft constraints)
 │   ├── host/
-│   └── worker/
+│   ├── worker/
+│   └── knowledge-keeper/
 │
 ├── rule/              # Enforced rules (hard constraints, highest priority)
-│   └── ai-collab-强制执行规则.md
-│
-├── docs/              # Design docs and integration guides
 │
 └── scripts/           # Smoke tests and packaging scripts
 ```
 
 ---
 
-## 🚧 Current Status
+## Current Status
 
 The project is under active development, but the core workflow is already stable and usable:
 
-- ✅ Named session management
-- ✅ Host / Worker role separation
-- ✅ Single task / batch task distribution
-- ✅ Resumable wait chain (no data loss on timeout)
-- ✅ SQLite-persisted message flow
-- ✅ Dual-layer AI behavior constraints: Skill / Rule
-- ✅ Trae-specific optimization rules
+- Named session management
+- Host / Worker / Knowledge Keeper role separation
+- Single task / batch task distribution
+- Resumable wait chain (no data loss on timeout)
+- SQLite-persisted message flow
+- Dual-layer AI behavior constraints: Skill / Rule
+- Knowledge base L1/L2/L3 architecture
+- Fragment-level knowledge references
+- User collaboration profile management
+- Web dashboard (session/member/message/knowledge visualization)
+- Frontend internationalization (Chinese/English)
+- VS Code extension adapter
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 ### Q: Why not build a fully autonomous agent?
 
@@ -256,7 +320,7 @@ Because clear division of labor creates stability.
 - Host focuses on "how to arrange work"
 - Worker focuses on "how to get the job done well"
 
-When mixed together, AI alternates between global strategic thinking and concrete coding—easily leading to confusion and errors.
+When mixed together, AI alternates between global strategic thinking and concrete coding -- easily leading to confusion and errors.
 
 ### Q: Why do we need the wait chain?
 
@@ -279,12 +343,12 @@ The wait chain automatically:
 
 ---
 
-## 📝 One Final Note
+## One Final Note
 
-`ai-collab` doesn't aim to replace you with AI—it simply makes managing multiple AI workers less exhausting.
+`ai-collab` doesn't aim to replace you with AI -- it simply makes managing multiple AI workers less exhausting.
 
 ---
 
 ## License
 
-MIT
+Licensed under the [Apache License 2.0](./LICENSE).

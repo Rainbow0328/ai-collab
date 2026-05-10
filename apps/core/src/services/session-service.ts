@@ -17,6 +17,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type {
   Agent,
+  AgentHeartbeat,
   AttachSessionInput,
   CreateSessionInput,
   LeaveAgentResult,
@@ -24,7 +25,8 @@ import type {
   JoinSessionByNameInput,
   RemoveSessionMemberInput,
   Session,
-  SessionJoinResult
+  SessionJoinResult,
+  SessionSummary
 } from "@ai-collab/protocol";
 import {
   AgentRepository,
@@ -32,8 +34,10 @@ import {
   MessageRepository,
   SessionInsightRepository,
   SessionRepository,
-  TaskEventRepository,
-  TaskRepository
+  SessionBindingRepository,
+  SkillRepository,
+  AgentProfileRepository,
+  ModelConfigRepository
 } from "@ai-collab/store";
 
 import { coreErrors } from "../errors.js";
@@ -58,7 +62,7 @@ const normalizeRoleDescription = (
   if (role === "worker") {
     if (!normalized) {
       throw coreErrors.invalidInput(
-        "当前 worker 加入必须提供角色说明。请明确说明这个 worker 是干什么用的。"
+        "Worker must provide a role description. Describe what this worker is responsible for."
       );
     }
 
@@ -87,11 +91,44 @@ export class SessionService {
     private readonly sessions: SessionRepository,
     private readonly agents: AgentRepository,
     private readonly messages: MessageRepository,
-    private readonly tasks: TaskRepository,
-    private readonly taskEvents: TaskEventRepository,
     private readonly sessionInsights: SessionInsightRepository,
-    private readonly identityLeases: IdentityLeaseRepository
+    private readonly identityLeases: IdentityLeaseRepository,
+    private readonly sessionBindings: SessionBindingRepository,
+    private readonly skills: SkillRepository,
+    private readonly agentProfiles: AgentProfileRepository,
+    private readonly modelConfigs: ModelConfigRepository
   ) {}
+
+  public listSessions(): SessionSummary[] {
+    return this.sessions.listAllSummaries();
+  }
+
+  public listMemberHeartbeats(sessionId: string): AgentHeartbeat[] {
+    const session = this.sessions.findById(sessionId);
+    if (!session) {
+      throw coreErrors.sessionNotFound(sessionId);
+    }
+
+    const heartbeats = this.agents.listHeartbeatsBySessionId(sessionId);
+    const now = Date.now();
+
+    return heartbeats.map((h) => {
+      const isWorkingState = h.status === "busy";
+      // Working state: 30 min heartbeat timeout; other states: 60s
+      const timeoutMs = isWorkingState ? 1800000 : 60000;
+      const lastHeartbeatMs = new Date(h.lastHeartbeatAt).getTime();
+      
+      return {
+        agentId: h.id,
+        agentName: h.agentName,
+        displayName: h.displayName,
+        role: h.role as import("@ai-collab/protocol").AgentRole,
+        status: h.status as import("@ai-collab/protocol").AgentStatus,
+        lastHeartbeatAt: h.lastHeartbeatAt,
+        online: h.status !== "offline" && (now - lastHeartbeatMs) < timeoutMs
+      };
+    });
+  }
 
   public createSession(input: CreateSessionInput): SessionJoinResult {
     const existing = this.sessions.findOpenByName(input.sessionName);
@@ -271,7 +308,7 @@ export class SessionService {
       agentName: input.agentName,
       displayName: defaultAgentDisplayName(input.agentName),
       platform: defaultAgentPlatform,
-      role: "worker",
+      role: input.role === "knowledge_keeper" ? "knowledge_keeper" : "worker",
       roleDescription: input.roleDescription,
       capabilities: defaultAgentCapabilities,
       connectionMode: defaultAgentConnectionMode
@@ -341,13 +378,13 @@ export class SessionService {
       throw coreErrors.crossSessionAgent(input.targetAgentId, input.sessionId);
     }
     if (requester.role !== "host") {
-      throw coreErrors.permissionDenied("只有 host 可以强制移除会话成员。");
+      throw coreErrors.permissionDenied("Only the host can remove session members.");
     }
     if (target.role === "host") {
-      throw coreErrors.invalidAgentRemoval("不能通过成员移除接口强制移除 host。");
+      throw coreErrors.invalidAgentRemoval("Cannot remove the host via the member removal endpoint.");
     }
     if (requester.id === target.id) {
-      throw coreErrors.invalidAgentRemoval("host 不能通过成员移除接口移除自己。");
+      throw coreErrors.invalidAgentRemoval("Host cannot remove itself via the member removal endpoint.");
     }
 
     return this.runInTransaction(() =>
@@ -394,7 +431,7 @@ export class SessionService {
         throw coreErrors.crossSessionAgent(requesterAgentId, sessionId);
       }
       if (requester.role !== "host") {
-        throw coreErrors.permissionDenied("只有 host 可以主动删除仍在运行中的会话。");
+        throw coreErrors.permissionDenied("Only the host can delete an active session.");
       }
     }
 
@@ -454,7 +491,6 @@ export class SessionService {
     const agentIdentity = `${session.name}::${agent.agentName}`;
 
     this.messages.deleteByAgentId(agent.id);
-    this.tasks.clearAssignmentsForAgent(agent.id, timestamp);
     this.sessionInsights.clearDispatchForAgent(session.id, agent.id, timestamp);
     this.agents.deleteById(agent.id);
     this.identityLeases.deleteByIdentity(agentIdentity);
@@ -477,13 +513,118 @@ export class SessionService {
     };
   }
 
+  public createSessionWithAgent(input: import("@ai-collab/protocol").CreateSessionWithAgentInput): SessionJoinResult {
+    let resolvedModelConfigId = input.modelConfigId ?? null;
+    let resolvedRoleDescription = input.roleDescription ?? undefined;
+    let resolvedRuntimeParameters = input.runtimeParameters ?? null;
+    let resolvedSystemPrompt: string | null = null;
+
+    if (input.agentProfileId) {
+      const profile = this.agentProfiles.findById(input.agentProfileId);
+      if (profile) {
+        if (!resolvedModelConfigId && profile.defaultModelConfigId) {
+          resolvedModelConfigId = profile.defaultModelConfigId;
+        }
+        if (!resolvedRoleDescription && profile.roleDescription) {
+          resolvedRoleDescription = profile.roleDescription;
+        }
+        if (!resolvedRuntimeParameters && profile.defaultParametersJson) {
+          try {
+            resolvedRuntimeParameters = JSON.parse(profile.defaultParametersJson);
+          } catch {
+            resolvedRuntimeParameters = null;
+          }
+        }
+        if (profile.systemPrompt) {
+          resolvedSystemPrompt = profile.systemPrompt;
+        }
+      }
+    }
+
+    const result = this.createSession({
+      sessionName: input.sessionName,
+      agentName: input.agentName,
+      displayName: input.displayName,
+      platform: defaultAgentPlatform,
+      roleDescription: resolvedRoleDescription,
+      capabilities: defaultAgentCapabilities,
+      connectionMode: defaultAgentConnectionMode
+    });
+
+    this.sessionBindings.insert({
+      agentId: result.agent.id,
+      modelConfigId: resolvedModelConfigId,
+      agentProfileId: input.agentProfileId ?? null,
+      runtimeParametersJson: resolvedRuntimeParameters ? JSON.stringify(resolvedRuntimeParameters) : null,
+      systemPrompt: resolvedSystemPrompt,
+      createdAt: now()
+    });
+
+    if (input.skillIds !== undefined) {
+      this.skills.setSessionSkills(result.session.id, input.skillIds);
+    }
+
+    return result;
+  }
+
+  public joinSessionWithAgent(input: import("@ai-collab/protocol").JoinSessionWithAgentInput): SessionJoinResult {
+    let resolvedModelConfigId = input.modelConfigId ?? null;
+    let resolvedRoleDescription = input.roleDescription ?? undefined;
+    let resolvedRuntimeParameters = input.runtimeParameters ?? null;
+    let resolvedSystemPrompt: string | null = null;
+
+    if (input.agentProfileId) {
+      const profile = this.agentProfiles.findById(input.agentProfileId);
+      if (profile) {
+        if (!resolvedModelConfigId && profile.defaultModelConfigId) {
+          resolvedModelConfigId = profile.defaultModelConfigId;
+        }
+        if (!resolvedRoleDescription && profile.roleDescription) {
+          resolvedRoleDescription = profile.roleDescription;
+        }
+        if (!resolvedRuntimeParameters && profile.defaultParametersJson) {
+          try {
+            resolvedRuntimeParameters = JSON.parse(profile.defaultParametersJson);
+          } catch {
+            resolvedRuntimeParameters = null;
+          }
+        }
+        if (profile.systemPrompt) {
+          resolvedSystemPrompt = profile.systemPrompt;
+        }
+      }
+    }
+
+    const result = this.joinSession({
+      sessionId: input.sessionId,
+      agentName: input.agentName,
+      displayName: input.displayName,
+      platform: defaultAgentPlatform,
+      role: input.role,
+      roleDescription: resolvedRoleDescription,
+      capabilities: defaultAgentCapabilities,
+      connectionMode: defaultAgentConnectionMode
+    });
+
+    this.sessionBindings.insert({
+      agentId: result.agent.id,
+      modelConfigId: resolvedModelConfigId,
+      agentProfileId: input.agentProfileId ?? null,
+      runtimeParametersJson: resolvedRuntimeParameters ? JSON.stringify(resolvedRuntimeParameters) : null,
+      systemPrompt: resolvedSystemPrompt,
+      createdAt: now()
+    });
+
+    return result;
+  }
+
   private deleteSessionData(session: Session): void {
-    this.taskEvents.deleteBySessionId(session.id);
-    this.tasks.deleteBySessionId(session.id);
     this.messages.deleteBySessionId(session.id);
     this.sessionInsights.deleteBySessionId(session.id);
     this.agents.deleteBySessionId(session.id);
     this.identityLeases.deleteBySessionName(session.name);
+    this.skills.deleteSessionSkills(session.id);
+    this.sessionBindings.deleteBySessionId(session.id);
     this.sessions.deleteById(session.id);
   }
 

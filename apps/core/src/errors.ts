@@ -43,7 +43,7 @@ export const coreErrors = {
   sessionNotEmpty(sessionId: string, memberCount: number) {
     return new CoreError(
       errorCodes.sessionNotEmpty,
-      `会话 "${sessionId}" 当前仍有 ${memberCount} 个成员，必须先让所有成员退出后才能删除该会话。`,
+      `Session "${sessionId}" still has ${memberCount} member(s). All members must leave before the session can be deleted.`,
       409
     );
   },
@@ -82,6 +82,13 @@ export const coreErrors = {
     return new CoreError(
       errorCodes.messageNotFound,
       `Message "${messageId}" was not found.`,
+      404
+    );
+  },
+  knowledgeDocumentNotFound(level: string, slug: string) {
+    return new CoreError(
+      errorCodes.knowledgeDocumentNotFound,
+      `Knowledge document "${level}/${slug}" was not found.`,
       404
     );
   },
@@ -136,24 +143,10 @@ export const coreErrors = {
       409
     );
   },
-  taskNotFound(taskId: string) {
-    return new CoreError(
-      errorCodes.taskNotFound,
-      `Task "${taskId}" was not found.`,
-      404
-    );
-  },
   crossSessionAgent(agentId: string, sessionId: string) {
     return new CoreError(
       errorCodes.crossSessionAgent,
       `Agent "${agentId}" does not belong to session "${sessionId}".`,
-      409
-    );
-  },
-  invalidTaskAssignee(agentId: string, taskId: string) {
-    return new CoreError(
-      errorCodes.invalidTaskAssignee,
-      `Agent "${agentId}" cannot complete task "${taskId}".`,
       409
     );
   },

@@ -13,9 +13,21 @@
  * limitations under the License.
  */
 export * from "./session-service.js";
+export * from "./session-console-service.js";
 export * from "./agent-service.js";
 export * from "./message-service.js";
-export * from "./task-service.js";
 export * from "./session-insight-service.js";
 export * from "./identity-lease-service.js";
 export * from "./window-binding-service.js";
+export * from "./websocket-service.js";
+export * from "./progress-service.js";
+export * from "./knowledge-file-store.js";
+export * from "./knowledge-service.js";
+export * from "./knowledge-extraction-service.js";
+export * from "./model-config-service.js";
+export * from "./agent-profile-service.js";
+export * from "./skill-service.js";
+export * from "./host-knowledge-build-service.js";
+export * from "./trace-service.js";
+export * from "./analytics-service.js";
+export * from "./user-profile-service.js";

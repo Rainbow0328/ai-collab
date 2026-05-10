@@ -24,10 +24,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-collab/core": "0.1.0",
-    "@ai-collab/protocol": "0.1.0",
-    "@ai-collab/shared": "0.1.0",
-    "@ai-collab/sdk": "0.1.0",
+    "@ai-collab/core": "workspace:*",
+    "@ai-collab/protocol": "workspace:*",
+    "@ai-collab/shared": "workspace:*",
+    "@ai-collab/sdk": "workspace:*",
     "commander": "^13.1.0"
   }
 }

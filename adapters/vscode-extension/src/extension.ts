@@ -19,7 +19,7 @@ type SessionState = {
   sessionId: string;
   agentId: string;
   agentName: string;
-  role: "host" | "worker" | "observer";
+  role: "host" | "worker" | "knowledge_keeper";
   displayName: string;
 };
 
@@ -153,18 +153,13 @@ const joinSession = async (
   }
 
   const rolePick = await vscode.window.showQuickPick<
-    vscode.QuickPickItem & { role: "worker" | "observer" }
+    vscode.QuickPickItem & { role: "worker" }
   >(
     [
       {
         label: "worker",
         description: "Participate as an implementation agent",
         role: "worker"
-      },
-      {
-        label: "observer",
-        description: "Watch the session without executing work",
-        role: "observer"
       }
     ],
     {

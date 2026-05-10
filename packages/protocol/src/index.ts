@@ -13,5 +13,14 @@
  * limitations under the License.
  */
 export * from "./types.js";
+export * from "./progress.js";
+export * from "./knowledge.js";
+export * from "./console.js";
 export * from "./schemas.js";
 export * from "./errors.js";
+export * from "./websocket.js";
+export * from "./model.js";
+export * from "./agent-profile.js";
+export * from "./skill.js";
+export * from "./session-create.js";
+export * from "./user-profile.js";

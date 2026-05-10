@@ -13,11 +13,13 @@
  * limitations under the License.
  */
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const releaseRoot = join(repoRoot, "release", "ai-collab");
+const webDistPath = join(repoRoot, "apps", "web", "dist");
 
 const rootPackage = {
   packageJsonPath: join(repoRoot, "apps", "cli", "package.json"),
@@ -168,6 +170,14 @@ const main = async () => {
 
   for (const item of bundledPackages) {
     await copyPackage(item, releaseRoot);
+  }
+
+  if (existsSync(join(webDistPath, "index.html"))) {
+    await cp(
+      webDistPath,
+      join(releaseRoot, "node_modules", "@ai-collab", "core", "web"),
+      { recursive: true }
+    );
   }
 
   for (const dependencyName of externalDependencies) {
