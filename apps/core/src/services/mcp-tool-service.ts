@@ -35,6 +35,160 @@ const objectSchema = (
 const builtinTools: BuiltinToolEntry[] = [
   {
     definition: {
+      name: "ai_collab_await_event",
+      description: "Wait for the next collaboration event with state-machine continuation guidance.",
+      parameters: objectSchema(
+        {
+          sessionName: { type: "string", description: "Session name bound to this window." },
+          windowName: { type: "string", description: "Window/agent name bound to this MCP client." },
+          role: {
+            type: "string",
+            description: "Optional expected role for this window.",
+            enum: ["host", "worker", "knowledge_keeper"]
+          },
+          timeoutSeconds: {
+            type: "number",
+            description: "Business wait timeout in seconds; clamped below the MCP client timeout."
+          },
+          continuationToken: { type: "string", description: "Continuation token returned by the previous wait." },
+          quiet: { type: "boolean", description: "Suppress user-visible summaries while waiting." },
+          returnOnlyOnEvent: { type: "boolean", description: "Return only when work arrives or continuation is required." }
+        },
+        ["sessionName", "windowName"]
+      )
+    },
+    allowedRoles: ["host", "worker", "knowledge_keeper"],
+    handler: async (args, services) =>
+      services.collaborationWaitService.awaitEvent({
+        sessionName: String(args.sessionName),
+        windowName: String(args.windowName),
+        ...(args.role ? { role: String(args.role) as never } : {}),
+        ...(typeof args.timeoutSeconds === "number"
+          ? { timeoutSeconds: args.timeoutSeconds }
+          : {}),
+        ...(args.continuationToken
+          ? { continuationToken: String(args.continuationToken) }
+          : {}),
+        ...(typeof args.quiet === "boolean" ? { quiet: args.quiet } : {}),
+        ...(typeof args.returnOnlyOnEvent === "boolean"
+          ? { returnOnlyOnEvent: args.returnOnlyOnEvent }
+          : {})
+      })
+  },
+  {
+    definition: {
+      name: "ai_collab_submit_and_await_next",
+      description: "Submit a claimed task result and immediately continue waiting for the next event.",
+      parameters: objectSchema(
+        {
+          sessionName: { type: "string", description: "Session name bound to this window." },
+          windowName: { type: "string", description: "Window/agent name bound to this MCP client." },
+          taskId: { type: "string", description: "Claimed task message id." },
+          status: {
+            type: "string",
+            description: "Task completion status.",
+            enum: ["completed", "failed", "blocked"]
+          },
+          result: { type: "object", description: "Structured task result." },
+          failureReason: { type: "string", description: "Failure or blocked reason." },
+          timeoutSeconds: {
+            type: "number",
+            description: "Business wait timeout in seconds after submission."
+          },
+          continuationToken: { type: "string", description: "Continuation token returned by the previous wait." }
+        },
+        ["sessionName", "windowName", "taskId", "status"]
+      )
+    },
+    allowedRoles: ["worker", "knowledge_keeper"],
+    handler: async (args, services) =>
+      services.collaborationWaitService.submitAndAwaitNext({
+        sessionName: String(args.sessionName),
+        windowName: String(args.windowName),
+        taskId: String(args.taskId),
+        status:
+          args.status === "failed" || args.status === "blocked"
+            ? args.status
+            : "completed",
+        ...(args.result !== undefined ? { result: args.result } : {}),
+        ...(args.failureReason
+          ? { failureReason: String(args.failureReason) }
+          : {}),
+        ...(typeof args.timeoutSeconds === "number"
+          ? { timeoutSeconds: args.timeoutSeconds }
+          : {}),
+        ...(args.continuationToken
+          ? { continuationToken: String(args.continuationToken) }
+          : {})
+      })
+  },
+  {
+    definition: {
+      name: "ai_collab_report_and_await_next",
+      description: "Resolve a claimed host report/message and immediately continue waiting for the next event.",
+      parameters: objectSchema(
+        {
+          sessionName: { type: "string", description: "Session name bound to this window." },
+          windowName: { type: "string", description: "Window/agent name bound to this MCP client." },
+          messageId: { type: "string", description: "Claimed report/message id." },
+          action: {
+            type: "string",
+            description: "Resolution action.",
+            enum: ["completed", "failed", "delegated"]
+          },
+          reply: { type: "object", description: "Optional structured reply/result." },
+          failureReason: { type: "string", description: "Failure reason." },
+          timeoutSeconds: {
+            type: "number",
+            description: "Business wait timeout in seconds after resolution."
+          },
+          continuationToken: { type: "string", description: "Continuation token returned by the previous wait." }
+        },
+        ["sessionName", "windowName", "messageId", "action"]
+      )
+    },
+    allowedRoles: ["host"],
+    handler: async (args, services) =>
+      services.collaborationWaitService.reportAndAwaitNext({
+        sessionName: String(args.sessionName),
+        windowName: String(args.windowName),
+        messageId: String(args.messageId),
+        action: args.action === "failed" || args.action === "delegated"
+          ? args.action
+          : "completed",
+        ...(args.reply !== undefined ? { reply: args.reply } : {}),
+        ...(args.failureReason
+          ? { failureReason: String(args.failureReason) }
+          : {}),
+        ...(typeof args.timeoutSeconds === "number"
+          ? { timeoutSeconds: args.timeoutSeconds }
+          : {}),
+        ...(args.continuationToken
+          ? { continuationToken: String(args.continuationToken) }
+          : {})
+      })
+  },
+  {
+    definition: {
+      name: "ai_collab_get_runtime_state",
+      description: "Read the current collaboration state-machine guidance for this window.",
+      parameters: objectSchema(
+        {
+          sessionName: { type: "string", description: "Session name bound to this window." },
+          windowName: { type: "string", description: "Window/agent name bound to this MCP client." }
+        },
+        ["sessionName", "windowName"]
+      )
+    },
+    allowedRoles: ["host", "worker", "knowledge_keeper"],
+    handler: async (args, services) =>
+      services.collaborationWaitService.getRuntimeState({
+        sessionName: String(args.sessionName),
+        windowName: String(args.windowName)
+      })
+  },
+  {
+    definition: {
       name: "claim_next",
       description: "Claim the next actionable message from the agent inbox.",
       parameters: objectSchema({
@@ -480,6 +634,9 @@ const builtinTools: BuiltinToolEntry[] = [
 
 const toolsetDefinitions: Record<McpToolsetId, string[]> = {
   worker: [
+    "ai_collab_await_event",
+    "ai_collab_submit_and_await_next",
+    "ai_collab_get_runtime_state",
     "claim_next",
     "submit_result",
     "fail_task",
@@ -489,6 +646,9 @@ const toolsetDefinitions: Record<McpToolsetId, string[]> = {
     "heartbeat"
   ],
   host: [
+    "ai_collab_await_event",
+    "ai_collab_report_and_await_next",
+    "ai_collab_get_runtime_state",
     "claim_next",
     "send_message",
     "knowledge_read",
@@ -500,6 +660,9 @@ const toolsetDefinitions: Record<McpToolsetId, string[]> = {
     "update_insight"
   ],
   knowledge_keeper: [
+    "ai_collab_await_event",
+    "ai_collab_submit_and_await_next",
+    "ai_collab_get_runtime_state",
     "claim_next",
     "submit_result",
     "fail_task",
@@ -516,6 +679,9 @@ const toolsetDefinitions: Record<McpToolsetId, string[]> = {
     "command_run"
   ],
   developer: [
+    "ai_collab_await_event",
+    "ai_collab_submit_and_await_next",
+    "ai_collab_get_runtime_state",
     "claim_next",
     "submit_result",
     "fail_task",
@@ -641,7 +807,13 @@ export class McpToolService {
       return `Tool '${toolName}' denied: messages.claim permission is disabled.`;
     }
     if (
-      ["submit_result", "fail_task", "resolve_message"].includes(toolName) &&
+      [
+        "submit_result",
+        "fail_task",
+        "resolve_message",
+        "ai_collab_submit_and_await_next",
+        "ai_collab_report_and_await_next"
+      ].includes(toolName) &&
       !policy.messages.complete
     ) {
       return `Tool '${toolName}' denied: messages.complete permission is disabled.`;

@@ -66,6 +66,7 @@ import { logApiAudit } from "./request-audit.js";
 import { successResponse, errorResponse } from "./response.js";
 import type {
   AgentService,
+  CollaborationWaitService,
   ExtractionService,
   GuardService,
   IdentityLeaseService,
@@ -105,6 +106,7 @@ export type ServerServices = {
   modelConfigService: ModelConfigRepository;
   externalMcpService: ExternalMcpService;
   mcpToolService: McpToolService;
+  collaborationWaitService: CollaborationWaitService;
   webAgentRuntimeService: WebAgentRuntimeService;
   webAgentRuntimeExecutorService: WebAgentRuntimeExecutorService;
   workflowDefinitionService: WorkflowDefinitionService;

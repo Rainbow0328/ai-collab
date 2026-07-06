@@ -27,6 +27,7 @@ export * from "./knowledge-service.js";
 export * from "./knowledge-extraction-service.js";
 export * from "./external-mcp-service.js";
 export * from "./mcp-tool-service.js";
+export * from "./collaboration-wait-service.js";
 export * from "./web-agent-runtime-service.js";
 export * from "./web-agent-runtime-executor-service.js";
 export * from "./workflow-definition-service.js";

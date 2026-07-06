@@ -14,7 +14,7 @@
  */
 import { createAiCollabClient } from "@ai-collab/sdk";
 import { AiCollabSdkError } from "@ai-collab/sdk";
-import { errorCodes } from "@ai-collab/protocol";
+import { errorCodes, type CollaborationRunState } from "@ai-collab/protocol";
 
 export type WindowRuntimeState = {
   windowKey: string;
@@ -39,6 +39,12 @@ export type WindowRuntimeState = {
   lastWorkflowStep: string | null;
   lastAutomationState: string | null;
   lastTurnDisposition: string | null;
+  state: CollaborationRunState | null;
+  requiredAction: string | null;
+  requiredTool: string | null;
+  continuationToken: string | null;
+  userVisibleResponseAllowed: boolean | null;
+  leaseExpiresAt: string | null;
   updatedAt: string;
 };
 
@@ -84,6 +90,12 @@ const mapBindingToRuntimeState = (
     lastWorkflowStep: binding.runtimeState.lastWorkflowStep,
     lastAutomationState: binding.runtimeState.lastAutomationState,
     lastTurnDisposition: binding.runtimeState.lastTurnDisposition,
+    state: binding.runtimeState.state,
+    requiredAction: binding.runtimeState.requiredAction,
+    requiredTool: binding.runtimeState.requiredTool,
+    continuationToken: binding.runtimeState.continuationToken,
+    userVisibleResponseAllowed: binding.runtimeState.userVisibleResponseAllowed,
+    leaseExpiresAt: binding.runtimeState.leaseExpiresAt,
     updatedAt: binding.runtimeState.updatedAt ?? binding.lastHeartbeatAt
   };
 };
@@ -134,7 +146,13 @@ export const writeWindowRuntimeState = async (
       lastStatus: state.lastStatus,
       lastWorkflowStep: state.lastWorkflowStep,
       lastAutomationState: state.lastAutomationState,
-      lastTurnDisposition: state.lastTurnDisposition
+      lastTurnDisposition: state.lastTurnDisposition,
+      state: state.state,
+      requiredAction: state.requiredAction,
+      requiredTool: state.requiredTool,
+      continuationToken: state.continuationToken,
+      userVisibleResponseAllowed: state.userVisibleResponseAllowed,
+      leaseExpiresAt: state.leaseExpiresAt
     }
   );
   return mapBindingToRuntimeState(binding);

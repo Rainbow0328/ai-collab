@@ -145,6 +145,20 @@ export type WindowBindingDefaults = {
 
 export type WindowRuntimeMessageKind = "task" | "report";
 
+export const collaborationRunStates = [
+  "idle",
+  "waiting",
+  "waiting_continue_required",
+  "assigned",
+  "in_progress",
+  "submit_pending_continue",
+  "resolve_pending_continue",
+  "stale",
+  "blocked_requires_user",
+  "session_complete"
+] as const;
+export type CollaborationRunState = (typeof collaborationRunStates)[number];
+
 export type WindowRuntimeState = {
   activeFlow: string | null;
   currentMessageId: string | null;
@@ -162,6 +176,12 @@ export type WindowRuntimeState = {
   lastWorkflowStep: string | null;
   lastAutomationState: string | null;
   lastTurnDisposition: string | null;
+  state: CollaborationRunState | null;
+  requiredAction: string | null;
+  requiredTool: string | null;
+  continuationToken: string | null;
+  userVisibleResponseAllowed: boolean | null;
+  leaseExpiresAt: string | null;
   updatedAt: string | null;
 };
 
@@ -472,6 +492,12 @@ export type UpdateWindowRuntimeStateInput = {
   lastWorkflowStep?: string | null | undefined;
   lastAutomationState?: string | null | undefined;
   lastTurnDisposition?: string | null | undefined;
+  state?: CollaborationRunState | null | undefined;
+  requiredAction?: string | null | undefined;
+  requiredTool?: string | null | undefined;
+  continuationToken?: string | null | undefined;
+  userVisibleResponseAllowed?: boolean | null | undefined;
+  leaseExpiresAt?: string | null | undefined;
 };
 
 export type ApiResponse<T = unknown> = {

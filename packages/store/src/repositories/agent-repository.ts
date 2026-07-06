@@ -16,6 +16,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type {
   Agent,
+  CollaborationRunState,
   UpdateWindowBindingDefaultsInput,
   UpdateWindowRuntimeStateInput,
   WindowBinding
@@ -55,6 +56,12 @@ type WindowBindingRow = {
   runtimeLastWorkflowStep: string | null;
   runtimeLastAutomationState: string | null;
   runtimeLastTurnDisposition: string | null;
+  runtimeState: CollaborationRunState | null;
+  runtimeRequiredAction: string | null;
+  runtimeRequiredTool: string | null;
+  runtimeContinuationToken: string | null;
+  runtimeUserVisibleResponseAllowed: number | null;
+  runtimeLeaseExpiresAt: string | null;
   runtimeUpdatedAt: string | null;
   createdAt: string;
   lastHeartbeatAt: string;
@@ -385,6 +392,12 @@ export class AgentRepository {
         a.runtime_last_workflow_step AS runtimeLastWorkflowStep,
         a.runtime_last_automation_state AS runtimeLastAutomationState,
         a.runtime_last_turn_disposition AS runtimeLastTurnDisposition,
+        a.runtime_state AS runtimeState,
+        a.runtime_required_action AS runtimeRequiredAction,
+        a.runtime_required_tool AS runtimeRequiredTool,
+        a.runtime_continuation_token AS runtimeContinuationToken,
+        a.runtime_user_visible_response_allowed AS runtimeUserVisibleResponseAllowed,
+        a.runtime_lease_expires_at AS runtimeLeaseExpiresAt,
         a.runtime_updated_at AS runtimeUpdatedAt,
         a.created_at AS createdAt,
         a.last_heartbeat_at AS lastHeartbeatAt
@@ -439,6 +452,12 @@ export class AgentRepository {
         a.runtime_last_workflow_step AS runtimeLastWorkflowStep,
         a.runtime_last_automation_state AS runtimeLastAutomationState,
         a.runtime_last_turn_disposition AS runtimeLastTurnDisposition,
+        a.runtime_state AS runtimeState,
+        a.runtime_required_action AS runtimeRequiredAction,
+        a.runtime_required_tool AS runtimeRequiredTool,
+        a.runtime_continuation_token AS runtimeContinuationToken,
+        a.runtime_user_visible_response_allowed AS runtimeUserVisibleResponseAllowed,
+        a.runtime_lease_expires_at AS runtimeLeaseExpiresAt,
         a.runtime_updated_at AS runtimeUpdatedAt,
         a.created_at AS createdAt,
         a.last_heartbeat_at AS lastHeartbeatAt
@@ -500,6 +519,12 @@ export class AgentRepository {
       "runtime_last_workflow_step = @lastWorkflowStep",
       "runtime_last_automation_state = @lastAutomationState",
       "runtime_last_turn_disposition = @lastTurnDisposition",
+      "runtime_state = @state",
+      "runtime_required_action = @requiredAction",
+      "runtime_required_tool = @requiredTool",
+      "runtime_continuation_token = @continuationToken",
+      "runtime_user_visible_response_allowed = @userVisibleResponseAllowed",
+      "runtime_lease_expires_at = @leaseExpiresAt",
       "runtime_updated_at = @updatedAt",
       "last_heartbeat_at = @updatedAt",
       "status = 'idle'"
@@ -548,6 +573,20 @@ export class AgentRepository {
         input.lastTurnDisposition === undefined
           ? null
           : input.lastTurnDisposition,
+      state: input.state === undefined ? null : input.state,
+      requiredAction:
+        input.requiredAction === undefined ? null : input.requiredAction,
+      requiredTool: input.requiredTool === undefined ? null : input.requiredTool,
+      continuationToken:
+        input.continuationToken === undefined ? null : input.continuationToken,
+      userVisibleResponseAllowed:
+        input.userVisibleResponseAllowed === undefined
+          ? null
+          : input.userVisibleResponseAllowed
+            ? 1
+            : 0,
+      leaseExpiresAt:
+        input.leaseExpiresAt === undefined ? null : input.leaseExpiresAt,
       updatedAt
     });
 
@@ -576,6 +615,12 @@ export class AgentRepository {
           runtime_last_workflow_step = NULL,
           runtime_last_automation_state = NULL,
           runtime_last_turn_disposition = NULL,
+          runtime_state = NULL,
+          runtime_required_action = NULL,
+          runtime_required_tool = NULL,
+          runtime_continuation_token = NULL,
+          runtime_user_visible_response_allowed = NULL,
+          runtime_lease_expires_at = NULL,
           runtime_updated_at = @updatedAt
       WHERE id = @agentId
     `);
@@ -622,6 +667,12 @@ export class AgentRepository {
         a.runtime_last_workflow_step AS runtimeLastWorkflowStep,
         a.runtime_last_automation_state AS runtimeLastAutomationState,
         a.runtime_last_turn_disposition AS runtimeLastTurnDisposition,
+        a.runtime_state AS runtimeState,
+        a.runtime_required_action AS runtimeRequiredAction,
+        a.runtime_required_tool AS runtimeRequiredTool,
+        a.runtime_continuation_token AS runtimeContinuationToken,
+        a.runtime_user_visible_response_allowed AS runtimeUserVisibleResponseAllowed,
+        a.runtime_lease_expires_at AS runtimeLeaseExpiresAt,
         a.runtime_updated_at AS runtimeUpdatedAt,
         a.created_at AS createdAt,
         a.last_heartbeat_at AS lastHeartbeatAt
@@ -680,6 +731,15 @@ export class AgentRepository {
         lastWorkflowStep: row.runtimeLastWorkflowStep,
         lastAutomationState: row.runtimeLastAutomationState,
         lastTurnDisposition: row.runtimeLastTurnDisposition,
+        state: row.runtimeState,
+        requiredAction: row.runtimeRequiredAction,
+        requiredTool: row.runtimeRequiredTool,
+        continuationToken: row.runtimeContinuationToken,
+        userVisibleResponseAllowed:
+          row.runtimeUserVisibleResponseAllowed === null
+            ? null
+            : row.runtimeUserVisibleResponseAllowed === 1,
+        leaseExpiresAt: row.runtimeLeaseExpiresAt,
         updatedAt: row.runtimeUpdatedAt
       },
       createdAt: row.createdAt,

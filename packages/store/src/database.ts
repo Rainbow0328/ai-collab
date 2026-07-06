@@ -25,6 +25,12 @@ export class DatabaseManager {
     this.ensureColumn("web_agent_runtimes", "current_step", "TEXT");
     this.ensureColumn("web_agent_runtimes", "last_error", "TEXT");
     this.ensureColumn("web_agent_runtimes", "last_tick_at", "TEXT");
+    this.ensureColumn("agents", "runtime_state", "TEXT");
+    this.ensureColumn("agents", "runtime_required_action", "TEXT");
+    this.ensureColumn("agents", "runtime_required_tool", "TEXT");
+    this.ensureColumn("agents", "runtime_continuation_token", "TEXT");
+    this.ensureColumn("agents", "runtime_user_visible_response_allowed", "INTEGER");
+    this.ensureColumn("agents", "runtime_lease_expires_at", "TEXT");
   }
 
   public close(): void {

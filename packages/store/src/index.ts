@@ -19,6 +19,8 @@ export * from "./repositories/agent-repository.js";
 export * from "./repositories/message-repository.js";
 export * from "./repositories/session-insight-repository.js";
 export * from "./repositories/identity-lease-repository.js";
+export * from "./repositories/task-repository.js";
+export * from "./repositories/task-event-repository.js";
 export * from "./repositories/web-agent-runtime-repository.js";
 export * from "./repositories/workflow-definition-repository.js";
 export * from "./repositories/model-config-repository.js";

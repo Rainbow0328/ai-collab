@@ -9,6 +9,13 @@ export interface ModelConfigRecord {
   updatedAt: string;
 }
 
+export interface ModelConfigWithSecret extends ModelConfigRecord {
+  modelName: string;
+  baseUrl: string;
+  apiKeyEncrypted: string | null;
+  timeoutSeconds: number;
+}
+
 const CREATE_TABLE = `
   CREATE TABLE IF NOT EXISTS model_configs (
     id TEXT PRIMARY KEY,
@@ -34,6 +41,20 @@ export class ModelConfigRepository {
     );
     const row = statement.get(id) as Record<string, string> | undefined;
     return row ? (row as unknown as ModelConfigRecord) : null;
+  }
+
+  public getFull(id: string): ModelConfigWithSecret {
+    const record = this.findById(id);
+    if (!record) {
+      throw new Error(`Model config '${id}' not found.`);
+    }
+    return {
+      ...record,
+      modelName: record.modelId,
+      baseUrl: resolveModelBaseUrl(record.provider),
+      apiKeyEncrypted: resolveModelApiKey(record.provider),
+      timeoutSeconds: 60
+    };
   }
 
   public list(): ModelConfigRecord[] {
@@ -64,3 +85,17 @@ export class ModelConfigRepository {
     });
   }
 }
+
+const resolveModelBaseUrl = (provider: string): string => {
+  if (provider === "anthropic") {
+    return process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com";
+  }
+  return process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+};
+
+const resolveModelApiKey = (provider: string): string | null => {
+  if (provider === "anthropic") {
+    return process.env.ANTHROPIC_API_KEY ?? null;
+  }
+  return process.env.OPENAI_API_KEY ?? null;
+};

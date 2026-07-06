@@ -18,6 +18,7 @@ import {
   agentPlatforms,
   agentRoles,
   agentStatuses,
+  collaborationRunStates,
   connectionModes,
   messageDeliveryStatuses,
   messageProcessingStatuses,
@@ -75,6 +76,7 @@ export const windowBindingDefaultsSchema = z.object({
 });
 
 export const windowRuntimeMessageKindSchema = z.enum(["task", "report"]);
+export const collaborationRunStateSchema = z.enum(collaborationRunStates);
 
 export const windowRuntimeStateSchema = z.object({
   activeFlow: z.string().nullable(),
@@ -93,6 +95,12 @@ export const windowRuntimeStateSchema = z.object({
   lastWorkflowStep: z.string().nullable(),
   lastAutomationState: z.string().nullable(),
   lastTurnDisposition: z.string().nullable(),
+  state: collaborationRunStateSchema.nullable(),
+  requiredAction: z.string().nullable(),
+  requiredTool: z.string().nullable(),
+  continuationToken: z.string().nullable(),
+  userVisibleResponseAllowed: z.boolean().nullable(),
+  leaseExpiresAt: z.string().datetime().nullable(),
   updatedAt: z.string().datetime().nullable()
 });
 
@@ -372,7 +380,13 @@ export const updateWindowRuntimeStateInputSchema = z.object({
   lastStatus: z.string().nullable().optional(),
   lastWorkflowStep: z.string().nullable().optional(),
   lastAutomationState: z.string().nullable().optional(),
-  lastTurnDisposition: z.string().nullable().optional()
+  lastTurnDisposition: z.string().nullable().optional(),
+  state: collaborationRunStateSchema.nullable().optional(),
+  requiredAction: z.string().nullable().optional(),
+  requiredTool: z.string().nullable().optional(),
+  continuationToken: z.string().nullable().optional(),
+  userVisibleResponseAllowed: z.boolean().nullable().optional(),
+  leaseExpiresAt: z.string().datetime().nullable().optional()
 });
 
 export const upsertProgressInputSchema = z.object({

@@ -59,6 +59,12 @@ export const schemaDDL = `
     runtime_last_workflow_step TEXT,
     runtime_last_automation_state TEXT,
     runtime_last_turn_disposition TEXT,
+    runtime_state TEXT,
+    runtime_required_action TEXT,
+    runtime_required_tool TEXT,
+    runtime_continuation_token TEXT,
+    runtime_user_visible_response_allowed INTEGER,
+    runtime_lease_expires_at TEXT,
     runtime_updated_at TEXT
   );
 

@@ -50,6 +50,10 @@ import {
   createCommandTrace,
   getCommandTraceStorePath
 } from "./command-trace.js";
+import {
+  configureMcpTimeouts,
+  type McpTimeoutConfigureTarget
+} from "./mcp-timeout-config.js";
 
 import {
   DEFAULT_LOOP_INTERVAL_SECONDS,
@@ -477,6 +481,12 @@ const persistWindowRuntimeState = async (
     lastWorkflowStep: existing?.lastWorkflowStep ?? null,
     lastAutomationState: existing?.lastAutomationState ?? null,
     lastTurnDisposition: existing?.lastTurnDisposition ?? null,
+    state: existing?.state ?? null,
+    requiredAction: existing?.requiredAction ?? null,
+    requiredTool: existing?.requiredTool ?? null,
+    continuationToken: existing?.continuationToken ?? null,
+    userVisibleResponseAllowed: existing?.userVisibleResponseAllowed ?? null,
+    leaseExpiresAt: existing?.leaseExpiresAt ?? null,
     updatedAt: new Date().toISOString(),
     ...patch
   });
@@ -5148,6 +5158,34 @@ program
         2
       )
     );
+  });
+
+program
+  .command("mcp:configure-timeout")
+  .description("Configure supported AI IDE MCP tool timeouts for ai-collab")
+  .option("--target <target>", "auto, claude, codex, cursor, or trae", "auto")
+  .option("--timeout <seconds>", "MCP client tool timeout seconds", "3600")
+  .option("--dry-run", "Print planned changes without writing files", false)
+  .action(async (options: {
+    target: string;
+    timeout: string;
+    dryRun?: boolean;
+  }) => {
+    const target = options.target as McpTimeoutConfigureTarget;
+    if (!["auto", "claude", "codex", "cursor", "trae"].includes(target)) {
+      throw new Error(`Unknown MCP timeout target: ${options.target}`);
+    }
+    const timeoutSeconds = Number(options.timeout);
+    if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+      throw new Error(`Invalid timeout seconds: ${options.timeout}`);
+    }
+    const results = await configureMcpTimeouts({
+      projectRoot,
+      target,
+      timeoutSeconds,
+      dryRun: Boolean(options.dryRun)
+    });
+    console.log(JSON.stringify({ results }, null, 2));
   });
 
 await program.parseAsync();

@@ -31,6 +31,7 @@ import { defaultCoreConfig } from "./config.js";
 import { createServer } from "./server/create-server.js";
 import {
   AgentService,
+  CollaborationWaitService,
   ExternalMcpService,
   ExtractionService,
   GuardService,
@@ -134,6 +135,10 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     progressService,
     knowledgeService
   );
+  const collaborationWaitService = new CollaborationWaitService(
+    messageService,
+    windowBindingService
+  );
   const externalMcpService = new ExternalMcpService();
   const mcpToolService = new McpToolService(webAgentRuntimeRepository);
   const webAgentRuntimeService = new WebAgentRuntimeService(
@@ -170,6 +175,7 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     modelConfigService: modelConfigRepository,
     externalMcpService,
     mcpToolService,
+    collaborationWaitService,
     webAgentRuntimeService,
     webAgentRuntimeExecutorService,
     workflowDefinitionService

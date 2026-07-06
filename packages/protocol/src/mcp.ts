@@ -135,12 +135,15 @@ export type AgentPermissionPolicy = {
     read?: boolean;
     write?: boolean;
     allowedPaths?: string[];
+    deniedPaths?: string[];
   };
   command?: {
     enabled?: boolean;
     background?: boolean;
     requireApproval?: boolean;
     allowedPrefixes?: string[];
+    workingDirectory?: string | null;
+    timeoutSeconds?: number;
   };
   [key: string]: unknown;
 };
@@ -157,4 +160,14 @@ export type AgentRuntimePolicy = {
   backgroundAllowed?: boolean;
   pauseOnError?: boolean;
   [key: string]: unknown;
+};
+
+export type McpControlEnvelope = {
+  status: string;
+  state?: import("./types.js").CollaborationRunState;
+  requiredAction?: string;
+  requiredTool?: string;
+  arguments?: Record<string, unknown>;
+  userVisibleResponseAllowed: boolean;
+  messageToAgent?: string;
 };
