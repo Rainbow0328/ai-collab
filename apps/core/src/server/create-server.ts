@@ -26,7 +26,6 @@ import {
   knowledgeLevels,
   knowledgePatchStatuses,
   knowledgeSourceKinds,
-  errorCodes,
   type DeleteKnowledgeInput,
   type KnowledgeLevel,
   type KnowledgePatchStatus,
@@ -34,12 +33,13 @@ import {
   type UpsertKnowledgeInput,
   type WsConsoleUpdateReason,
   type SendMessageInput,
+  completeTaskInputSchema,
+  createTaskInputSchema,
   createSessionInputSchema,
   joinSessionByNameInputSchema,
   joinSessionInputSchema,
   listProgressFilterSchema,
   messageClaimInputSchema,
-  messageClaimManyInputSchema,
   messageProcessCompleteInputSchema,
   messageProcessFailInputSchema,
   removeSessionMemberInputSchema,
@@ -48,21 +48,16 @@ import {
   updateSessionInsightInputSchema,
   updateWindowBindingDefaultsInputSchema,
   updateWindowRuntimeStateInputSchema,
-  upsertProgressInputSchema,
-  createModelConfigInputSchema,
-  updateModelConfigInputSchema,
-  testModelConfigInputSchema,
-  createAgentProfileInputSchema,
-  updateAgentProfileInputSchema,
-  updateAgentProfileSkillsInputSchema,
-  createSessionWithAgentInputSchema,
-  joinSessionWithAgentInputSchema,
-  setSessionSkillsInputSchema,
-  createSkillInputSchema,
-  updateSkillInputSchema,
-  knowledgeFeedbackInputSchema,
-  createKnowledgeBuildJudgementInputSchema,
-  fulfillKnowledgeBuildJudgementInputSchema
+  upsertProgressInputSchema
+} from "@ai-collab/protocol";
+import type {
+  CreateMcpServerInput,
+  CreateWebAgentRuntimeInput,
+  CreateWorkflowDefinitionInput,
+  McpToolsetId,
+  UpdateMcpServerInput,
+  UpdateWebAgentRuntimeInput,
+  UpdateWorkflowDefinitionInput
 } from "@ai-collab/protocol";
 
 import type { CoreConfig } from "../config.js";
@@ -71,6 +66,7 @@ import { logApiAudit } from "./request-audit.js";
 import { successResponse, errorResponse } from "./response.js";
 import type {
   AgentService,
+  ExtractionService,
   GuardService,
   IdentityLeaseService,
   KnowledgeService,
@@ -79,29 +75,39 @@ import type {
   SessionConsoleService,
   SessionService,
   SessionInsightService,
+  TaskService,
+  UserPreferencesService,
+  WebAgentRuntimeExecutorService,
+  WebAgentRuntimeService,
   WebSocketService,
-  UserProfileService
+  ExternalMcpService,
+  McpToolService,
+  WorkflowDefinitionService
 } from "../services/index.js";
+import type { ModelConfigRepository } from "@ai-collab/store";
+import { createLlmRequest } from "../services/llm-provider-client.js";
 
-type ServerServices = {
+export type ServerServices = {
   sessionService: SessionService;
   agentService: AgentService;
   identityLeaseService: IdentityLeaseService;
   messageService: MessageService;
+  taskService: TaskService;
   sessionInsightService: SessionInsightService;
   windowBindingService: import("../services/index.js").WindowBindingService;
   websocketService: WebSocketService;
   progressService: ProgressService;
   sessionConsoleService: SessionConsoleService;
   knowledgeService: KnowledgeService;
+  userPreferencesService: UserPreferencesService;
+  extractionService: ExtractionService;
   guardService: GuardService;
-  modelConfigService: import("../services/index.js").ModelConfigService;
-  agentProfileService: import("../services/index.js").AgentProfileService;
-  skillService: import("../services/index.js").SkillService;
-  hostKnowledgeBuildService: import("../services/index.js").HostKnowledgeBuildService;
-  traceService: import("../services/index.js").TraceService;
-  analyticsService: import("../services/index.js").AnalyticsService;
-  userProfileService: UserProfileService;
+  modelConfigService: ModelConfigRepository;
+  externalMcpService: ExternalMcpService;
+  mcpToolService: McpToolService;
+  webAgentRuntimeService: WebAgentRuntimeService;
+  webAgentRuntimeExecutorService: WebAgentRuntimeExecutorService;
+  workflowDefinitionService: WorkflowDefinitionService;
 };
 
 export const createServer = async (
@@ -170,16 +176,14 @@ export const createServer = async (
 
   server.get("/api/knowledge", async (request) => {
     const query = request.query as {
-      sessionId?: string;
       level?: string;
       tag?: string;
       query?: string;
     };
     const level = isKnowledgeLevel(query.level) ? query.level : undefined;
     return successResponse({
-      manifest: services.knowledgeService.getManifest(query.sessionId),
+      manifest: services.knowledgeService.getManifest(),
       items: services.knowledgeService.list({
-        ...(query.sessionId ? { sessionId: query.sessionId } : {}),
         ...(level ? { level } : {}),
         ...(query.tag ? { tag: query.tag } : {}),
         ...(query.query ? { query: query.query } : {})
@@ -189,7 +193,6 @@ export const createServer = async (
 
   server.get("/api/knowledge/changes", async (request) => {
     const query = request.query as {
-      sessionId?: string;
       level?: string;
       slug?: string;
       limit?: string;
@@ -197,7 +200,6 @@ export const createServer = async (
     const level = isKnowledgeLevel(query.level) ? query.level : undefined;
     return successResponse({
       changes: services.knowledgeService.listChanges({
-        ...(query.sessionId ? { sessionId: query.sessionId } : {}),
         ...(level ? { level } : {}),
         ...(query.slug ? { slug: query.slug } : {}),
         ...(query.limit ? { limit: Number(query.limit) } : {})
@@ -207,12 +209,11 @@ export const createServer = async (
 
   server.get("/api/knowledge/:level/:slug", async (request) => {
     const params = request.params as { level: string; slug: string };
-    const query = request.query as { sessionId?: string };
     if (!isKnowledgeLevel(params.level)) {
       throw new CoreError("INVALID_INPUT", `Unknown knowledge level "${params.level}".`);
     }
     return successResponse({
-      document: services.knowledgeService.get(params.level, params.slug, query.sessionId)
+      document: services.knowledgeService.get(params.level, params.slug)
     });
   });
 
@@ -220,13 +221,6 @@ export const createServer = async (
     const params = request.params as { level: string; slug: string };
     if (!isKnowledgeLevel(params.level)) {
       throw new CoreError("INVALID_INPUT", `Unknown knowledge level "${params.level}".`);
-    }
-    if (params.slug !== "current") {
-      throw new CoreError(
-        "INVALID_INPUT",
-        `Only slug "current" is allowed for knowledge documents. Received "${params.slug}". Use read-current/update-current commands.`,
-        400
-      );
     }
     const body: Partial<Omit<UpsertKnowledgeInput, "level" | "slug">> =
       typeof request.body === "object" && request.body !== null
@@ -238,7 +232,6 @@ export const createServer = async (
         `Unknown knowledge source kind "${body.sourceKind}".`
       );
     }
-    await validateAgentRole(services, body.sourceAgentId || body.ownerAgentId, ["host", "knowledge_keeper"], "upsert knowledge");
     const guard = services.guardService.check({
       level: params.level,
       slug: params.slug,
@@ -255,7 +248,6 @@ export const createServer = async (
         slug: params.slug,
         title: body.title ?? params.slug,
         content: body.content ?? "",
-        ...(body.sessionId !== undefined ? { sessionId: body.sessionId } : {}),
         ...(body.summary !== undefined ? { summary: body.summary } : {}),
         ...(body.tags ? { tags: body.tags } : {}),
         ...(body.ownerAgentId !== undefined
@@ -280,13 +272,6 @@ export const createServer = async (
     if (!isKnowledgeLevel(params.level)) {
       throw new CoreError("INVALID_INPUT", `Unknown knowledge level "${params.level}".`);
     }
-    if (params.slug !== "current") {
-      throw new CoreError(
-        "INVALID_INPUT",
-        `Only slug "current" is allowed for knowledge documents. Received "${params.slug}".`,
-        400
-      );
-    }
     const body: Partial<Omit<DeleteKnowledgeInput, "level" | "slug">> =
       typeof request.body === "object" && request.body !== null
         ? (request.body as Partial<Omit<DeleteKnowledgeInput, "level" | "slug">>)
@@ -297,11 +282,9 @@ export const createServer = async (
         `Unknown knowledge source kind "${body.sourceKind}".`
       );
     }
-    await validateAgentRole(services, body.sourceAgentId, ["host", "knowledge_keeper"], "delete knowledge");
     const result = services.knowledgeService.delete({
         level: params.level,
         slug: params.slug,
-        ...(body.sessionId !== undefined ? { sessionId: body.sessionId } : {}),
         ...(body.sourceKind ? { sourceKind: body.sourceKind } : {}),
         ...(body.sourceAgentId !== undefined
           ? { sourceAgentId: body.sourceAgentId }
@@ -314,116 +297,58 @@ export const createServer = async (
     return successResponse(result);
   });
 
-  server.post("/api/knowledge/feedback", async (request) => {
-    const input = knowledgeFeedbackInputSchema.parse(request.body);
-    const session = services.sessionService.listSessions().find(s => s.id === input.sessionId);
-    if (!session) {
-      throw new CoreError("SESSION_NOT_FOUND", `Session "${input.sessionId}" not found.`, 404);
-    }
-    const members = services.sessionService.listMembers(input.sessionId);
-    const hostAgent = members.find(m => m.id === session.hostAgentId);
-    if (!hostAgent) {
-      throw new CoreError(errorCodes.agentNotFound, `Host agent for session "${input.sessionId}" not found.`, 404);
-    }
-    services.messageService.sendMessage({
-      sessionId: input.sessionId,
-      fromAgentId: hostAgent.id,
-      toAgentId: hostAgent.id,
-      type: "instruction",
-      payload: {
-        kind: "knowledge_feedback",
-        source: "user",
-        level: input.level,
-        slug: input.slug,
-        feedback: input.feedback,
-        ...(input.userIntent ? { userIntent: input.userIntent } : {})
-      }
-    });
-    broadcastConsoleUpdate(input.sessionId, "message_sent");
-    return successResponse({ ok: true, message: "Feedback sent to host" });
-  });
-
-  server.post("/api/knowledge/judgements", async (request) => {
-    const input = createKnowledgeBuildJudgementInputSchema.parse(request.body);
-    const session = services.sessionService.listSessions().find(s => s.id === input.sessionId);
-    if (!session) {
-      throw new CoreError("SESSION_NOT_FOUND", `Session "${input.sessionId}" not found.`, 404);
-    }
-    const members = services.sessionService.listMembers(input.sessionId);
-    const hostAgent = members.find(m => m.id === input.hostAgentId);
-    if (!hostAgent) {
-      throw new CoreError(errorCodes.agentNotFound, `Host agent "${input.hostAgentId}" not found in session "${input.sessionId}".`, 404);
-    }
-    if (hostAgent.role !== "host") {
-      throw new CoreError("INVALID_INPUT", `Agent "${input.hostAgentId}" is not a host.`);
-    }
-    const judgement = services.hostKnowledgeBuildService.createJudgement(input);
-    broadcastConsoleUpdate(input.sessionId, "knowledge_updated");
-    return successResponse({ judgement });
-  });
-
-  server.get("/api/knowledge/judgements", async (request) => {
-    const query = request.query as { sessionId?: string };
-    if (!query.sessionId) {
-      throw new CoreError("INVALID_INPUT", "sessionId query parameter is required.");
-    }
+  server.get("/api/knowledge/patches/pending", async () => {
     return successResponse({
-      judgements: services.hostKnowledgeBuildService.listJudgements(query.sessionId)
+      patches: services.knowledgeService.listPendingPatchRecords()
     });
   });
 
-  server.get("/api/knowledge/judgements/by-message/:messageId", async (request) => {
-    const params = request.params as { messageId: string };
-    const query = request.query as { sessionId?: string };
-    if (!query.sessionId) {
-      throw new CoreError("INVALID_INPUT", "sessionId query parameter is required.");
-    }
-    const judgement = services.hostKnowledgeBuildService.getJudgementBySourceMessage(
-      query.sessionId,
-      params.messageId
-    );
-    return successResponse({ judgement });
-  });
-
-  server.post("/api/knowledge/judgements/fulfil", async (request) => {
-    const input = fulfillKnowledgeBuildJudgementInputSchema.parse(request.body);
-    const judgement = services.hostKnowledgeBuildService.getJudgementById(input.judgementId);
-    if (!judgement) {
-      throw new CoreError(errorCodes.invalidInput, `Judgement "${input.judgementId}" not found.`, 404);
-    }
-    const session = services.sessionService.listSessions().find(s => s.id === judgement.sessionId);
-    if (!session) {
-      throw new CoreError("SESSION_NOT_FOUND", `Session "${judgement.sessionId}" not found.`, 404);
-    }
-    const members = services.sessionService.listMembers(judgement.sessionId);
-    const hostAgent = members.find(m => m.id === input.hostAgentId);
-    if (!hostAgent) {
-      throw new CoreError(errorCodes.agentNotFound, `Host agent "${input.hostAgentId}" not found.`, 404);
-    }
-    if (hostAgent.role !== "host") {
-      throw new CoreError("INVALID_INPUT", `Agent "${input.hostAgentId}" is not a host.`);
-    }
-    const result = services.hostKnowledgeBuildService.fulfilJudgement(input);
-    broadcastConsoleUpdate(judgement.sessionId, "knowledge_updated");
-    return successResponse({ judgement: result });
-  });
-
-  server.get("/api/knowledge/patches/pending", async (request) => {
-    const query = request.query as { sessionId?: string };
+  server.get("/api/user-preferences", async (request) => {
+    const query = request.query as {
+      category?: string;
+      query?: string;
+    };
     return successResponse({
-      patches: services.knowledgeService.listPendingPatchRecords(query.sessionId)
+      manifest: services.userPreferencesService.getManifest(),
+      preferences: services.userPreferencesService.list({
+        ...(query.category ? { category: query.category } : {}),
+        ...(query.query ? { query: query.query } : {})
+      })
     });
+  });
+
+  server.put("/api/user-preferences/:key", async (request) => {
+    const params = request.params as { key: string };
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as {
+            value?: string;
+            category?: string | null;
+            source?: "manual" | "agent" | "system";
+          })
+        : {};
+    const preference = services.userPreferencesService.upsert({
+      key: params.key,
+      value: body.value ?? "",
+      ...(body.category !== undefined ? { category: body.category } : {}),
+      ...(body.source ? { source: body.source } : {})
+    });
+    return successResponse({ preference });
+  });
+
+  server.delete("/api/user-preferences/:key", async (request) => {
+    const params = request.params as { key: string };
+    return successResponse(services.userPreferencesService.delete(params.key));
   });
 
   server.get("/api/knowledge/patches/:patchId", async (request) => {
     const params = request.params as { patchId: string };
-    const query = request.query as { sessionId?: string };
-    const patchRecord = services.knowledgeService.getPatchRecord(params.patchId, query.sessionId);
+    const patchRecord = services.knowledgeService.getPatchRecord(params.patchId);
     if (!patchRecord) {
       throw new CoreError("KNOWLEDGE_DOCUMENT_NOT_FOUND", `Knowledge patch "${params.patchId}" not found.`);
     }
-    const reviewRecord = services.knowledgeService.getPatchReviewRecord(params.patchId, query.sessionId);
-    const persistenceRecord = services.knowledgeService.getPersistenceRecord(params.patchId, query.sessionId);
+    const reviewRecord = services.knowledgeService.getPatchReviewRecord(params.patchId);
+    const persistenceRecord = services.knowledgeService.getPersistenceRecord(params.patchId);
     return successResponse({
       patch: patchRecord,
       review: reviewRecord,
@@ -434,15 +359,13 @@ export const createServer = async (
   server.get("/api/knowledge/patches", async (request) => {
     const query = request.query as {
       status?: string;
-      sessionId?: string;
     };
     const status = query.status && knowledgePatchStatuses.includes(query.status as KnowledgePatchStatus)
       ? query.status as KnowledgePatchStatus
       : undefined;
     return successResponse({
       patches: services.knowledgeService.listPatchRecords({
-        ...(status ? { status } : {}),
-        ...(query.sessionId ? { sessionId: query.sessionId } : {})
+        ...(status ? { status } : {})
       })
     });
   });
@@ -461,8 +384,7 @@ export const createServer = async (
       decision: body.decision,
       reviewedBy: body.reviewedBy ?? "system",
       ...(body.reviewComment !== undefined ? { reviewComment: body.reviewComment } : {}),
-      ...(body.reviewedAt ? { reviewedAt: body.reviewedAt } : {}),
-      ...(body.sessionId ? { sessionId: body.sessionId } : {})
+      ...(body.reviewedAt ? { reviewedAt: body.reviewedAt } : {})
     });
     services.websocketService.broadcastConsoleUpdateToAll("knowledge_updated");
     return successResponse(result);
@@ -470,10 +392,7 @@ export const createServer = async (
 
   server.post("/api/knowledge/patches/:patchId/execute", async (request) => {
     const params = request.params as { patchId: string };
-    const body = typeof request.body === "object" && request.body !== null
-      ? (request.body as { sessionId?: string })
-      : {};
-    const result = services.knowledgeService.executeApprovedPatchPersistence(params.patchId, body.sessionId);
+    const result = services.knowledgeService.executeApprovedPatchPersistence(params.patchId);
     services.websocketService.broadcastConsoleUpdateToAll("knowledge_updated");
     return successResponse(result);
   });
@@ -635,29 +554,6 @@ export const createServer = async (
     return successResponse(result);
   });
 
-  server.get("/api/sessions/:sessionId/timeline", async (request) => {
-    const params = request.params as { sessionId: string };
-    const session = services.sessionService.getSession(params.sessionId);
-    if (!session) {
-      throw new CoreError(
-        errorCodes.sessionNotFound,
-        "Session not found.",
-        404
-      );
-    }
-    const timeline = services.analyticsService.buildSessionTimeline(
-      params.sessionId,
-      session.name
-    );
-    return successResponse(timeline);
-  });
-
-  server.get("/api/sessions/:sessionId/traces", async (request) => {
-    const params = request.params as { sessionId: string };
-    const traces = services.traceService.getSessionTraces(params.sessionId);
-    return successResponse({ traces });
-  });
-
   server.post("/api/messages/send", async (request) => {
     const parsed = sendMessageInputSchema.parse(request.body);
     const input: SendMessageInput = {
@@ -674,26 +570,6 @@ export const createServer = async (
           ? { supersedeMessageIds: parsed.supersedeMessageIds }
           : {})
       };
-
-      const dispatchTypes = new Set(["task", "instruction"]);
-      if (dispatchTypes.has(parsed.type)) {
-        const members = services.sessionService.listMembers(parsed.sessionId);
-        const fromMember = members.find(m => m.id === parsed.fromAgentId);
-        if (fromMember && fromMember.role === "host") {
-          const gateResult = services.hostKnowledgeBuildService.checkDispatchGate(
-            parsed.sessionId,
-            parsed.fromAgentId
-          );
-          if (!gateResult.allowed) {
-            throw new CoreError(
-              errorCodes.invalidInput,
-              gateResult.reason ?? "Knowledge build gate check failed.",
-              409
-            );
-          }
-        }
-      }
-
       const message = services.messageService.sendMessage(input);
       broadcastConsoleUpdate(message.sessionId, "message_sent");
       return successResponse(message);
@@ -822,7 +698,6 @@ export const createServer = async (
 
   server.post("/api/messages/claim-next", async (request) => {
     const input = messageClaimInputSchema.parse(request.body);
-    await validateAgentRole(services, input.agentId, ["host", "worker", "knowledge_keeper"], "claim messages");
     const message = services.messageService.claimNext(input.agentId, {
       ...(input.types ? { types: input.types } : {}),
       ...(input.fromAgentId ? { fromAgentId: input.fromAgentId } : {}),
@@ -838,28 +713,6 @@ export const createServer = async (
     }
     return successResponse({
       message
-    });
-  });
-
-  server.post("/api/messages/claim-many", async (request) => {
-    const input = messageClaimManyInputSchema.parse(request.body);
-    await validateAgentRole(services, input.agentId, ["host", "worker", "knowledge_keeper"], "claim messages");
-    const messages = services.messageService.claimMany(input.agentId, {
-      ...(input.types ? { types: input.types } : {}),
-      ...(input.fromAgentId ? { fromAgentId: input.fromAgentId } : {}),
-      ...(input.correlationId
-        ? { correlationId: input.correlationId }
-        : {}),
-      ...(input.maxMessages ? { maxMessages: input.maxMessages } : {}),
-      ...(input.identity ? { identity: input.identity } : {}),
-      ...(input.flow ? { flow: input.flow } : {}),
-      ...(input.ownerToken ? { ownerToken: input.ownerToken } : {})
-    });
-    for (const message of messages) {
-      broadcastConsoleUpdate(message.sessionId, "message_claimed");
-    }
-    return successResponse({
-      messages
     });
   });
 
@@ -879,7 +732,6 @@ export const createServer = async (
   server.post("/api/messages/:messageId/process-complete", async (request) => {
     const params = request.params as { messageId: string };
     const input = messageProcessCompleteInputSchema.parse(request.body);
-    await validateAgentRole(services, input.agentId, ["host", "worker", "knowledge_keeper"], "complete message");
     const message = services.messageService.completeMessage(
       params.messageId,
       input.agentId,
@@ -898,7 +750,6 @@ export const createServer = async (
   server.post("/api/messages/:messageId/process-fail", async (request) => {
     const params = request.params as { messageId: string };
     const input = messageProcessFailInputSchema.parse(request.body);
-    await validateAgentRole(services, input.agentId, ["host", "worker", "knowledge_keeper"], "fail message");
     const message = services.messageService.failMessage(
       params.messageId,
       input.agentId,
@@ -913,6 +764,24 @@ export const createServer = async (
     return successResponse({
       message
     });
+  });
+
+  server.post("/api/tasks", async (request) => {
+    const input = createTaskInputSchema.parse(request.body);
+    return successResponse(services.taskService.createTask(input));
+  });
+
+  server.get("/api/sessions/:sessionId/tasks", async (request) => {
+    const params = request.params as { sessionId: string };
+    return successResponse({
+      tasks: services.taskService.listTasks(params.sessionId)
+    });
+  });
+
+  server.post("/api/tasks/:taskId/complete", async (request) => {
+    const params = request.params as { taskId: string };
+    const input = completeTaskInputSchema.parse(request.body);
+    return successResponse(services.taskService.completeTask(params.taskId, input));
   });
 
   server.put("/api/progress", async (request) => {
@@ -961,6 +830,267 @@ export const createServer = async (
     return successResponse({ cleared });
   });
 
+  server.post("/api/sessions/join-with-agent", async (request) => {
+    const body = request.body as {
+      sessionId: string;
+      role: "worker" | "observer" | "knowledge_keeper";
+      agentName: string;
+      displayName?: string;
+      roleDescription?: string | null;
+    };
+    const result = services.sessionService.joinSession({
+      sessionId: body.sessionId,
+      agentName: body.agentName,
+      displayName: body.displayName ?? body.agentName,
+      platform: "generic",
+      role: body.role,
+      roleDescription: body.roleDescription ?? undefined,
+      capabilities: [],
+      connectionMode: "skill-bridge"
+    });
+    broadcastConsoleUpdate(result.session.id, "member_changed");
+    return successResponse({ agent: result.agent, session: result.session });
+  });
+
+  server.post("/api/sessions/create-with-agent", async (request) => {
+    const body = request.body as {
+      sessionName: string;
+      agentName: string;
+      displayName?: string;
+      roleDescription?: string | null;
+    };
+    const result = services.sessionService.createSession({
+      sessionName: body.sessionName,
+      agentName: body.agentName,
+      displayName: body.displayName ?? body.agentName,
+      platform: "generic",
+      roleDescription: body.roleDescription ?? undefined,
+      capabilities: [],
+      connectionMode: "skill-bridge"
+    });
+    broadcastConsoleUpdate(result.session.id, "member_changed");
+    return successResponse({ agent: result.agent, session: result.session });
+  });
+
+  server.get("/api/models", async () => {
+    return successResponse(services.modelConfigService.list());
+  });
+
+  server.post("/api/llm/chat", async (request) => {
+    const body = request.body as {
+      modelConfigId?: string;
+      messages?: Array<{ role: string; content: string }>;
+      tools?: unknown[];
+      tool_choice?: unknown;
+      temperature?: number;
+      stream?: boolean;
+    };
+    const modelId = body.modelConfigId ?? "default-model";
+    const model = services.modelConfigService.getFull(modelId);
+    const { response, parse } = await createLlmRequest(model, {
+      messages: body.messages ?? [],
+      ...(body.tools ? { tools: body.tools } : {}),
+      ...(body.tool_choice ? { tool_choice: body.tool_choice } : {}),
+      ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+      ...(body.stream !== undefined ? { stream: body.stream } : {})
+    });
+    if (!response.ok) {
+      throw new CoreError(
+        "INVALID_INPUT",
+        `LLM HTTP ${response.status}: ${await response.text()}`,
+        response.status
+      );
+    }
+    return successResponse(await parse());
+  });
+
+  server.get("/api/workflows", async () => {
+    return successResponse(services.workflowDefinitionService.list());
+  });
+
+  server.get("/api/workflows/:workflowId", async (request) => {
+    const params = request.params as { workflowId: string };
+    return successResponse(services.workflowDefinitionService.get(params.workflowId));
+  });
+
+  server.post("/api/workflows", async (request) => {
+    return successResponse(
+      services.workflowDefinitionService.create(
+        request.body as CreateWorkflowDefinitionInput
+      )
+    );
+  });
+
+  server.put("/api/workflows/:workflowId", async (request) => {
+    const params = request.params as { workflowId: string };
+    return successResponse(
+      services.workflowDefinitionService.update(
+        params.workflowId,
+        request.body as UpdateWorkflowDefinitionInput
+      )
+    );
+  });
+
+  server.delete("/api/workflows/:workflowId", async (request) => {
+    const params = request.params as { workflowId: string };
+    return successResponse(services.workflowDefinitionService.delete(params.workflowId));
+  });
+
+  server.get("/api/web-agent-runtimes", async (request) => {
+    const query = request.query as { sessionId?: string };
+    if (!query.sessionId) {
+      return successResponse([]);
+    }
+    return successResponse(services.webAgentRuntimeService.list(query.sessionId));
+  });
+
+  server.post("/api/web-agent-runtimes", async (request) => {
+    const body = request.body as Partial<CreateWebAgentRuntimeInput>;
+    const runtime = services.webAgentRuntimeService.createOrUpdate({
+      sessionId: String(body.sessionId),
+      agentId: String(body.agentId),
+      role: body.role === "host" ? "host" : "knowledge_keeper",
+      modelConfigId: body.modelConfigId ?? "default-model",
+      agentProfileId: body.agentProfileId ?? null,
+      toolsetId: body.toolsetId ?? (body.role === "host" ? "host" : "knowledge_keeper")
+    });
+    broadcastConsoleUpdate(runtime.sessionId, "member_changed");
+    return successResponse(runtime);
+  });
+
+  server.get("/api/web-agent-runtimes/:runtimeId", async (request) => {
+    const params = request.params as { runtimeId: string };
+    return successResponse(services.webAgentRuntimeService.get(params.runtimeId));
+  });
+
+  server.patch("/api/web-agent-runtimes/:runtimeId", async (request) => {
+    const params = request.params as { runtimeId: string };
+    return successResponse(
+      services.webAgentRuntimeService.update(
+        params.runtimeId,
+        request.body as UpdateWebAgentRuntimeInput
+      )
+    );
+  });
+
+  server.delete("/api/web-agent-runtimes/:runtimeId", async (request) => {
+    const params = request.params as { runtimeId: string };
+    services.webAgentRuntimeExecutorService.stop(params.runtimeId);
+    return successResponse(services.webAgentRuntimeService.delete(params.runtimeId));
+  });
+
+  server.post("/api/web-agent-runtimes/:runtimeId/start", async (request) => {
+    const params = request.params as { runtimeId: string };
+    const runtime = services.webAgentRuntimeService.setStatus(params.runtimeId, "running");
+    services.webAgentRuntimeExecutorService.start(runtime);
+    return successResponse(runtime);
+  });
+
+  server.post("/api/web-agent-runtimes/:runtimeId/pause", async (request) => {
+    const params = request.params as { runtimeId: string };
+    services.webAgentRuntimeExecutorService.stop(params.runtimeId);
+    return successResponse(services.webAgentRuntimeService.setStatus(params.runtimeId, "paused"));
+  });
+
+  server.post("/api/web-agent-runtimes/:runtimeId/stop", async (request) => {
+    const params = request.params as { runtimeId: string };
+    services.webAgentRuntimeExecutorService.stop(params.runtimeId);
+    return successResponse(services.webAgentRuntimeService.setStatus(params.runtimeId, "stopped"));
+  });
+
+  server.get("/api/mcp/tools", async (request) => {
+    const query = request.query as { toolsetId?: string; extraToolNames?: string };
+    const toolsetId = (query.toolsetId ?? "worker") as McpToolsetId;
+    const extraToolNames = query.extraToolNames
+      ? query.extraToolNames.split(",").map((item) => item.trim()).filter(Boolean)
+      : [];
+    return successResponse({
+      tools: [
+        ...services.mcpToolService.getToolsetDefinitions(toolsetId),
+        ...services.mcpToolService.getToolDefinitionsByNames(extraToolNames)
+      ]
+    });
+  });
+
+  server.post("/api/mcp/call", async (request) => {
+    const body = request.body as {
+      agentId: string;
+      sessionId: string;
+      toolName: string;
+      arguments?: Record<string, unknown>;
+    };
+    const result = await services.mcpToolService.executeTool(
+      body.toolName,
+      body.arguments ?? {},
+      body.agentId,
+      body.sessionId,
+      services
+    );
+    return successResponse(result);
+  });
+
+  server.get("/api/mcp-servers", async () => {
+    const servers = await Promise.all(
+      services.externalMcpService.list().map(async (serverConfig) => ({
+        ...serverConfig,
+        toolCount: (await services.externalMcpService.listTools(serverConfig.id)).length
+      }))
+    );
+    return successResponse(servers);
+  });
+
+  server.post("/api/mcp-servers", async (request) => {
+    const body = request.body as CreateMcpServerInput & { enabled?: boolean };
+    const created = services.externalMcpService.create({
+      ...body,
+      transport: body.transport ?? "sse"
+    });
+    if (body.enabled === false) {
+      return successResponse(
+        services.externalMcpService.update(created.id, { enabled: false })
+      );
+    }
+    return successResponse(created);
+  });
+
+  server.put("/api/mcp-servers/:serverId", async (request) => {
+    const params = request.params as { serverId: string };
+    return successResponse(
+      services.externalMcpService.update(
+        params.serverId,
+        request.body as UpdateMcpServerInput
+      )
+    );
+  });
+
+  server.delete("/api/mcp-servers/:serverId", async (request) => {
+    const params = request.params as { serverId: string };
+    return successResponse(services.externalMcpService.delete(params.serverId));
+  });
+
+  server.get("/api/mcp-servers/:serverId/tools", async (request) => {
+    const params = request.params as { serverId: string };
+    return successResponse(await services.externalMcpService.listTools(params.serverId));
+  });
+
+  server.get("/api/agent-profiles", async () => {
+    return successResponse([]);
+  });
+
+  server.get("/api/agent-profiles/:profileId", async (request) => {
+    const params = request.params as { profileId: string };
+    throw new CoreError("INVALID_INPUT", `Agent profile "${params.profileId}" is disabled in this build.`, 404);
+  });
+
+  server.get("/api/skills", async () => {
+    return successResponse([]);
+  });
+
+  server.get("/api/skills/:skillId", async (request) => {
+    const params = request.params as { skillId: string };
+    throw new CoreError("INVALID_INPUT", `Skill "${params.skillId}" is disabled in this build.`, 404);
+  });
+
   server.get("/api/metrics", async (request) => {
     const params = request.query as { sessionId?: string };
     const metrics: Record<string, unknown> = {
@@ -978,172 +1108,8 @@ export const createServer = async (
     return successResponse(metrics);
   });
 
-  // ============================================
-  // Model Config API
-  // ============================================
-  server.post("/api/models", async (request) => {
-    const input = createModelConfigInputSchema.parse(request.body) as import("@ai-collab/protocol").CreateModelConfigInput;
-    return successResponse(services.modelConfigService.create(input));
-  });
-
-  server.get("/api/models", async () => {
-    return successResponse({ models: services.modelConfigService.list() });
-  });
-
-  server.get("/api/models/:id", async (request) => {
-    const params = request.params as { id: string };
-    return successResponse(services.modelConfigService.get(params.id));
-  });
-
-  server.put("/api/models/:id", async (request) => {
-    const params = request.params as { id: string };
-    const input = updateModelConfigInputSchema.parse(request.body) as import("@ai-collab/protocol").UpdateModelConfigInput;
-    return successResponse(services.modelConfigService.update(params.id, input));
-  });
-
-  server.delete("/api/models/:id", async (request) => {
-    const params = request.params as { id: string };
-    return successResponse(services.modelConfigService.delete(params.id));
-  });
-
-  server.post("/api/models/:id/test", async (request) => {
-    const params = request.params as { id: string };
-    const input = testModelConfigInputSchema.parse(request.body) as import("@ai-collab/protocol").TestModelConfigInput;
-    return successResponse(await services.modelConfigService.test({ ...input, modelConfigId: params.id }));
-  });
-
-  // ============================================
-  // Agent Profile API
-  // ============================================
-  server.post("/api/agent-profiles", async (request) => {
-    const input = createAgentProfileInputSchema.parse(request.body) as import("@ai-collab/protocol").CreateAgentProfileInput;
-    return successResponse(services.agentProfileService.create(input));
-  });
-
-  server.get("/api/agent-profiles", async () => {
-    return successResponse({ profiles: services.agentProfileService.list() });
-  });
-
-  server.get("/api/agent-profiles/:id", async (request) => {
-    const params = request.params as { id: string };
-    return successResponse(services.agentProfileService.get(params.id));
-  });
-
-  server.put("/api/agent-profiles/:id", async (request) => {
-    const params = request.params as { id: string };
-    const input = updateAgentProfileInputSchema.parse(request.body) as import("@ai-collab/protocol").UpdateAgentProfileInput;
-    return successResponse(services.agentProfileService.update(params.id, input));
-  });
-
-  server.delete("/api/agent-profiles/:id", async (request) => {
-    const params = request.params as { id: string };
-    return successResponse(services.agentProfileService.delete(params.id));
-  });
-
-  server.put("/api/agent-profiles/:id/skills", async (request) => {
-    const params = request.params as { id: string };
-    const input = updateAgentProfileSkillsInputSchema.parse(request.body);
-    return successResponse(services.agentProfileService.updateSkills(params.id, input));
-  });
-
-  // ============================================
-  // Skill API
-  // ============================================
-  server.post("/api/skills", async (request) => {
-    const input = createSkillInputSchema.parse(request.body) as { name: string; description?: string | null; path: string; roleScope?: string | null };
-    return successResponse(services.skillService.create(input));
-  });
-
-  server.get("/api/skills", async () => {
-    return successResponse({ skills: services.skillService.list() });
-  });
-
-  server.get("/api/skills/:id", async (request) => {
-    const params = request.params as { id: string };
-    return successResponse(services.skillService.get(params.id));
-  });
-
-  server.put("/api/skills/:id", async (request) => {
-    const params = request.params as { id: string };
-    const input = updateSkillInputSchema.parse(request.body) as { name?: string; description?: string | null; roleScope?: string | null; enabled?: boolean };
-    return successResponse(services.skillService.update(params.id, input));
-  });
-
-  server.delete("/api/skills/:id", async (request) => {
-    const params = request.params as { id: string };
-    return successResponse(services.skillService.delete(params.id));
-  });
-
-  server.post("/api/skills/scan", async (request) => {
-    const input = request.body as { directoryPath: string };
-    return successResponse(services.skillService.scanDirectory(input.directoryPath));
-  });
-
-  // ============================================
-  // Session Skills API
-  // ============================================
-  server.get("/api/sessions/:sessionId/skills", async (request) => {
-    const params = request.params as { sessionId: string };
-    return successResponse({ skills: services.skillService.getSessionSkills(params.sessionId) });
-  });
-
-  server.get("/api/sessions/:sessionId/available-skills", async (request) => {
-    const params = request.params as { sessionId: string };
-    return successResponse({ skills: services.skillService.listAvailableSessionSkills(params.sessionId) });
-  });
-
-  server.put("/api/sessions/:sessionId/skills", async (request) => {
-    const params = request.params as { sessionId: string };
-    const input = setSessionSkillsInputSchema.parse(request.body);
-    return successResponse({ skills: services.skillService.setSessionSkills(params.sessionId, input.skillIds) });
-  });
-
-  // ============================================
-  // Session Creation with Agent API
-  // ============================================
-  server.post("/api/sessions/create-with-agent", async (request) => {
-    const input = createSessionWithAgentInputSchema.parse(request.body) as import("@ai-collab/protocol").CreateSessionWithAgentInput;
-    return successResponse(services.sessionService.createSessionWithAgent(input));
-  });
-
-  server.post("/api/sessions/join-with-agent", async (request) => {
-    const input = joinSessionWithAgentInputSchema.parse(request.body) as import("@ai-collab/protocol").JoinSessionWithAgentInput;
-    return successResponse(services.sessionService.joinSessionWithAgent(input));
-  });
-
   services.websocketService.register(server);
   registerWebFrontend(server);
-
-  server.get("/api/profile", async (request) => {
-    const query = request.query as { key?: string; agentId?: string };
-    if (!query.agentId) {
-      throw new CoreError("INVALID_INPUT", "agentId is required for profile access.");
-    }
-    await validateAgentRole(services, query.agentId, ["host", "knowledge_keeper"], "read profile");
-    return successResponse(services.userProfileService.get(query.key ? { key: query.key } : {}));
-  });
-
-  server.put("/api/profile", async (request) => {
-    const body = request.body as { key: string; value: string; agentId?: string } | null;
-    if (!body || typeof body.key !== "string" || typeof body.value !== "string") {
-      throw new CoreError("INVALID_INPUT", "key and value are required.");
-    }
-    if (!body.agentId) {
-      throw new CoreError("INVALID_INPUT", "agentId is required for profile access.");
-    }
-    await validateAgentRole(services, body.agentId, ["host", "knowledge_keeper"], "write profile");
-    return successResponse({ entry: services.userProfileService.set({ key: body.key, value: body.value }) });
-  });
-
-  server.delete("/api/profile/:key", async (request) => {
-    const params = request.params as { key: string };
-    const query = request.query as { agentId?: string };
-    if (!query.agentId) {
-      throw new CoreError("INVALID_INPUT", "agentId is required for profile access.");
-    }
-    await validateAgentRole(services, query.agentId, ["host", "knowledge_keeper"], "delete profile");
-    return successResponse({ deleted: services.userProfileService.delete(params.key) });
-  });
 
   return server;
 };
@@ -1158,41 +1124,6 @@ const isKnowledgeSourceKind = (
 ): value is KnowledgeSourceKind => {
   return typeof value === "string" &&
     (knowledgeSourceKinds as readonly string[]).includes(value);
-};
-
-const validateAgentRole = async (
-  services: ServerServices,
-  agentId: string | undefined | null,
-  allowedRoles: string[],
-  operation: string
-) => {
-  if (!agentId) {
-    throw new CoreError(
-      errorCodes.permissionDenied,
-      `Agent identity is required for ${operation}.`,
-      403
-    );
-  }
-  const agent = services.sessionService
-    .listSessions()
-    .flatMap((session) => services.sessionService.listMembers(session.id))
-    .find((a) => a.id === agentId);
-
-  if (!agent) {
-    throw new CoreError(
-      errorCodes.permissionDenied,
-      `Agent not found for ${operation}.`,
-      403
-    );
-  }
-
-  if (!allowedRoles.includes(agent.role)) {
-    throw new CoreError(
-      errorCodes.permissionDenied,
-      `Agent role "${agent.role}" is not allowed for ${operation}. Allowed roles: ${allowedRoles.join(", ")}.`,
-      403
-    );
-  }
 };
 
 const webMimeTypes: Record<string, string> = {
@@ -1216,8 +1147,11 @@ const findWebDistPath = (): string | null => {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     process.env.AI_COLLAB_WEB_DIST_PATH,
+    resolve(process.cwd(), "..", "web", "dist"),
+    resolve(process.cwd(), "..", "..", "apps", "web", "dist"),
     resolve(process.cwd(), "apps", "web", "dist"),
     resolve(moduleDir, "..", "..", "..", "..", "..", "web"),
+    resolve(moduleDir, "..", "..", "..", "..", "..", "..", "..", "apps", "web", "dist"),
     resolve(moduleDir, "..", "..", "..", "..", "web"),
     resolve(moduleDir, "web")
   ].filter((candidate): candidate is string => Boolean(candidate));

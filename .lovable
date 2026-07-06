@@ -1,0 +1,31 @@
+# Frontend Design Skills — Lovable Project Instructions
+# This file makes skills available in Lovable AI.
+
+This repository contains opinionated web design skills from curated sources,
+covering UI/UX, typography, color, accessibility, branding, and modern design trends.
+
+## How to Use
+
+Each skill is a self-contained folder under `skills-src/` containing a `SKILL.md` file
+with detailed instructions and a `references/` directory. When a task matches a skill's
+domain, read and follow the corresponding `SKILL.md`.
+
+## Key Skills for Lovable Projects
+
+### Web Development
+- `skills-src/ui-design/SKILL.md` — Layout, grids, visual hierarchy, components
+- `skills-src/ux-design/SKILL.md` — User research, information architecture
+- `skills-src/responsive-design/SKILL.md` — Mobile-first, breakpoints, fluid grids
+- `skills-src/component-patterns/SKILL.md` — Compound components, design tokens, theming
+- `skills-src/agent-ui-design/SKILL.md` — Chat interfaces, streaming UI, agent UX
+
+### Visual Design
+- `skills-src/web-typography/SKILL.md` — Font selection, pairing, fluid typography
+- `skills-src/color-theory/SKILL.md` — Color schemes, 60-30-10, dark mode
+- `skills-src/visual-direction/SKILL.md` — Color palette archetypes, trends
+
+### Quality & Conversion
+- `skills-src/accessibility/SKILL.md` — WCAG, BFSG, semantic HTML, ARIA
+- `skills-src/usability/SKILL.md` — Nielsen heuristics, form design, conversion
+- `skills-src/landing-pages/SKILL.md` — Conversion structure, CTA, A/B testing
+- `skills-src/webdesign-review/SKILL.md` — Comprehensive design review (all 20 domains)

@@ -16,7 +16,6 @@
 import type {
   ListProgressFilter,
   Progress,
-  ProgressStatus,
   UpsertProgressInput
 } from "@ai-collab/protocol";
 

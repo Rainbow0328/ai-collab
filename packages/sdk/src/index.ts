@@ -21,7 +21,9 @@ import type {
   Agent,
   AgentHeartbeat,
   AgentQueueStats,
+  CompleteTaskInput,
   CreateSessionInput,
+  CreateTaskInput,
   IdentityLease,
   JoinSessionByNameInput,
   JoinSessionInput,
@@ -37,6 +39,7 @@ import type {
   Session,
   SessionJoinResult,
   SessionSummary,
+  Task,
   UpdateSessionInsightInput,
   UpdateWindowBindingDefaultsInput,
   UpdateWindowRuntimeStateInput,
@@ -460,39 +463,6 @@ export class AiCollabClient {
     return response.message;
   }
 
-  public async claimMany(
-    agentId: string,
-    options: {
-      types?: MessageRecord["type"][];
-      fromAgentId?: string;
-      correlationId?: string;
-      maxMessages?: number;
-      identity?: string;
-      flow?: "host" | "worker";
-      ownerToken?: string;
-    } = {}
-  ): Promise<MessageRecord[]> {
-    const response = await this.request<{ messages: MessageRecord[] }>(
-      "/api/messages/claim-many",
-      {
-        method: "POST",
-        body: {
-          agentId,
-          ...(options.types ? { types: options.types } : {}),
-          ...(options.fromAgentId ? { fromAgentId: options.fromAgentId } : {}),
-          ...(options.correlationId
-            ? { correlationId: options.correlationId }
-            : {}),
-          ...(options.maxMessages ? { maxMessages: options.maxMessages } : {}),
-          ...(options.identity ? { identity: options.identity } : {}),
-          ...(options.flow ? { flow: options.flow } : {}),
-          ...(options.ownerToken ? { ownerToken: options.ownerToken } : {})
-        }
-      }
-    );
-    return response.messages;
-  }
-
   public async completeMessage(
     messageId: string,
     input: MessageProcessCompleteInput
@@ -531,6 +501,20 @@ export class AiCollabClient {
         processed
       }
     });
+  }
+
+  public async createTask(input: CreateTaskInput): Promise<Task> {
+    return this.request("/api/tasks", {
+      method: "POST",
+      body: input
+    });
+  }
+
+  public async listTasks(sessionId: string): Promise<Task[]> {
+    const response = await this.request<{ tasks: Task[] }>(
+      `/api/sessions/${sessionId}/tasks`
+    );
+    return response.tasks;
   }
 
   public async upsertProgress(
@@ -579,18 +563,13 @@ export class AiCollabClient {
     });
   }
 
-  public async getKnowledgeManifest(
-    sessionId?: string
-  ): Promise<
+  public async getKnowledgeManifest(): Promise<
     import("@ai-collab/protocol").KnowledgeManifest
   > {
-    const searchParams = new URLSearchParams();
-    if (sessionId) searchParams.set("sessionId", sessionId);
-    const qs = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
     const response = await this.request<{
       manifest: import("@ai-collab/protocol").KnowledgeManifest;
       items: import("@ai-collab/protocol").KnowledgeListItem[];
-    }>(`/api/knowledge${qs}`);
+    }>("/api/knowledge");
     return response.manifest;
   }
 
@@ -598,7 +577,6 @@ export class AiCollabClient {
     input: import("@ai-collab/protocol").ListKnowledgeInput = {}
   ): Promise<import("@ai-collab/protocol").KnowledgeListItem[]> {
     const searchParams = new URLSearchParams();
-    if (input.sessionId) searchParams.set("sessionId", input.sessionId);
     if (input.level) searchParams.set("level", input.level);
     if (input.tag) searchParams.set("tag", input.tag);
     if (input.query) searchParams.set("query", input.query);
@@ -614,24 +592,19 @@ export class AiCollabClient {
 
   public async getKnowledge(
     level: import("@ai-collab/protocol").KnowledgeLevel,
-    slug: string,
-    sessionId?: string
+    slug: string
   ): Promise<import("@ai-collab/protocol").KnowledgeDocument | undefined> {
-    const searchParams = new URLSearchParams();
-    if (sessionId) searchParams.set("sessionId", sessionId);
-    const qs = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
     const response = await this.request<{
       document: import("@ai-collab/protocol").KnowledgeDocument | undefined;
-    }>(`/api/knowledge/${level}/${encodeURIComponent(slug)}${qs}`);
+    }>(`/api/knowledge/${level}/${encodeURIComponent(slug)}`);
     return response.document;
   }
 
   public async getKnowledgeByRef(
-    ref: string,
-    sessionId?: string
+    ref: string
   ): Promise<import("@ai-collab/protocol").KnowledgeDocument | undefined> {
     const parsed = this.parseKnowledgeRef(ref);
-    return this.getKnowledge(parsed.level, parsed.slug, sessionId);
+    return this.getKnowledge(parsed.level, parsed.slug);
   }
 
   public async upsertKnowledge(
@@ -646,7 +619,6 @@ export class AiCollabClient {
         body: {
           title: input.title,
           content: input.content,
-          ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
           ...(input.summary !== undefined ? { summary: input.summary } : {}),
           ...(input.tags ? { tags: input.tags } : {}),
           ...(input.ownerAgentId !== undefined
@@ -673,7 +645,6 @@ export class AiCollabClient {
       {
         method: "DELETE",
         body: {
-          ...(input.sessionId ? { sessionId: input.sessionId } : {}),
           ...(input.sourceKind ? { sourceKind: input.sourceKind } : {}),
           ...(input.sourceAgentId !== undefined
             ? { sourceAgentId: input.sourceAgentId }
@@ -690,7 +661,6 @@ export class AiCollabClient {
     input: import("@ai-collab/protocol").ListKnowledgeChangesInput = {}
   ): Promise<import("@ai-collab/protocol").KnowledgeChangeRecord[]> {
     const searchParams = new URLSearchParams();
-    if (input.sessionId) searchParams.set("sessionId", input.sessionId);
     if (input.level) searchParams.set("level", input.level);
     if (input.slug) searchParams.set("slug", input.slug);
     if (input.limit !== undefined) searchParams.set("limit", String(input.limit));
@@ -703,60 +673,6 @@ export class AiCollabClient {
       }`
     );
     return response.changes;
-  }
-
-  public async submitKnowledgeFeedback(
-    input: import("@ai-collab/protocol").KnowledgeFeedbackInput
-  ): Promise<{ ok: boolean; message: string }> {
-    return this.request("/api/knowledge/feedback", {
-      method: "POST",
-      body: input
-    });
-  }
-
-  public async createKnowledgeBuildJudgement(
-    input: import("@ai-collab/protocol").CreateKnowledgeBuildJudgementInput
-  ): Promise<import("@ai-collab/protocol").KnowledgeBuildJudgement> {
-    const response = await this.request<{
-      judgement: import("@ai-collab/protocol").KnowledgeBuildJudgement;
-    }>("/api/knowledge/judgements", {
-      method: "POST",
-      body: input
-    });
-    return response.judgement;
-  }
-
-  public async listKnowledgeBuildJudgements(
-    sessionId: string
-  ): Promise<import("@ai-collab/protocol").KnowledgeBuildJudgement[]> {
-    const response = await this.request<{
-      judgements: import("@ai-collab/protocol").KnowledgeBuildJudgement[];
-    }>(`/api/knowledge/judgements?sessionId=${encodeURIComponent(sessionId)}`);
-    return response.judgements;
-  }
-
-  public async getKnowledgeBuildJudgementBySourceMessage(
-    sessionId: string,
-    messageId: string
-  ): Promise<import("@ai-collab/protocol").KnowledgeBuildJudgement | null> {
-    const response = await this.request<{
-      judgement: import("@ai-collab/protocol").KnowledgeBuildJudgement | null;
-    }>(
-      `/api/knowledge/judgements/by-message/${encodeURIComponent(messageId)}?sessionId=${encodeURIComponent(sessionId)}`
-    );
-    return response.judgement;
-  }
-
-  public async fulfilKnowledgeBuildJudgement(
-    input: import("@ai-collab/protocol").FulfillKnowledgeBuildJudgementInput
-  ): Promise<import("@ai-collab/protocol").KnowledgeBuildJudgement> {
-    const response = await this.request<{
-      judgement: import("@ai-collab/protocol").KnowledgeBuildJudgement;
-    }>("/api/knowledge/judgements/fulfil", {
-      method: "POST",
-      body: input
-    });
-    return response.judgement;
   }
 
   public async listPendingKnowledgePatches(): Promise<
@@ -831,6 +747,16 @@ export class AiCollabClient {
       body: {}
     });
     return response;
+  }
+
+  public async completeTask(
+    taskId: string,
+    input: CompleteTaskInput
+  ): Promise<Task> {
+    return this.request(`/api/tasks/${taskId}/complete`, {
+      method: "POST",
+      body: input
+    });
   }
 
   private parseKnowledgeRef(ref: string): {
@@ -916,10 +842,273 @@ export class AiCollabClient {
     });
   }
 
+  // Workflow Management
+  public async listWorkflows(): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord[]> {
+    return this.request("/api/workflows");
+  }
+
+  public async getWorkflow(workflowId: string): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord> {
+    return this.request(`/api/workflows/${encodeURIComponent(workflowId)}`);
+  }
+
+  public async createWorkflow(input: {
+    id?: string;
+    name: string;
+    description?: string | null;
+    role: import("@ai-collab/protocol").AgentRole;
+    nodes: import("@ai-collab/protocol").WorkflowNodeDefinition[];
+    edges: import("@ai-collab/protocol").WorkflowEdgeDefinition[];
+    enabled?: boolean;
+  }): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord> {
+    return this.request("/api/workflows", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  public async updateWorkflow(
+    workflowId: string,
+    input: {
+      name?: string;
+      description?: string | null;
+      role?: import("@ai-collab/protocol").AgentRole;
+      nodes?: import("@ai-collab/protocol").WorkflowNodeDefinition[];
+      edges?: import("@ai-collab/protocol").WorkflowEdgeDefinition[];
+      enabled?: boolean;
+    }
+  ): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord> {
+    return this.request(`/api/workflows/${encodeURIComponent(workflowId)}`, {
+      method: "PUT",
+      body: input,
+    });
+  }
+
+  public async deleteWorkflow(workflowId: string): Promise<void> {
+    await this.request(`/api/workflows/${encodeURIComponent(workflowId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Web Agent Runtime Management
+  public async listWebAgentRuntimes(sessionId?: string): Promise<import("@ai-collab/protocol").WebAgentRuntime[]> {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+    return this.request(`/api/web-agent-runtimes${query}`);
+  }
+
+  public async createWebAgentRuntime(input: {
+    sessionId: string;
+    agentId: string;
+    role: string;
+    modelConfigId?: string;
+    agentProfileId?: string | null;
+    toolsetId?: string | null;
+  }): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+    return this.request("/api/web-agent-runtimes", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  public async getWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+    return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}`);
+  }
+
+  public async updateWebAgentRuntime(runtimeId: string, input: {
+    toolsetId?: string | null;
+    modelConfigId?: string;
+    status?: string;
+    currentStep?: string | null;
+    lastError?: string | null;
+    lastTickAt?: string | null;
+  }): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+    return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}`, {
+      method: "PATCH",
+      body: input,
+    });
+  }
+
+  public async deleteWebAgentRuntime(runtimeId: string): Promise<void> {
+    await this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  public async startWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+    return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}/start`, {
+      method: "POST",
+    });
+  }
+
+  public async pauseWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+    return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}/pause`, {
+      method: "POST",
+    });
+  }
+
+  public async stopWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+    return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}/stop`, {
+      method: "POST",
+    });
+  }
+
+  // User Profile
+  public async getUserProfile(agentId: string): Promise<Array<{ key: string; value: string; updatedAt: string }>> {
+    return this.request(`/api/agents/${encodeURIComponent(agentId)}/profile`);
+  }
+
+  public async setUserProfileEntry(agentId: string, key: string, value: string): Promise<void> {
+    await this.request(`/api/agents/${encodeURIComponent(agentId)}/profile`, {
+      method: "PUT",
+      body: { key, value },
+    });
+  }
+
+  public async deleteUserProfileEntry(agentId: string, key: string): Promise<void> {
+    await this.request(`/api/agents/${encodeURIComponent(agentId)}/profile/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Global User Preferences
+  public async listUserPreferences(input: import("@ai-collab/protocol").ListUserPreferencesInput = {}): Promise<{
+    manifest: import("@ai-collab/protocol").UserPreferencesManifest;
+    preferences: import("@ai-collab/protocol").UserPreference[];
+  }> {
+    const searchParams = new URLSearchParams();
+    if (input.category) searchParams.set("category", input.category);
+    if (input.query) searchParams.set("query", input.query);
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return this.request(`/api/user-preferences${query}`);
+  }
+
+  public async upsertUserPreference(
+    key: string,
+    input: Omit<import("@ai-collab/protocol").UpsertUserPreferenceInput, "key">
+  ): Promise<import("@ai-collab/protocol").UserPreference> {
+    const response = await this.request<{ preference: import("@ai-collab/protocol").UserPreference }>(
+      `/api/user-preferences/${encodeURIComponent(key)}`,
+      {
+        method: "PUT",
+        body: input,
+      }
+    );
+    return response.preference;
+  }
+
+  public async deleteUserPreference(key: string): Promise<{ deleted: boolean }> {
+    return this.request(`/api/user-preferences/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Models
+  public async listModels(): Promise<Array<{ id: string; name: string; provider: string; modelId: string }>> {
+    return this.request("/api/models");
+  }
+
+  // MCP Servers
+  public async listMcpServers(): Promise<Array<{ id: string; name: string; url: string; description: string | null; transport: "stdio" | "sse"; enabled: boolean; toolCount: number; createdAt: string; updatedAt: string }>> {
+    return this.request("/api/mcp-servers");
+  }
+
+  public async createMcpServer(input: { name: string; url: string; description?: string | null; transport?: "stdio" | "sse"; headers?: Record<string, string> | null; enabled?: boolean }): Promise<{ id: string; name: string; url: string; enabled: boolean }> {
+    return this.request("/api/mcp-servers", { method: "POST", body: input });
+  }
+
+  public async updateMcpServer(serverId: string, input: { name?: string; url?: string; description?: string | null; transport?: "stdio" | "sse"; headers?: Record<string, string> | null; enabled?: boolean }): Promise<{ id: string; name: string; url: string; enabled: boolean }> {
+    return this.request(`/api/mcp-servers/${encodeURIComponent(serverId)}`, { method: "PUT", body: input });
+  }
+
+  public async deleteMcpServer(serverId: string): Promise<void> {
+    await this.request(`/api/mcp-servers/${encodeURIComponent(serverId)}`, { method: "DELETE" });
+  }
+
+  public async listMcpServerTools(serverId: string): Promise<Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>> {
+    return this.request(`/api/mcp-servers/${encodeURIComponent(serverId)}/tools`);
+  }
+
+  // Agent Profiles
+  public async getAgentProfile(profileId: string): Promise<{ id: string; name: string; systemPrompt: string | null; skillIds: string[]; toolsetId: string | null; externalToolNames: string[]; permissionPolicy: Record<string, unknown> | null; runtimePolicy: Record<string, unknown> | null }> {
+    return this.request(`/api/agent-profiles/${encodeURIComponent(profileId)}`);
+  }
+
+  public async listAgentProfiles(): Promise<Array<{ id: string; name: string; systemPrompt: string | null; skillIds: string[]; toolsetId: string | null; externalToolNames: string[]; permissionPolicy: Record<string, unknown> | null; runtimePolicy: Record<string, unknown> | null }>> {
+    return this.request("/api/agent-profiles");
+  }
+
+  // MCP Tool Calls
+  public async callMcpTool(input: import("@ai-collab/protocol").McpCallRequest): Promise<import("@ai-collab/protocol").McpCallResponse> {
+    return this.request("/api/mcp/call", { method: "POST", body: input });
+  }
+
+  public async getMcpTools(options?: { toolsetId?: string; extraToolNames?: string[] }): Promise<{ tools: import("@ai-collab/protocol").McpToolDefinition[] }> {
+    const params = new URLSearchParams();
+    if (options?.toolsetId) params.set("toolsetId", options.toolsetId);
+    if (options?.extraToolNames?.length) params.set("extraToolNames", options.extraToolNames.join(","));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request(`/api/mcp/tools${query}`);
+  }
+
+  // LLM
+  public async llmChat(input: {
+    modelConfigId?: string;
+    messages: Array<{ role: string; content: string }>;
+    stream?: boolean;
+    tools?: import("@ai-collab/protocol").McpToolDefinition[];
+    tool_choice?: unknown;
+    temperature?: number;
+  }): Promise<{
+    content: string | null;
+    role: string;
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
+    tool_calls: import("@ai-collab/protocol").McpToolCall[] | null;
+  }> {
+    return this.request("/api/llm/chat", { method: "POST", body: input });
+  }
+
+  // Skills
+  public async getSkill(skillId: string): Promise<import("@ai-collab/protocol").SkillDefinition> {
+    return this.request(`/api/skills/${encodeURIComponent(skillId)}`);
+  }
+
+  public async listSkills(): Promise<import("@ai-collab/protocol").SkillDefinition[]> {
+    return this.request("/api/skills");
+  }
+
+  // Session with Agent (join/create)
+  public async joinSessionWithAgent(input: {
+    sessionId: string;
+    role: string;
+    agentName: string;
+    displayName: string;
+    modelConfigId?: string;
+    agentProfileId?: string | null;
+    roleDescription?: string | null;
+  }): Promise<{ agent: import("@ai-collab/protocol").Agent }> {
+    return this.request("/api/sessions/join-with-agent", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  public async createSessionWithAgent(input: {
+    sessionName: string;
+    agentName: string;
+    displayName: string;
+    modelConfigId?: string;
+    agentProfileId?: string | null;
+    roleDescription?: string | null;
+  }): Promise<{ agent: import("@ai-collab/protocol").Agent; session: import("@ai-collab/protocol").SessionSummary }> {
+    return this.request("/api/sessions/create-with-agent", {
+      method: "POST",
+      body: input,
+    });
+  }
+
   private async request<T>(
     path: string,
     options: {
-      method?: "GET" | "POST" | "PUT" | "DELETE";
+      method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
       body?: unknown;
     } = {}
   ): Promise<T> {
@@ -955,236 +1144,6 @@ export class AiCollabClient {
     }
 
     return result.data;
-  }
-
-  // ============================================
-  // Model Config API
-  // ============================================
-  public async createModelConfig(
-    input: import("@ai-collab/protocol").CreateModelConfigInput
-  ): Promise<import("@ai-collab/protocol").ModelConfig> {
-    return this.request("/api/models", {
-      method: "POST",
-      body: input
-    });
-  }
-
-  public async listModelConfigs(): Promise<import("@ai-collab/protocol").ModelConfig[]> {
-    const response = await this.request<{ models: import("@ai-collab/protocol").ModelConfig[] }>("/api/models");
-    return response.models;
-  }
-
-  public async getModelConfig(id: string): Promise<import("@ai-collab/protocol").ModelConfig> {
-    return this.request(`/api/models/${id}`);
-  }
-
-  public async updateModelConfig(
-    id: string,
-    input: import("@ai-collab/protocol").UpdateModelConfigInput
-  ): Promise<import("@ai-collab/protocol").ModelConfig> {
-    return this.request(`/api/models/${id}`, {
-      method: "PUT",
-      body: input
-    });
-  }
-
-  public async deleteModelConfig(id: string): Promise<{ deleted: boolean }> {
-    return this.request(`/api/models/${id}`, {
-      method: "DELETE"
-    });
-  }
-
-  public async testModelConfig(
-    id: string,
-    input?: { prompt?: string }
-  ): Promise<import("@ai-collab/protocol").TestModelConfigResult> {
-    return this.request(`/api/models/${id}/test`, {
-      method: "POST",
-      body: input ?? {}
-    });
-  }
-
-  // ============================================
-  // Agent Profile API
-  // ============================================
-  public async createAgentProfile(
-    input: import("@ai-collab/protocol").CreateAgentProfileInput
-  ): Promise<import("@ai-collab/protocol").AgentProfile> {
-    return this.request("/api/agent-profiles", {
-      method: "POST",
-      body: input
-    });
-  }
-
-  public async listAgentProfiles(): Promise<import("@ai-collab/protocol").AgentProfileWithSkills[]> {
-    const response = await this.request<{ profiles: import("@ai-collab/protocol").AgentProfileWithSkills[] }>("/api/agent-profiles");
-    return response.profiles;
-  }
-
-  public async getAgentProfile(id: string): Promise<import("@ai-collab/protocol").AgentProfileWithSkills> {
-    return this.request(`/api/agent-profiles/${id}`);
-  }
-
-  public async updateAgentProfile(
-    id: string,
-    input: import("@ai-collab/protocol").UpdateAgentProfileInput
-  ): Promise<import("@ai-collab/protocol").AgentProfile> {
-    return this.request(`/api/agent-profiles/${id}`, {
-      method: "PUT",
-      body: input
-    });
-  }
-
-  public async deleteAgentProfile(id: string): Promise<{ deleted: boolean }> {
-    return this.request(`/api/agent-profiles/${id}`, {
-      method: "DELETE"
-    });
-  }
-
-  public async updateAgentProfileSkills(
-    id: string,
-    skillIds: string[]
-  ): Promise<import("@ai-collab/protocol").AgentProfileWithSkills> {
-    return this.request(`/api/agent-profiles/${id}/skills`, {
-      method: "PUT",
-      body: { skillIds }
-    });
-  }
-
-  // ============================================
-  // Skill API
-  // ============================================
-  public async createSkill(
-    input: { name: string; description?: string | null; path: string; roleScope?: string | null }
-  ): Promise<import("@ai-collab/protocol").SkillDefinition> {
-    return this.request("/api/skills", {
-      method: "POST",
-      body: input
-    });
-  }
-
-  public async listSkills(): Promise<import("@ai-collab/protocol").SkillDefinition[]> {
-    const response = await this.request<{ skills: import("@ai-collab/protocol").SkillDefinition[] }>("/api/skills");
-    return response.skills;
-  }
-
-  public async getSkill(id: string): Promise<import("@ai-collab/protocol").SkillDefinition> {
-    return this.request(`/api/skills/${id}`);
-  }
-
-  public async updateSkill(
-    id: string,
-    input: { name?: string; description?: string | null; roleScope?: string | null; enabled?: boolean }
-  ): Promise<import("@ai-collab/protocol").SkillDefinition> {
-    return this.request(`/api/skills/${id}`, {
-      method: "PUT",
-      body: input
-    });
-  }
-
-  public async deleteSkill(id: string): Promise<{ deleted: boolean }> {
-    return this.request(`/api/skills/${id}`, {
-      method: "DELETE"
-    });
-  }
-
-  public async scanSkills(directoryPath: string): Promise<import("@ai-collab/protocol").ScanSkillsResult> {
-    return this.request("/api/skills/scan", {
-      method: "POST",
-      body: { directoryPath }
-    });
-  }
-
-  // ============================================
-  // Session Skills API
-  // ============================================
-  public async getSessionSkills(sessionId: string): Promise<import("@ai-collab/protocol").SessionSkillScope[]> {
-    const response = await this.request<{ skills: import("@ai-collab/protocol").SessionSkillScope[] }>(`/api/sessions/${sessionId}/skills`);
-    return response.skills;
-  }
-
-  public async getAvailableSessionSkills(sessionId: string): Promise<import("@ai-collab/protocol").SkillDefinition[]> {
-    const response = await this.request<{ skills: import("@ai-collab/protocol").SkillDefinition[] }>(`/api/sessions/${sessionId}/available-skills`);
-    return response.skills;
-  }
-
-  public async setSessionSkills(sessionId: string, skillIds: string[]): Promise<import("@ai-collab/protocol").SessionSkillScope[]> {
-    const response = await this.request<{ skills: import("@ai-collab/protocol").SessionSkillScope[] }>(`/api/sessions/${sessionId}/skills`, {
-      method: "PUT",
-      body: { skillIds }
-    });
-    return response.skills;
-  }
-
-  // ============================================
-  // Session Creation with Agent API
-  // ============================================
-  public async createSessionWithAgent(
-    input: import("@ai-collab/protocol").CreateSessionWithAgentInput
-  ): Promise<SessionJoinResult> {
-    return this.request("/api/sessions/create-with-agent", {
-      method: "POST",
-      body: input
-    });
-  }
-
-  public async joinSessionWithAgent(
-    input: import("@ai-collab/protocol").JoinSessionWithAgentInput
-  ): Promise<SessionJoinResult> {
-    return this.request("/api/sessions/join-with-agent", {
-      method: "POST",
-      body: input
-    });
-  }
-
-  public async getSessionTimeline(
-    sessionId: string
-  ): Promise<import("@ai-collab/protocol").SessionTimeline> {
-    return this.request(`/api/sessions/${sessionId}/timeline`);
-  }
-
-  public async getSessionTraces(
-    sessionId: string
-  ): Promise<import("@ai-collab/protocol").MessageTrace[]> {
-    const response = await this.request<{
-      traces: import("@ai-collab/protocol").MessageTrace[];
-    }>(`/api/sessions/${sessionId}/traces`);
-    return response.traces;
-  }
-
-  public async getProfile(
-    key?: string,
-    agentId?: string
-  ): Promise<import("@ai-collab/protocol").UserProfileSnapshot> {
-    const searchParams = new URLSearchParams();
-    if (key) searchParams.set("key", key);
-    if (agentId) searchParams.set("agentId", agentId);
-    return this.request(
-      `/api/profile${searchParams.size > 0 ? `?${searchParams.toString()}` : ""}`
-    );
-  }
-
-  public async setProfile(
-    key: string,
-    value: string,
-    agentId?: string
-  ): Promise<{ entry: import("@ai-collab/protocol").UserProfileEntry }> {
-    return this.request("/api/profile", {
-      method: "PUT",
-      body: { key, value, ...(agentId ? { agentId } : {}) }
-    });
-  }
-
-  public async deleteProfile(
-    key: string,
-    agentId?: string
-  ): Promise<{ deleted: boolean }> {
-    const searchParams = new URLSearchParams();
-    if (agentId) searchParams.set("agentId", agentId);
-    return this.request(
-      `/api/profile/${encodeURIComponent(key)}${searchParams.size > 0 ? `?${searchParams.toString()}` : ""}`,
-      { method: "DELETE" }
-    );
   }
 }
 

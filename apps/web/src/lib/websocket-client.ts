@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AiCollabWebSocketClient, type AiCollabWebSocketClientOptions } from "@ai-collab/sdk";
-import { useSessionActions } from "@/state/session-store";
 import type {
   WsServerMessage,
   WsProgressUpdateNotification,
@@ -25,7 +24,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected" | "reconnecting">("disconnected");
   const [lastMessage, setLastMessage] = useState<WsServerMessage | null>(null);
   const [lastProgressUpdate, setLastProgressUpdate] = useState<WsProgressUpdateNotification | null>(null);
-  const { setConnectionStatus } = useSessionActions();
   const optionsRef = useRef(options);
 
   useEffect(() => {
@@ -42,19 +40,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     client.on("connected", () => {
       setStatus("connected");
-      setConnectionStatus("connected");
       optionsRef.current.onConnected?.();
     });
 
     client.on("disconnected", () => {
       setStatus("disconnected");
-      setConnectionStatus("disconnected");
       optionsRef.current.onDisconnected?.();
     });
 
     client.on("reconnecting", () => {
       setStatus("reconnecting");
-      setConnectionStatus("reconnecting");
     });
 
     client.on("inbox:message", (message: WsInboxMessageNotification) => {
@@ -84,16 +79,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     clientRef.current = client;
 
     return client;
-  }, [setConnectionStatus]);
+  }, []);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;
       setStatus("disconnected");
-      setConnectionStatus("disconnected");
     }
-  }, [setConnectionStatus]);
+  }, []);
 
   const send = useCallback((message: never) => {
     clientRef.current?.send(message);

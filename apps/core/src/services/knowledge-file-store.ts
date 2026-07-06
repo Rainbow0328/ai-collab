@@ -95,22 +95,8 @@ export class KnowledgeFileStore {
     return this.knowledgeRoot;
   }
 
-  private resolveSessionRoot(sessionId?: string | null): string {
-    if (sessionId) {
-      const sessionRoot = resolve(this.knowledgeRoot, sessionId);
-      if (!existsSync(sessionRoot)) {
-        mkdirSync(sessionRoot, { recursive: true });
-        mkdirSync(join(sessionRoot, META_DIR, PATCHES_DIR), { recursive: true });
-        mkdirSync(join(sessionRoot, META_DIR, REVIEWS_DIR), { recursive: true });
-        mkdirSync(join(sessionRoot, META_DIR, PERSISTENCE_DIR), { recursive: true });
-      }
-      return sessionRoot;
-    }
-    return this.knowledgeRoot;
-  }
-
   public list(input: ListKnowledgeInput = {}): KnowledgeListItem[] {
-    const documents = this.loadAllDocuments(input.sessionId);
+    const documents = this.loadAllDocuments();
     return sortByUpdatedAtDesc(
       documents
         .filter((document) => {
@@ -135,8 +121,8 @@ export class KnowledgeFileStore {
     );
   }
 
-  public get(level: KnowledgeLevel, slug: string, sessionId?: string | null): KnowledgeDocument | null {
-    const path = this.getDocumentPath(level, slug, sessionId);
+  public get(level: KnowledgeLevel, slug: string): KnowledgeDocument | null {
+    const path = this.getDocumentPath(level, slug);
     if (!existsSync(path)) {
       return null;
     }
@@ -145,9 +131,8 @@ export class KnowledgeFileStore {
   }
 
   public upsert(input: UpsertKnowledgeInput): KnowledgeDocument {
-    const sessionId = input.sessionId;
-    const path = this.getDocumentPath(input.level, input.slug, sessionId);
-    const existing = this.get(input.level, input.slug, sessionId);
+    const path = this.getDocumentPath(input.level, input.slug);
+    const existing = this.get(input.level, input.slug);
     const timestamp = now();
 
     const next: KnowledgeDocument = {
@@ -175,19 +160,18 @@ export class KnowledgeFileStore {
       sourceAgentId: input.sourceAgentId ?? null,
       summary: input.changeSummary ?? null,
       version: next.version
-    }, sessionId);
-    this.writeManifest(sessionId);
+    });
+    this.writeManifest();
     return next;
   }
 
   public delete(input: DeleteKnowledgeInput): boolean {
-    const sessionId = input.sessionId;
-    const existing = this.get(input.level, input.slug, sessionId);
+    const existing = this.get(input.level, input.slug);
     if (!existing) {
       return false;
     }
 
-    rmSync(this.getDocumentPath(input.level, input.slug, sessionId), { force: true });
+    rmSync(this.getDocumentPath(input.level, input.slug), { force: true });
     this.appendChange({
       documentId: existing.id,
       level: existing.level,
@@ -197,21 +181,21 @@ export class KnowledgeFileStore {
       sourceAgentId: input.sourceAgentId ?? null,
       summary: input.changeSummary ?? null,
       version: existing.version
-    }, sessionId);
-    this.writeManifest(sessionId);
+    });
+    this.writeManifest();
     return true;
   }
 
-  public getManifest(sessionId?: string | null): KnowledgeManifest {
-    const manifestPath = this.getManifestPath(sessionId);
+  public getManifest(): KnowledgeManifest {
+    const manifestPath = this.getManifestPath();
     if (!existsSync(manifestPath)) {
-      return this.writeManifest(sessionId);
+      return this.writeManifest();
     }
     return this.readJsonFile<KnowledgeManifest>(manifestPath);
   }
 
   public listChanges(input: ListKnowledgeChangesInput = {}): KnowledgeChangeRecord[] {
-    const historyDir = this.getHistoryDirPath(input.sessionId);
+    const historyDir = this.getHistoryDirPath();
     if (!existsSync(historyDir)) {
       return [];
     }
@@ -257,12 +241,12 @@ export class KnowledgeFileStore {
       createdAt: timestamp,
       updatedAt: timestamp
     };
-    this.writeAtomically(this.getPatchRecordPath(record.patchId, input.sessionId), record);
+    this.writeAtomically(this.getPatchRecordPath(record.patchId), record);
     return record;
   }
 
-  public getPatchRecord(patchId: string, sessionId?: string | null): KnowledgePatchRecord | null {
-    const path = this.getPatchRecordPath(patchId, sessionId);
+  public getPatchRecord(patchId: string): KnowledgePatchRecord | null {
+    const path = this.getPatchRecordPath(patchId);
     if (!existsSync(path)) {
       return null;
     }
@@ -272,7 +256,7 @@ export class KnowledgeFileStore {
   public listPatchRecords(
     input: ListKnowledgePatchRecordsInput = {}
   ): KnowledgePatchRecord[] {
-    const records = this.readMetaCollection<KnowledgePatchRecord>(this.getPatchRecordsDirPath(input.sessionId));
+    const records = this.readMetaCollection<KnowledgePatchRecord>(this.getPatchRecordsDirPath());
     const filtered = input.status
       ? records.filter((record) => record.status === input.status)
       : records;
@@ -280,7 +264,7 @@ export class KnowledgeFileStore {
   }
 
   public updatePatchRecord(input: UpdateKnowledgePatchRecordInput): KnowledgePatchRecord | null {
-    const existing = this.getPatchRecord(input.patchId, input.sessionId);
+    const existing = this.getPatchRecord(input.patchId);
     if (!existing) {
       return null;
     }
@@ -289,12 +273,12 @@ export class KnowledgeFileStore {
       status: input.status,
       updatedAt: now()
     };
-    this.writeAtomically(this.getPatchRecordPath(input.patchId, input.sessionId), next);
+    this.writeAtomically(this.getPatchRecordPath(input.patchId), next);
     return next;
   }
 
-  public getPatchReviewRecord(patchId: string, sessionId?: string | null): KnowledgePatchReviewRecord | null {
-    const path = this.getPatchReviewRecordPath(patchId, sessionId);
+  public getPatchReviewRecord(patchId: string): KnowledgePatchReviewRecord | null {
+    const path = this.getPatchReviewRecordPath(patchId);
     if (!existsSync(path)) {
       return null;
     }
@@ -304,7 +288,7 @@ export class KnowledgeFileStore {
   public upsertPatchReviewRecord(
     input: UpsertKnowledgePatchReviewRecordInput
   ): KnowledgePatchReviewRecord {
-    const existing = this.getPatchReviewRecord(input.patchId, input.sessionId);
+    const existing = this.getPatchReviewRecord(input.patchId);
     const next: KnowledgePatchReviewRecord = {
       patchId: input.patchId,
       validationResult: input.validationResult ?? existing?.validationResult ?? "pending",
@@ -315,12 +299,12 @@ export class KnowledgeFileStore {
       reviewComment: input.reviewComment ?? existing?.reviewComment ?? null,
       reviewedAt: input.reviewedAt ?? existing?.reviewedAt ?? null
     };
-    this.writeAtomically(this.getPatchReviewRecordPath(input.patchId, input.sessionId), next);
+    this.writeAtomically(this.getPatchReviewRecordPath(input.patchId), next);
     return next;
   }
 
-  public getPersistenceRecord(patchId: string, sessionId?: string | null): KnowledgePersistenceRecord | null {
-    const path = this.getPersistenceRecordPath(patchId, sessionId);
+  public getPersistenceRecord(patchId: string): KnowledgePersistenceRecord | null {
+    const path = this.getPersistenceRecordPath(patchId);
     if (!existsSync(path)) {
       return null;
     }
@@ -330,7 +314,7 @@ export class KnowledgeFileStore {
   public upsertPersistenceRecord(
     input: UpsertKnowledgePersistenceRecordInput
   ): KnowledgePersistenceRecord {
-    const existing = this.getPersistenceRecord(input.patchId, input.sessionId);
+    const existing = this.getPersistenceRecord(input.patchId);
     const next: KnowledgePersistenceRecord = {
       patchId: input.patchId,
       targetPath: input.targetPath ?? existing?.targetPath ?? null,
@@ -339,7 +323,7 @@ export class KnowledgeFileStore {
       errorMessage: input.errorMessage ?? existing?.errorMessage ?? null,
       persistedAt: input.persistedAt ?? existing?.persistedAt ?? null
     };
-    this.writeAtomically(this.getPersistenceRecordPath(input.patchId, input.sessionId), next);
+    this.writeAtomically(this.getPersistenceRecordPath(input.patchId), next);
     return next;
   }
 
@@ -354,11 +338,10 @@ export class KnowledgeFileStore {
     mkdirSync(this.getPersistenceRecordsDirPath(), { recursive: true });
   }
 
-  private loadAllDocuments(sessionId?: string | null): KnowledgeDocument[] {
-    const root = this.resolveSessionRoot(sessionId);
+  private loadAllDocuments(): KnowledgeDocument[] {
     const documents: KnowledgeDocument[] = [];
     for (const level of Object.keys(KNOWLEDGE_LEVEL_DIRS) as KnowledgeLevel[]) {
-      const levelDir = join(root, KNOWLEDGE_LEVEL_DIRS[level]);
+      const levelDir = this.getLevelDir(level);
       const entries = existsSync(levelDir)
         ? readdirSync(levelDir, { withFileTypes: true })
         : [];
@@ -374,63 +357,60 @@ export class KnowledgeFileStore {
     return documents;
   }
 
-  private getLevelDir(level: KnowledgeLevel, sessionId?: string | null): string {
-    return join(this.resolveSessionRoot(sessionId), KNOWLEDGE_LEVEL_DIRS[level]);
+  private getLevelDir(level: KnowledgeLevel): string {
+    return join(this.knowledgeRoot, KNOWLEDGE_LEVEL_DIRS[level]);
   }
 
-  private getDocumentPath(level: KnowledgeLevel, slug: string, sessionId?: string | null): string {
-    return join(this.getLevelDir(level, sessionId), toSlugFilename(slug));
+  private getDocumentPath(level: KnowledgeLevel, slug: string): string {
+    return join(this.getLevelDir(level), toSlugFilename(slug));
   }
 
-  private getManifestPath(sessionId?: string | null): string {
-    return join(this.resolveSessionRoot(sessionId), MANIFEST_FILE);
+  private getManifestPath(): string {
+    return join(this.knowledgeRoot, MANIFEST_FILE);
   }
 
-  private getHistoryDirPath(sessionId?: string | null): string {
-    return join(this.resolveSessionRoot(sessionId), HISTORY_DIR);
+  private getHistoryDirPath(): string {
+    return join(this.knowledgeRoot, HISTORY_DIR);
   }
 
-  private getMetaDirPath(sessionId?: string | null): string {
-    return join(this.resolveSessionRoot(sessionId), META_DIR);
+  private getMetaDirPath(): string {
+    return join(this.knowledgeRoot, META_DIR);
   }
 
-  private getPatchRecordsDirPath(sessionId?: string | null): string {
-    return join(this.getMetaDirPath(sessionId), PATCHES_DIR);
+  private getPatchRecordsDirPath(): string {
+    return join(this.getMetaDirPath(), PATCHES_DIR);
   }
 
-  private getPatchReviewsDirPath(sessionId?: string | null): string {
-    return join(this.getMetaDirPath(sessionId), REVIEWS_DIR);
+  private getPatchReviewsDirPath(): string {
+    return join(this.getMetaDirPath(), REVIEWS_DIR);
   }
 
-  private getPersistenceRecordsDirPath(sessionId?: string | null): string {
-    return join(this.getMetaDirPath(sessionId), PERSISTENCE_DIR);
+  private getPersistenceRecordsDirPath(): string {
+    return join(this.getMetaDirPath(), PERSISTENCE_DIR);
   }
 
-  private getPatchRecordPath(patchId: string, sessionId?: string | null): string {
-    return join(this.getPatchRecordsDirPath(sessionId), toSlugFilename(patchId));
+  private getPatchRecordPath(patchId: string): string {
+    return join(this.getPatchRecordsDirPath(), toSlugFilename(patchId));
   }
 
-  private getPatchReviewRecordPath(patchId: string, sessionId?: string | null): string {
-    return join(this.getPatchReviewsDirPath(sessionId), toSlugFilename(patchId));
+  private getPatchReviewRecordPath(patchId: string): string {
+    return join(this.getPatchReviewsDirPath(), toSlugFilename(patchId));
   }
 
-  private getPersistenceRecordPath(patchId: string, sessionId?: string | null): string {
-    return join(this.getPersistenceRecordsDirPath(sessionId), toSlugFilename(patchId));
+  private getPersistenceRecordPath(patchId: string): string {
+    return join(this.getPersistenceRecordsDirPath(), toSlugFilename(patchId));
   }
 
-  private appendChange(
-    input: {
-      documentId: string;
-      level: KnowledgeLevel;
-      slug: string;
-      kind: "created" | "updated" | "deleted";
-      sourceKind: KnowledgeSourceKind;
-      sourceAgentId: string | null;
-      summary: string | null;
-      version: number;
-    },
-    sessionId?: string | null
-  ): void {
+  private appendChange(input: {
+    documentId: string;
+    level: KnowledgeLevel;
+    slug: string;
+    kind: KnowledgeChangeRecord["kind"];
+    sourceKind: KnowledgeSourceKind;
+    sourceAgentId: string | null;
+    summary: string | null;
+    version: number;
+  }): void {
     const record: KnowledgeChangeRecord = {
       id: randomUUID(),
       documentId: input.documentId,
@@ -444,27 +424,27 @@ export class KnowledgeFileStore {
       version: input.version
     };
     const historyPath = join(
-      this.getHistoryDirPath(sessionId),
+      this.getHistoryDirPath(),
       `${record.createdAt.replaceAll(":", "-")}-${record.id}.json`
     );
     this.writeAtomically(historyPath, record);
   }
 
-  private writeManifest(sessionId?: string | null): KnowledgeManifest {
+  private writeManifest(): KnowledgeManifest {
     const counts = {
       l1: 0,
       l2: 0,
       l3: 0
     } satisfies KnowledgeManifestCounts;
-    for (const item of this.loadAllDocuments(sessionId)) {
+    for (const item of this.loadAllDocuments()) {
       counts[item.level] += 1;
     }
     const manifest: KnowledgeManifest = {
-      rootPath: this.resolveSessionRoot(sessionId),
+      rootPath: this.knowledgeRoot,
       counts,
       updatedAt: now()
     };
-    this.writeAtomically(this.getManifestPath(sessionId), manifest);
+    this.writeAtomically(this.getManifestPath(), manifest);
     return manifest;
   }
 

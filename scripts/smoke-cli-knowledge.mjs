@@ -98,6 +98,8 @@ const main = async () => {
     const sessionName = `knowledge-${Date.now()}`;
     const hostName = "main-host";
     const workerName = "worker-one";
+    const slug = "smoke/session-direction";
+    const userFeedbackSlug = "smoke/user-feedback-direction";
     const content = "Current session direction: host owns knowledge updates; workers may read refs only.";
 
     await runCliJson({
@@ -130,47 +132,63 @@ const main = async () => {
     const upserted = await runCliJson({
       args: [
         "knowledge",
-        "update-current",
+        "upsert",
         hostName,
         "--session",
         sessionName,
         "--level",
         "l1",
+        "--slug",
+        slug,
+        "--title",
+        "Smoke Session Direction",
         "--content",
-        content
+        content,
+        "--summary",
+        "Host-owned knowledge update smoke",
+        "--tags",
+        "smoke,session",
+        "--change-summary",
+        "Create smoke L1 direction"
       ],
       env
     });
-    assert(upserted.op === "KNOWLEDGE_UPDATE_CURRENT", "host should update-current knowledge");
-    assert(upserted.slug === "current", "upserted document slug should be current");
+    assert(upserted.op === "KNOWLEDGE_UPSERTED", "host should upsert knowledge");
+    assert(upserted.document?.slug === slug, "upserted document slug should match");
 
     const userFeedbackContent =
       "User feedback corrected the current session direction and must take priority.";
     const userFeedbackUpserted = await runCliJson({
       args: [
         "knowledge",
-        "update-current",
+        "upsert",
         hostName,
         "--session",
         sessionName,
         "--level",
         "l1",
+        "--slug",
+        userFeedbackSlug,
+        "--title",
+        "Smoke User Feedback Direction",
         "--content",
         userFeedbackContent,
+        "--summary",
+        "User feedback source smoke",
         "--source-kind",
-        "user_feedback"
+        "user_feedback",
+        "--change-summary",
+        "User feedback corrected the L1 direction"
       ],
       env
     });
     assert(
-      userFeedbackUpserted.op === "KNOWLEDGE_UPDATE_CURRENT",
-      "host should update-current with user_feedback source kind"
+      userFeedbackUpserted.op === "KNOWLEDGE_UPSERTED",
+      "host should upsert user-feedback knowledge"
     );
 
     const userFeedbackChanges = await client.listKnowledgeChanges({
-      slug: "current",
-      level: "l1",
-      sessionId: (await client.getSessionByName(sessionName)).id,
+      slug: userFeedbackSlug,
       limit: 5
     });
     assert(
@@ -181,150 +199,54 @@ const main = async () => {
     const read = await runCliJson({
       args: [
         "knowledge",
-        "read-current",
+        "read",
         workerName,
         "--session",
         sessionName,
-        "--level",
-        "l1",
+        "--ref",
+        `L1/${slug}`,
         "--max-chars",
         "200"
       ],
       env
     });
-    assert(read.op === "KNOWLEDGE_READ_CURRENT", "worker should read-current knowledge");
+    assert(read.op === "KNOWLEDGE_READ", "worker should read knowledge");
     assert(
-      read.document?.content === userFeedbackContent,
-      "worker read should return the latest host-updated knowledge content"
+      read.document?.content === content,
+      "worker read should return the host-upserted knowledge content"
     );
 
     const denied = await runCli({
       args: [
         "knowledge",
-        "update-current",
+        "upsert",
         workerName,
         "--session",
         sessionName,
         "--level",
         "l1",
+        "--slug",
+        "smoke/worker-denied",
+        "--title",
+        "Denied",
         "--content",
         "Workers cannot write knowledge."
       ],
       env
     });
-    assert(denied.exitCode !== 0, "worker update-current should be denied");
-    assert(denied.json?.error, "denied worker update-current should return an error payload");
-
-    const nonCurrentSlugDenied = await runCli({
-      args: [
-        "knowledge",
-        "upsert",
-        hostName,
-        "--session",
-        sessionName,
-        "--level",
-        "l1",
-        "--slug",
-        "smoke/non-current-slug",
-        "--title",
-        "Denied",
-        "--content",
-        "Non-current slugs should be rejected."
-      ],
-      env
-    });
-    assert(nonCurrentSlugDenied.exitCode !== 0, "non-current slug upsert should be denied");
+    assert(denied.exitCode !== 0, "worker knowledge upsert should be denied");
+    assert(denied.json?.error, "denied worker upsert should return an error payload");
 
     console.log(
       JSON.stringify(
         {
           sessionName,
-          updateCurrentOp: upserted.op,
+          upsertOp: upserted.op,
           userFeedbackSourceRecorded: userFeedbackChanges.some(
             (change) => change.sourceKind === "user_feedback"
           ),
-          readCurrentOp: read.op,
-          workerUpdateCurrentDenied: denied.exitCode !== 0,
-          nonCurrentSlugDenied: nonCurrentSlugDenied.exitCode !== 0
-        },
-        null,
-        2
-      )
-    );
-
-    // ==========================================
-    // Judgement + Fulfil Flow
-    // ==========================================
-
-    const judgeResult = await runCliJson({
-      args: [
-        "knowledge", "judge", hostName,
-        "--session", sessionName,
-        "--source", "user_message",
-        "--source-message-id", "msg-judge-001",
-        "--knowledge-build-required", "true",
-        "--target-levels", "l1,l2",
-        "--source-kind", "user_feedback",
-        "--reason", "用户提出了新功能需要更新L1和L2",
-        "--next-action", "knowledge_upsert_then_dispatch"
-      ],
-      env
-    });
-    assert(
-      judgeResult.op === "KNOWLEDGE_BUILD_JUDGEMENT_CREATED",
-      "knowledge judge should create a judgement"
-    );
-    assert(judgeResult.judgement.knowledgeBuildRequired === true, "knowledgeBuildRequired should be true");
-    assert(judgeResult.judgement.targetLevels.length === 2, "targetLevels should contain l1 and l2");
-    const judgementId = judgeResult.judgement.id;
-
-    const updateWithFulfil = await runCliJson({
-      args: [
-        "knowledge", "update-current", hostName,
-        "--session", sessionName,
-        "--level", "l1",
-        "--content", "Direction updated from user feedback via judge flow.",
-        "--source-kind", "user_feedback",
-        "--judgement-id", judgementId
-      ],
-      env
-    });
-    assert(updateWithFulfil.op === "KNOWLEDGE_UPDATE_CURRENT", "update-current with judgement-id should succeed");
-    assert(
-      updateWithFulfil.fulfilledJudgement !== null,
-      "judgement should be auto-fulfilled after update-current"
-    );
-    assert(
-      updateWithFulfil.fulfilledJudgement.fulfilledAt !== null,
-      "fulfilledAt should be set"
-    );
-    assert(
-      updateWithFulfil.fulfilledJudgement.fulfilledKnowledgeRefs.includes("l1/current"),
-      "fulfilledKnowledgeRefs should contain l1/current"
-    );
-
-    const fulfilResult = await runCliJson({
-      args: [
-        "knowledge", "fulfil-judgement", hostName,
-        "--session", sessionName,
-        "--judgement-id", judgementId
-      ],
-      env
-    });
-    assert(
-      fulfilResult.op === "KNOWLEDGE_BUILD_JUDGEMENT_FULFILLED",
-      "explicit fulfil-judgement should succeed even if already fulfilled"
-    );
-
-    console.log(
-      JSON.stringify(
-        {
-          judgementFlow: {
-            judgeCreated: judgeResult.op === "KNOWLEDGE_BUILD_JUDGEMENT_CREATED",
-            autoFulfilledViaUpsert: upsertWithFulfil.fulfilledJudgement !== null,
-            explicitFulfilOk: fulfilResult.op === "KNOWLEDGE_BUILD_JUDGEMENT_FULFILLED",
-            passed: true
-          }
+          readOp: read.op,
+          workerUpsertDenied: denied.exitCode !== 0
         },
         null,
         2

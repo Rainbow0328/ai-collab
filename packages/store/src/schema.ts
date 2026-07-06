@@ -1,6 +1,6 @@
 export const schemaDDL = `
   -- ============================================
-  -- schema_version: Schema version tracking
+  -- schema_version: 迁移版本追踪
   -- ============================================
   CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
@@ -8,7 +8,7 @@ export const schemaDDL = `
   );
 
   -- ============================================
-  -- sessions: Sessions table
+  -- sessions: 会话表
   -- ============================================
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
@@ -26,7 +26,7 @@ export const schemaDDL = `
     ON sessions(status);
 
   -- ============================================
-  -- agents: Agents table
+  -- agents: AI 参与者表
   -- ============================================
   CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY,
@@ -75,7 +75,7 @@ export const schemaDDL = `
     ON agents(status);
 
   -- ============================================
-  -- messages: Messages table
+  -- messages: 消息表
   -- ============================================
   CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
@@ -119,7 +119,103 @@ export const schemaDDL = `
     WHERE idempotency_key IS NOT NULL AND idempotency_key <> '';
 
   -- ============================================
-  -- operation_dedup: Operation deduplication table
+  -- tasks: 任务表
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    created_by_agent_id TEXT NOT NULL,
+    assigned_to_agent_id TEXT,
+    status TEXT NOT NULL,
+    priority TEXT NOT NULL,
+    capability_hint TEXT,
+    parent_task_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_session_id 
+    ON tasks(session_id);
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to 
+    ON tasks(assigned_to_agent_id);
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_status 
+    ON tasks(status);
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_priority 
+    ON tasks(priority);
+
+  -- ============================================
+  -- task_events: 任务事件表
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS task_events (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    actor_agent_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_task_events_task_id 
+    ON task_events(task_id);
+
+  -- ============================================
+  -- model_configs: Web runtime model presets
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS model_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  -- ============================================
+  -- web_agent_runtimes: Backend browser-independent agents
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS web_agent_runtimes (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL,
+    model_config_id TEXT NOT NULL,
+    agent_profile_id TEXT,
+    toolset_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    current_step TEXT,
+    last_error TEXT,
+    last_tick_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_web_agent_runtimes_session_id
+    ON web_agent_runtimes(session_id);
+
+  -- ============================================
+  -- workflow_definitions: Role workflow templates
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS workflow_definitions (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    role TEXT NOT NULL,
+    nodes_json TEXT NOT NULL,
+    edges_json TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    builtin INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  -- ============================================
+  -- operation_dedup: 操作去重表
   -- ============================================
   CREATE TABLE IF NOT EXISTS operation_dedup (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,7 +230,7 @@ export const schemaDDL = `
     ON operation_dedup(agent_id, operation_type, idempotency_key);
 
   -- ============================================
-  -- identity_leases: Identity leases table
+  -- identity_leases: 身份租约表
   -- ============================================
   CREATE TABLE IF NOT EXISTS identity_leases (
     identity_key TEXT PRIMARY KEY,
@@ -148,7 +244,7 @@ export const schemaDDL = `
     ON identity_leases(lease_until);
 
   -- ============================================
-  -- session_insights: Session insights table
+  -- session_insights: 会话洞察表
   -- ============================================
   CREATE TABLE IF NOT EXISTS session_insights (
     session_id TEXT PRIMARY KEY,
@@ -183,168 +279,7 @@ export const schemaDDL = `
     updated_at TEXT NOT NULL
   );
 
-  -- ============================================
-  -- model_configs: Model configs table
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS model_configs (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    base_url TEXT NOT NULL,
-    api_key_encrypted TEXT,
-    api_key_hint TEXT,
-    model_name TEXT NOT NULL,
-    temperature REAL NOT NULL DEFAULT 0.7,
-    max_tokens INTEGER NOT NULL DEFAULT 4096,
-    top_p REAL NOT NULL DEFAULT 1.0,
-    timeout_seconds INTEGER NOT NULL DEFAULT 60,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_model_configs_name
-    ON model_configs(name);
-
-  -- ============================================
-  -- agent_profiles: Agent profiles table
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS agent_profiles (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    default_model_config_id TEXT,
-    default_role TEXT,
-    role_description TEXT,
-    system_prompt TEXT,
-    default_parameters_json TEXT,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (default_model_config_id) REFERENCES model_configs(id)
-  );
-
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_profiles_name
-    ON agent_profiles(name);
-
-  -- ============================================
-  -- skill_definitions: Skill definitions table
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS skill_definitions (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    path TEXT NOT NULL,
-    role_scope TEXT,
-    source TEXT NOT NULL DEFAULT 'manual',
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_definitions_name
-    ON skill_definitions(name);
-
-  -- ============================================
-  -- agent_profile_skills: Agent profile skill bindings
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS agent_profile_skills (
-    agent_profile_id TEXT NOT NULL,
-    skill_id TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    PRIMARY KEY (agent_profile_id, skill_id),
-    FOREIGN KEY (agent_profile_id) REFERENCES agent_profiles(id),
-    FOREIGN KEY (skill_id) REFERENCES skill_definitions(id)
-  );
-
-  -- ============================================
-  -- session_skill_scopes: Session skill scopes
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS session_skill_scopes (
-    session_id TEXT NOT NULL,
-    skill_id TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    PRIMARY KEY (session_id, skill_id),
-    FOREIGN KEY (session_id) REFERENCES sessions(id),
-    FOREIGN KEY (skill_id) REFERENCES skill_definitions(id)
-  );
-
-  -- ============================================
-  -- session_member_model_bindings: Session member model bindings
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS session_member_model_bindings (
-    agent_id TEXT PRIMARY KEY,
-    model_config_id TEXT,
-    agent_profile_id TEXT,
-    runtime_parameters_json TEXT,
-    system_prompt TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (agent_id) REFERENCES agents(id),
-    FOREIGN KEY (model_config_id) REFERENCES model_configs(id),
-    FOREIGN KEY (agent_profile_id) REFERENCES agent_profiles(id)
-  );
-
-  -- ============================================
-  -- knowledge_build_judgements: Knowledge build judgements
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS knowledge_build_judgements (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    source TEXT NOT NULL,
-    source_message_id TEXT,
-    host_agent_id TEXT NOT NULL,
-    knowledge_build_required INTEGER NOT NULL DEFAULT 0,
-    target_levels_json TEXT NOT NULL DEFAULT '[]',
-    source_kind TEXT NOT NULL,
-    candidate_refs_json TEXT NOT NULL DEFAULT '[]',
-    reason TEXT NOT NULL,
-    next_action TEXT NOT NULL,
-    fulfilled_at TEXT,
-    fulfilled_by_change_ids_json TEXT NOT NULL DEFAULT '[]',
-    fulfilled_knowledge_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_knowledge_build_judgements_session_id
-    ON knowledge_build_judgements(session_id);
-
-  CREATE INDEX IF NOT EXISTS idx_knowledge_build_judgements_source_message_id
-    ON knowledge_build_judgements(source_message_id);
-
-  CREATE INDEX IF NOT EXISTS idx_knowledge_build_judgements_host_agent_id
-    ON knowledge_build_judgements(host_agent_id);
-
-  CREATE INDEX IF NOT EXISTS idx_knowledge_build_judgements_created_at
-    ON knowledge_build_judgements(created_at);
-
-  -- Record schema version
+  -- 记录 schema 版本
   INSERT OR IGNORE INTO schema_version (version, applied_at)
   VALUES (1, datetime('now'));
-
-  -- ============================================
-  -- message_traces: Message traces table
-  -- ============================================
-  CREATE TABLE IF NOT EXISTS message_traces (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    agent_id TEXT NOT NULL,
-    trace_type TEXT NOT NULL,
-    correlation_id TEXT,
-    metadata_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_message_traces_session_id
-    ON message_traces(session_id);
-
-  CREATE INDEX IF NOT EXISTS idx_message_traces_message_id
-    ON message_traces(message_id);
-
-  CREATE INDEX IF NOT EXISTS idx_message_traces_agent_id
-    ON message_traces(agent_id);
-
-  CREATE INDEX IF NOT EXISTS idx_message_traces_session_created
-    ON message_traces(session_id, created_at);
 `;

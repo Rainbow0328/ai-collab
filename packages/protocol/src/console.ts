@@ -8,10 +8,6 @@ import type { Progress } from "./progress.js";
 
 export type ConsoleMemberStatus = "offline" | "working" | "waiting";
 
-export const HOST_TASK_TYPES: readonly MessageType[] = ["instruction", "task"];
-export const WORKER_REPORT_TYPES: readonly MessageType[] = ["result", "progress", "error"];
-export const HIDDEN_RECENT_MESSAGE_TYPES: readonly MessageType[] = ["heartbeat", "ack"];
-
 export type ConsoleMessageBrief = {
   messageId: string;
   fromAgentId: string;
@@ -21,17 +17,9 @@ export type ConsoleMessageBrief = {
   result: string | null;
   correlationId: string | null;
   createdAt: string;
-  fromAgentName?: string | null;
-  toAgentName?: string | null;
-  fromRole?: "host" | "worker" | "knowledge_keeper" | null;
-  toRole?: "host" | "worker" | "knowledge_keeper" | null;
-  kind?: string | null;
-  source?: string | null;
-  level?: string | null;
-  slug?: string | null;
 };
 
-export type ConsoleMemberRole = "host" | "worker";
+export type ConsoleMemberRole = "host" | "worker" | "knowledge_keeper";
 
 export type ConsoleMember = {
   agentId: string;
@@ -75,20 +63,11 @@ export type ConsoleKnowledgeSummary = {
   }>;
 };
 
-export type SessionIdleInfo = {
-  allWorkersWaiting: boolean;
-  pendingMessageCount: number;
-  claimedMessageCount: number;
-  latestWorkerReports: ConsoleMessageBrief[];
-  suggestedHostAction: string;
-};
-
 export type SessionConsole = {
   session: Session;
   members: ConsoleMember[];
   taskThreads: ConsoleTaskThread[];
   recentMessages: ConsoleMessageBrief[];
   knowledgeSummary: ConsoleKnowledgeSummary;
-  idleInfo: SessionIdleInfo;
   generatedAt: string;
 };

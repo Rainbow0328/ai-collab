@@ -30,7 +30,6 @@ import {
 } from "@ai-collab/store";
 
 import { coreErrors } from "../errors.js";
-import type { TraceService } from "./trace-service.js";
 
 const now = (): string => {
   return new Date().toISOString();
@@ -45,8 +44,7 @@ export class MessageService {
     private readonly sessions: SessionRepository,
     private readonly agents: AgentRepository,
     private readonly messages: MessageRepository,
-    private readonly identityLeases: IdentityLeaseRepository,
-    private readonly traceService: TraceService
+    private readonly identityLeases: IdentityLeaseRepository
   ) {}
 
   public setWebSocketService(service: {
@@ -116,15 +114,6 @@ export class MessageService {
       this.websocketService.sendToAgent(inserted.message.toAgentId, notification);
     }
 
-    this.traceService.record({
-      sessionId: inserted.message.sessionId,
-      messageId: inserted.message.id,
-      agentId: inserted.message.fromAgentId,
-      traceType: "sent",
-      correlationId: inserted.message.correlationId ?? undefined,
-      metadata: { type: inserted.message.type }
-    });
-
     return inserted.message;
   }
 
@@ -188,51 +177,7 @@ export class MessageService {
 
     this.assertCurrentWaitChain(options);
 
-    const claimed = this.messages.claimNextForAgent(agentId, now(), options);
-    if (claimed) {
-      this.traceService.record({
-        sessionId: claimed.sessionId,
-        messageId: claimed.id,
-        agentId,
-        traceType: "claimed",
-        correlationId: claimed.correlationId ?? undefined,
-        metadata: { type: claimed.type }
-      });
-    }
-    return claimed;
-  }
-
-  public claimMany(
-    agentId: string,
-    options: {
-      types?: MessageType[];
-      fromAgentId?: string;
-      correlationId?: string;
-      maxMessages?: number;
-      identity?: string;
-      flow?: "host" | "worker";
-      ownerToken?: string;
-    } = {}
-  ): MessageRecord[] {
-    const agent = this.agents.findById(agentId);
-    if (!agent) {
-      throw coreErrors.agentNotFound(agentId);
-    }
-
-    this.assertCurrentWaitChain(options);
-
-    const claimed = this.messages.claimManyForAgent(agentId, now(), options);
-    for (const message of claimed) {
-      this.traceService.record({
-        sessionId: message.sessionId,
-        messageId: message.id,
-        agentId,
-        traceType: "claimed",
-        correlationId: message.correlationId ?? undefined,
-        metadata: { type: message.type, batch: true }
-      });
-    }
-    return claimed;
+    return this.messages.claimNextForAgent(agentId, now(), options);
   }
 
   public completeMessage(
@@ -253,14 +198,6 @@ export class MessageService {
 
     const completed = this.messages.markProcessed(messageId, agentId, now());
     if (completed) {
-      this.traceService.record({
-        sessionId: completed.sessionId,
-        messageId: completed.id,
-        agentId,
-        traceType: "submitted",
-        correlationId: completed.correlationId ?? undefined,
-        metadata: { type: completed.type, processingStatus: "processed" }
-      });
       return completed;
     }
 
@@ -286,14 +223,6 @@ export class MessageService {
 
     const failed = this.messages.markFailed(messageId, agentId, now(), reason);
     if (failed) {
-      this.traceService.record({
-        sessionId: failed.sessionId,
-        messageId: failed.id,
-        agentId,
-        traceType: "failed",
-        correlationId: failed.correlationId ?? undefined,
-        metadata: { type: failed.type, reason: reason ?? null }
-      });
       return failed;
     }
 

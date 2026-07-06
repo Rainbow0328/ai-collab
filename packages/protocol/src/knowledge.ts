@@ -79,14 +79,12 @@ export type KnowledgeChangeRecord = {
 export type KnowledgeListItem = Omit<KnowledgeDocument, "content">;
 
 export type ListKnowledgeInput = {
-  sessionId?: string | undefined;
   level?: KnowledgeLevel | undefined;
   tag?: string | undefined;
   query?: string | undefined;
 };
 
 export type UpsertKnowledgeInput = {
-  sessionId?: string | undefined;
   level: KnowledgeLevel;
   slug: string;
   title: string;
@@ -100,7 +98,6 @@ export type UpsertKnowledgeInput = {
 };
 
 export type DeleteKnowledgeInput = {
-  sessionId?: string | undefined;
   level: KnowledgeLevel;
   slug: string;
   sourceKind?: KnowledgeSourceKind | undefined;
@@ -109,17 +106,9 @@ export type DeleteKnowledgeInput = {
 };
 
 export type ListKnowledgeChangesInput = {
-  sessionId?: string | undefined;
   level?: KnowledgeLevel | undefined;
   slug?: string | undefined;
   limit?: number | undefined;
-};
-
-export type KnowledgeUpdateAssessment = {
-  summary: string;
-  suggestedLevels: KnowledgeLevel[];
-  suggestedUpdates?: string | undefined;
-  confidence: "high" | "medium" | "low";
 };
 
 export type KnowledgeExtractionCandidate = {
@@ -249,13 +238,11 @@ export type KnowledgePatchLifecycleRecord = {
 export type CreateKnowledgePatchRecordInput = {
   patch: KnowledgePatch;
   status?: KnowledgePatchStatus | undefined;
-  sessionId?: string | null | undefined;
 };
 
 export type UpdateKnowledgePatchRecordInput = {
   patchId: string;
   status: KnowledgePatchStatus;
-  sessionId?: string | null | undefined;
 };
 
 export type UpsertKnowledgePatchReviewRecordInput = {
@@ -267,7 +254,6 @@ export type UpsertKnowledgePatchReviewRecordInput = {
   reviewedBy?: string | null | undefined;
   reviewComment?: string | null | undefined;
   reviewedAt?: string | null | undefined;
-  sessionId?: string | null | undefined;
 };
 
 export type UpsertKnowledgePersistenceRecordInput = {
@@ -277,25 +263,14 @@ export type UpsertKnowledgePersistenceRecordInput = {
   persistResult?: KnowledgePersistenceResult | undefined;
   errorMessage?: string | null | undefined;
   persistedAt?: string | null | undefined;
-  sessionId?: string | null | undefined;
 };
 
 export type ListKnowledgePatchRecordsInput = {
   status?: KnowledgePatchStatus | undefined;
-  sessionId?: string | null | undefined;
 };
 
 export type ListKnowledgePatchLifecycleInput = {
   status?: KnowledgePatchStatus | undefined;
-  sessionId?: string | null | undefined;
-};
-
-export type KnowledgeFeedbackInput = {
-  sessionId: string;
-  level: KnowledgeLevel;
-  slug: string;
-  feedback: string;
-  userIntent?: string | undefined;
 };
 
 export type AdjudicateKnowledgePatchInput = {
@@ -307,7 +282,6 @@ export type AdjudicateKnowledgePatchInput = {
   reviewedBy: string;
   reviewComment?: string | null | undefined;
   reviewedAt?: string | null | undefined;
-  sessionId?: string | null | undefined;
 };
 
 export type ExecuteKnowledgePatchPersistenceResult = {
@@ -412,130 +386,4 @@ export type ArchitectureGuardDecision = {
   warnings: KnowledgeGuardViolation[];
   suggestions: KnowledgeGuardSuggestion[];
   requiresKnowledgeKeeperReview: boolean;
-};
-
-export const knowledgeBuildSources = [
-  "user_message",
-  "user_feedback",
-  "host_planning",
-  "worker_report",
-  "system_idle"
-] as const;
-export type KnowledgeBuildSource = (typeof knowledgeBuildSources)[number];
-
-export const knowledgeBuildNextActions = [
-  "none",
-  "knowledge_upsert",
-  "knowledge_upsert_then_dispatch",
-  "dispatch"
-] as const;
-export type KnowledgeBuildNextAction = (typeof knowledgeBuildNextActions)[number];
-
-export type KnowledgeBuildJudgement = {
-  id: string;
-  sessionId: string;
-  source: KnowledgeBuildSource;
-  sourceMessageId?: string | undefined;
-  hostAgentId: string;
-  knowledgeBuildRequired: boolean;
-  targetLevels: KnowledgeLevel[];
-  sourceKind: KnowledgeSourceKind | "none";
-  candidateRefs: string[];
-  reason: string;
-  nextAction: KnowledgeBuildNextAction;
-  fulfilledAt: string | null;
-  fulfilledByChangeIds: string[];
-  fulfilledKnowledgeRefs: string[];
-  createdAt: string;
-};
-
-export type CreateKnowledgeBuildJudgementInput = {
-  sessionId: string;
-  source: KnowledgeBuildSource;
-  sourceMessageId?: string | undefined;
-  hostAgentId: string;
-  knowledgeBuildRequired: boolean;
-  targetLevels: KnowledgeLevel[];
-  sourceKind: KnowledgeSourceKind | "none";
-  candidateRefs?: string[] | undefined;
-  reason: string;
-  nextAction: KnowledgeBuildNextAction;
-};
-
-export type FulfillKnowledgeBuildJudgementInput = {
-  judgementId: string;
-  hostAgentId: string;
-  changeIds: string[];
-  knowledgeRefs: string[];
-};
-
-export type KnowledgeRef = {
-  ref: string;
-  reason?: string | undefined;
-  lines?: [number, number] | undefined;
-};
-
-export type TaskV1 = {
-  schema: "ai-collab.task.v1";
-  taskId: string;
-  goal: string;
-  knowledgeRefs?: KnowledgeRef[] | undefined;
-};
-
-export type TaskV1Input = {
-  goal: string;
-  knowledgeRefs?: KnowledgeRef[] | undefined;
-};
-
-export type WorkerReportV1 = {
-  schema: "ai-collab.worker-report.v1";
-  taskId: string;
-  status: "completed" | "failed" | "blocked";
-  summary: string;
-  changedFiles?: string[] | undefined;
-  verification?: string | undefined;
-  risks?: string[] | undefined;
-  blockers?: string[] | undefined;
-  knowledgeRead?: {
-    refs: string[];
-    usedFor: string;
-    conflicts: string[];
-  } | undefined;
-  knowledgeUpdate?: {
-    shouldUpdateKnowledge: boolean;
-    reason: string;
-    targetLevels?: KnowledgeLevel[] | undefined;
-    candidateUpdates?: Array<{
-      level: KnowledgeLevel;
-      slug: string;
-      title: string;
-      content: string;
-      evidence: string;
-    }> | undefined;
-  } | undefined;
-};
-
-export type WorkerReportV1Input = {
-  summary: string;
-  changedFiles?: string[] | undefined;
-  verification?: string | undefined;
-  risks?: string[] | undefined;
-  blockers?: string[] | undefined;
-  knowledgeRead?: {
-    refs: string[];
-    usedFor: string;
-    conflicts: string[];
-  } | undefined;
-  knowledgeUpdate?: {
-    shouldUpdateKnowledge: boolean;
-    reason: string;
-    targetLevels?: KnowledgeLevel[] | undefined;
-    candidateUpdates?: Array<{
-      level: KnowledgeLevel;
-      slug: string;
-      title: string;
-      content: string;
-      evidence: string;
-    }> | undefined;
-  } | undefined;
 };

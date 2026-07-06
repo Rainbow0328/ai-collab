@@ -1,9 +1,9 @@
-import { loadConfig, type CoreConfig, defaultCoreConfig as sharedDefaultCoreConfig } from "@ai-collab/shared";
+import { loadConfig, type CoreConfig } from "@ai-collab/shared";
 
 export { type CoreConfig };
 
 export const getCoreConfig = (): CoreConfig => {
-  return loadConfig();
+  return loadConfig().core;
 };
 
-export const defaultCoreConfig = sharedDefaultCoreConfig;
+export const defaultCoreConfig = getCoreConfig();

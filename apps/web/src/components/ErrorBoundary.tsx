@@ -1,6 +1,5 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { t } from '@/i18n';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -87,7 +86,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               fontFamily: 'var(--font-display)',
             }}
           >
-            {t('error.somethingWrong')}
+            Something went wrong
           </h2>
           <p
             style={{
@@ -98,7 +97,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               lineHeight: 1.6,
             }}
           >
-            {this.state.error?.message || t('error.unknown')}
+            {this.state.error?.message || 'Unknown error'}
           </p>
           <button
             onClick={this.handleReset}
@@ -121,7 +120,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               e.currentTarget.style.opacity = '1';
             }}
           >
-            {t('common.retry')}
+            Retry
           </button>
         </div>
       );

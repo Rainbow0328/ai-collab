@@ -174,15 +174,11 @@ const main = async () => {
       "host await should restore the already claimed batch before claiming anything else"
     );
 
-    const resolveResult = await runCliJson({
-      args: ["resolve", hostName, "--session", sessionName, "--summary", "reviewed worker reports"],
+    const resolveMany = await runCliJson({
+      args: ["resolve-many", hostName, "--session", sessionName, "--summary", "reviewed worker reports"],
       env
     });
-    assert(
-      resolveResult.op === "HOST_DECISION_REQUIRED",
-      `resolve should return HOST_DECISION_REQUIRED, got ${resolveResult.op}`
-    );
-    assert(resolveResult.resolvedCount === 2, "resolve should consume both claimed messages");
+    const nextAwaitArgs = assertExecuteCmd(resolveMany, "resolve-many");
 
     await runCliJson({
       args: ["await", workerOneName, "--session", sessionName],
@@ -194,7 +190,7 @@ const main = async () => {
     });
 
     const hostAfterResolve = await runCliJson({
-      args: ["await", hostName, "--session", sessionName],
+      args: nextAwaitArgs,
       env
     });
     assert(

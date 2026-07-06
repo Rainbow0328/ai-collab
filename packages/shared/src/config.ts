@@ -1,40 +1,44 @@
-export type ConsoleConfig = {
-  offlineThresholdSeconds: number;
-  maxRecentMessages: number;
-  maxTaskThreads: number;
-  maxBriefTextChars: number;
-};
-
 export type CoreConfig = {
   host: string;
   port: number;
   databasePath: string;
-  websocket: {
-    enabled: boolean;
-    heartbeatIntervalSeconds: number;
-    disconnectTimeoutSeconds: number;
-  };
-  waitChain: {
-    defaultIntervalSeconds: number;
-    defaultMaxRounds: number;
-    pollBackoffGrowth: number;
-    pollBackoffMaxFactor: number;
-    pollJitterRatio: number;
-  };
-  logging: {
-    level: "debug" | "info" | "warn" | "error";
-    enableRotation: boolean;
-    maxFileSize: string;
-    maxFiles: number;
-    destination: string;
-  };
-  console: ConsoleConfig;
 };
 
-export const defaultCoreConfig: CoreConfig = {
-  host: "127.0.0.1",
-  port: 42688,
-  databasePath: ".ai-collab/ai-collab.sqlite",
+export type WebSocketConfig = {
+  enabled: boolean;
+  heartbeatIntervalSeconds: number;
+  disconnectTimeoutSeconds: number;
+};
+
+export type WaitChainConfig = {
+  defaultIntervalSeconds: number;
+  defaultMaxRounds: number;
+  pollBackoffGrowth: number;
+  pollBackoffMaxFactor: number;
+  pollJitterRatio: number;
+};
+
+export type LoggingConfig = {
+  level: "debug" | "info" | "warn" | "error";
+  enableRotation: boolean;
+  maxFileSize: string;
+  maxFiles: number;
+  destination: string;
+};
+
+export type AppConfig = {
+  core: CoreConfig;
+  websocket: WebSocketConfig;
+  waitChain: WaitChainConfig;
+  logging: LoggingConfig;
+};
+
+export const defaultConfig: AppConfig = {
+  core: {
+    host: "127.0.0.1",
+    port: 42688,
+    databasePath: ".ai-collab/ai-collab.sqlite"
+  },
   websocket: {
     enabled: false,
     heartbeatIntervalSeconds: 30,
@@ -53,16 +57,8 @@ export const defaultCoreConfig: CoreConfig = {
     maxFileSize: "10MB",
     maxFiles: 5,
     destination: ".ai-collab/logs/core.log"
-  },
-  console: {
-    offlineThresholdSeconds: 120,
-    maxRecentMessages: 50,
-    maxTaskThreads: 100,
-    maxBriefTextChars: 4000
   }
 };
-
-export const defaultConfig = defaultCoreConfig;
 
 const parseNumber = (value: string | undefined, defaultValue: number): number => {
   if (!value) return defaultValue;
@@ -75,13 +71,15 @@ const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean
   return value.toLowerCase() === "true" || value === "1";
 };
 
-export const loadConfig = (overrides?: Partial<CoreConfig>): CoreConfig => {
+export const loadConfig = (overrides?: Partial<AppConfig>): AppConfig => {
   const env = process.env;
 
   return {
-    host: env.AI_COLLAB_HOST ?? defaultConfig.host,
-    port: parseNumber(env.AI_COLLAB_PORT, defaultConfig.port),
-    databasePath: env.AI_COLLAB_DATABASE_PATH ?? defaultConfig.databasePath,
+    core: {
+      host: env.AI_COLLAB_HOST ?? defaultConfig.core.host,
+      port: parseNumber(env.AI_COLLAB_PORT, defaultConfig.core.port),
+      databasePath: env.AI_COLLAB_DATABASE_PATH ?? defaultConfig.core.databasePath
+    },
     websocket: {
       enabled: parseBoolean(env.AI_COLLAB_WS_ENABLED, defaultConfig.websocket.enabled),
       heartbeatIntervalSeconds: parseNumber(
@@ -116,7 +114,7 @@ export const loadConfig = (overrides?: Partial<CoreConfig>): CoreConfig => {
       )
     },
     logging: {
-      level: (env.AI_COLLAB_LOG_LEVEL as CoreConfig["logging"]["level"]) ?? defaultConfig.logging.level,
+      level: (env.AI_COLLAB_LOG_LEVEL as LoggingConfig["level"]) ?? defaultConfig.logging.level,
       enableRotation: parseBoolean(
         env.AI_COLLAB_LOG_ROTATION,
         defaultConfig.logging.enableRotation
@@ -124,24 +122,6 @@ export const loadConfig = (overrides?: Partial<CoreConfig>): CoreConfig => {
       maxFileSize: env.AI_COLLAB_LOG_MAX_SIZE ?? defaultConfig.logging.maxFileSize,
       maxFiles: parseNumber(env.AI_COLLAB_LOG_MAX_FILES, defaultConfig.logging.maxFiles),
       destination: env.AI_COLLAB_LOG_DESTINATION ?? defaultConfig.logging.destination
-    },
-    console: {
-      offlineThresholdSeconds: parseNumber(
-        env.AI_COLLAB_CONSOLE_OFFLINE_THRESHOLD,
-        defaultConfig.console.offlineThresholdSeconds
-      ),
-      maxRecentMessages: parseNumber(
-        env.AI_COLLAB_CONSOLE_MAX_RECENT_MESSAGES,
-        defaultConfig.console.maxRecentMessages
-      ),
-      maxTaskThreads: parseNumber(
-        env.AI_COLLAB_CONSOLE_MAX_TASK_THREADS,
-        defaultConfig.console.maxTaskThreads
-      ),
-      maxBriefTextChars: parseNumber(
-        env.AI_COLLAB_CONSOLE_MAX_BRIEF_TEXT_CHARS,
-        defaultConfig.console.maxBriefTextChars
-      )
     },
     ...overrides
   };

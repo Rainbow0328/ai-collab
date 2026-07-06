@@ -20,8 +20,14 @@ export type SessionStatus = (typeof sessionStatuses)[number];
 export const agentPlatforms = ["generic"] as const;
 export type AgentPlatform = string;
 
-export const agentRoles = ["host", "worker", "knowledge_keeper"] as const;
+export const agentRoles = ["host", "worker", "observer", "knowledge_keeper"] as const;
 export type AgentRole = (typeof agentRoles)[number];
+
+export type UserProfileEntry = {
+  key: string;
+  value: string;
+  updatedAt: string;
+};
 
 export const connectionModes = [
   "plugin",
@@ -47,8 +53,7 @@ export const messageTypes = [
   "result",
   "heartbeat",
   "ack",
-  "error",
-  "knowledge_feedback"
+  "error"
 ] as const;
 export type MessageType = (typeof messageTypes)[number];
 
@@ -69,6 +74,21 @@ export const messageProcessingStatuses = [
 ] as const;
 export type MessageProcessingStatus =
   (typeof messageProcessingStatuses)[number];
+
+export const taskStatuses = [
+  "created",
+  "assigned",
+  "accepted",
+  "in_progress",
+  "completed",
+  "failed",
+  "cancelled",
+  "awaiting_reassign"
+] as const;
+export type TaskStatus = (typeof taskStatuses)[number];
+
+export const taskPriorities = ["low", "normal", "high"] as const;
+export type TaskPriority = (typeof taskPriorities)[number];
 
 export const reviewStatuses = [
   "in_progress",
@@ -177,6 +197,30 @@ export type MessageEnvelope = {
   payload: unknown;
 };
 
+export type Task = {
+  id: string;
+  sessionId: string;
+  title: string;
+  description: string;
+  createdByAgentId: string;
+  assignedToAgentId?: string | undefined;
+  status: TaskStatus;
+  priority: TaskPriority;
+  capabilityHint?: string | undefined;
+  parentTaskId?: string | undefined;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskEvent = {
+  id: string;
+  taskId: string;
+  eventType: string;
+  actorAgentId: string;
+  payload: unknown;
+  createdAt: string;
+};
+
 export type AckPayload = {
   messageId: string;
   processed: boolean;
@@ -190,10 +234,6 @@ export type MessageClaimInput = {
   identity?: string | undefined;
   flow?: "host" | "worker" | undefined;
   ownerToken?: string | undefined;
-};
-
-export type MessageClaimManyInput = MessageClaimInput & {
-  maxMessages?: number | undefined;
 };
 
 export type MessageProcessCompleteInput = {
@@ -257,7 +297,7 @@ export type JoinSessionByNameInput = {
 export type AttachSessionInput = {
   sessionName: string;
   agentName: string;
-  role: "host" | "worker" | "knowledge_keeper";
+  role: "host" | "worker";
   roleDescription: string;
 };
 
@@ -303,6 +343,22 @@ export type AgentQueueStats = {
   pending: number;
   claimed: number;
   total: number;
+};
+
+export type CreateTaskInput = {
+  sessionId: string;
+  title: string;
+  description: string;
+  createdByAgentId: string;
+  assignedToAgentId?: string | undefined;
+  priority: TaskPriority;
+  capabilityHint?: string | undefined;
+  parentTaskId?: string | undefined;
+};
+
+export type CompleteTaskInput = {
+  completedByAgentId: string;
+  summary?: string | undefined;
 };
 
 export type SessionInsight = {
@@ -428,45 +484,4 @@ export type ApiResponse<T = unknown> = {
   };
   timestamp: string;
   requestId?: string;
-};
-
-export type TraceType = "sent" | "claimed" | "submitted" | "failed" | "delivery_failed";
-
-export type MessageTrace = {
-  id: string;
-  sessionId: string;
-  messageId: string;
-  agentId: string;
-  traceType: TraceType;
-  correlationId: string | null;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-};
-
-export type MessageTraceInput = {
-  sessionId: string;
-  messageId: string;
-  agentId: string;
-  traceType: TraceType;
-  correlationId?: string | undefined;
-  metadata?: Record<string, unknown> | undefined;
-};
-
-export type AgentAnalytics = {
-  agentId: string;
-  agentName: string;
-  role: string;
-  totalDispatched: number;
-  totalCompleted: number;
-  totalFailed: number;
-  avgProcessingSeconds: number | null;
-  lastActiveAt: string | null;
-  status: string;
-};
-
-export type SessionTimeline = {
-  sessionId: string;
-  sessionName: string;
-  traces: MessageTrace[];
-  agentAnalytics: AgentAnalytics[];
 };
