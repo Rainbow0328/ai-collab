@@ -16,7 +16,6 @@ import {
   useConsoleQuery,
   useCreateHostSessionMutation,
   useDeleteRuntimeMutation,
-  useEnsureHostRuntimeMutation,
   useMessagesQuery,
   useModelsQuery,
   useRuntimeCommandMutation,
@@ -142,7 +141,6 @@ export function WorkbenchPage() {
             host={host}
             hostRuntime={hostRuntime}
             messages={hostMessages}
-            models={models}
             sessionId={sessionId}
             onOpenDetail={setDetailMessage}
           />
@@ -193,27 +191,19 @@ function HostPanel({
   host,
   hostRuntime,
   messages,
-  models,
   sessionId,
   onOpenDetail,
 }: {
   host: ConsoleMember | null;
   hostRuntime: WebAgentRuntime | null;
   messages: MessageRecord[];
-  models: Array<{ id: string; name: string; modelId: string }>;
   sessionId: string;
   onOpenDetail: (m: MessageRecord) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const [modelConfigId, setModelConfigId] = useState("");
-  const ensureRuntime = useEnsureHostRuntimeMutation(sessionId);
   const runtimeCommand = useRuntimeCommandMutation(sessionId);
   const sendMessage = useSendHostMessageMutation(sessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!modelConfigId && models[0]?.id) setModelConfigId(models[0].id);
-  }, [modelConfigId, models]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -263,24 +253,36 @@ function HostPanel({
         {!hasHost ? (
           <EmptyState title="暂无 Host" desc="创建会话后将自动出现 Host" />
         ) : !hasHostRuntime ? (
-          <div style={{ padding: "var(--sp-4)", textAlign: "center" }}>
-            <p style={{ fontSize: "var(--fs-sm)", color: "var(--c-text-tertiary)", marginBottom: "var(--sp-3)" }}>
-              Host 已就位，但尚未启用 Web 运行时
-            </p>
-            <select className="input" style={{ marginBottom: "var(--sp-3)", maxWidth: 300 }} value={modelConfigId} onChange={(e) => setModelConfigId(e.target.value)}>
-              {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.modelId})</option>)}
-            </select>
-            <div>
-              <button
-                className="btn btn-primary"
-                disabled={!modelConfigId || ensureRuntime.isPending}
-                onClick={() => ensureRuntime.mutate({ host: host!, modelConfigId }, {
-                  onSuccess: () => pushToast("Web Host 已启用", "success"),
-                  onError: (e) => pushToast(e.message, "error"),
-                })}
-              >
-                {ensureRuntime.isPending ? "启用中…" : "启用 Web Host"}
-              </button>
+          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--sp-2)",
+              padding: "var(--sp-3) var(--sp-4)",
+              borderRadius: "var(--r-md)",
+              background: "var(--c-bg-subtle)",
+              margin: "var(--sp-2) var(--sp-3)",
+              fontSize: "var(--fs-sm)", color: "var(--c-text-tertiary)",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+              Host 已断联，仅显示历史消息
+            </div>
+            <div style={{ flex: 1, overflow: "auto", padding: "var(--sp-3)" }}>
+              {messages.length === 0 ? (
+                <EmptyState title="暂无消息" desc="Host 断联期间无新消息" />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+                  {messages.map((msg) => (
+                    <MessageCard
+                      key={msg.id}
+                      message={msg}
+                      role="host"
+                      onOpenDetail={() => onOpenDetail(msg)}
+                    />
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
             </div>
           </div>
         ) : messages.length === 0 ? (
