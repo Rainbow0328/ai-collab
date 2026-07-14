@@ -32,3 +32,4 @@ export * from "./web-agent-runtime-service.js";
 export * from "./web-agent-runtime-executor-service.js";
 export * from "./workflow-definition-service.js";
 export * from "./user-preferences-service.js";
+export * from "./stdio-mcp-registry-service.js";

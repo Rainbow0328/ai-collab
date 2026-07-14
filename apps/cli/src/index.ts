@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import path from "node:path";
+import fs from "node:fs";
 import { Command } from "commander";
 import {
   createAiCollabClient,
@@ -54,6 +58,10 @@ import {
   configureMcpTimeouts,
   type McpTimeoutConfigureTarget
 } from "./mcp-timeout-config.js";
+import {
+  setupMcp,
+  type McpSetupTarget
+} from "./mcp-setup.js";
 
 import {
   DEFAULT_LOOP_INTERVAL_SECONDS,
@@ -2432,15 +2440,20 @@ const submitWorkerResult = async (
     correlationId?: string | undefined;
     idempotencyKey?: string | undefined;
     failReason?: string | undefined;
-    markAs: "completed" | "failed";
+    markAs: "completed" | "failed" | "contested";
   }
 ) => {
-  const markAs = options.markAs === "failed" ? "failed" : "completed";
+  const markAs = options.markAs;
   const resolvedType =
     options.type ??
     (markAs === "failed" ? ("error" as const) : ("result" as const));
   const resolvedResult =
-    options.result ?? (markAs === "failed" ? "failed" : "completed");
+    options.result ??
+    (markAs === "failed"
+      ? "failed"
+      : markAs === "contested"
+        ? "contested"
+        : "completed");
   const sourceMessage = await client.getMessageById(options.messageId);
   const resolvedCorrelationId =
     options.correlationId ?? sourceMessage.correlationId ?? undefined;
@@ -4339,7 +4352,7 @@ program
   .option("--result <result>", "Payload result marker")
   .option("--type <type>", `Message type: ${SUPPORTED_MESSAGE_TYPES.join(", ")}`)
   .option("--fail-reason <reason>", "Failure reason for the claimed message")
-  .option("--mark-as <state>", "completed or failed", "completed")
+  .option("--mark-as <state>", "completed, failed, or contested", "completed")
   .action(
     async (
       name: string,
@@ -4349,7 +4362,7 @@ program
         result?: string;
         type?: string;
         failReason?: string;
-        markAs: "completed" | "failed";
+        markAs: "completed" | "failed" | "contested";
       }
     ) => {
       const trace = createCommandTrace(projectRoot, {
@@ -5049,9 +5062,10 @@ const executeWindowWaitCommand = async (options: {
 
 program
   .command("start")
-  .description("Start the local ai-collab core service")
+  .description("Start the local ai-collab core service and web dashboard")
   .option("--daemon", "Start the local core as a background process")
-  .action(async (options: { daemon?: boolean }) => {
+  .option("--core-only", "Start only the core service without the web dashboard")
+  .action(async (options: { daemon?: boolean; coreOnly?: boolean }) => {
     const runtime = await loadRuntimeModule();
     if (options.daemon) {
       const status = await runtime.startCore(projectRoot);
@@ -5071,19 +5085,23 @@ program
       return;
     }
 
+    const webDir = path.resolve(projectRoot, "apps", "web");
+    const startWeb = !options.coreOnly && fs.existsSync(path.join(webDir, "package.json"));
+
     console.log(
       JSON.stringify(
         {
           mode: "foreground",
-          message:
-            "Starting ai-collab core in the foreground. Press Ctrl+C to stop.",
-          dashboardUrl: runtime.getDashboardUrl()
+          message: "Starting ai-collab core in the foreground. Press Ctrl+C to stop.",
+          dashboardUrl: runtime.getDashboardUrl(),
+          webDashboardUrl: startWeb ? "http://localhost:5173" : null,
+          webDir: startWeb ? webDir : null
         },
         null,
         2
       )
     );
-    await runtime.runCoreForeground(projectRoot);
+    await runtime.runCoreForeground(projectRoot, startWeb ? webDir : undefined);
   });
 
 program
@@ -5110,11 +5128,56 @@ program
   .action(async () => {
     const runtime = await loadRuntimeModule();
     const status = await runtime.getCoreStatus(projectRoot);
+    const mcpServers = status.reachable
+      ? await runtime.getRegisteredMcpServers(
+          status.metadata?.host,
+          status.metadata?.port
+        )
+      : [];
     console.log(
       JSON.stringify(
         {
           ...status,
+          mcpServers,
           dashboardUrl: runtime.getDashboardUrl(status.metadata)
+        },
+        null,
+        2
+      )
+    );
+  });
+
+program
+  .command("mcp:status")
+  .description("Show status of MCP stdio servers connected to the core")
+  .action(async () => {
+    const runtime = await loadRuntimeModule();
+    const status = await runtime.getCoreStatus(projectRoot);
+    if (!status.reachable) {
+      console.log(
+        JSON.stringify(
+          {
+            error: "ai-collab core is not running. Start it with 'ai-collab start --daemon'."
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+    const servers = await runtime.getRegisteredMcpServers(
+      status.metadata?.host,
+      status.metadata?.port
+    );
+    console.log(
+      JSON.stringify(
+        {
+          core: {
+            state: status.state,
+            pid: status.metadata?.pid ?? null
+          },
+          mcpServers: servers,
+          mcpServerCount: servers.length
         },
         null,
         2
@@ -5184,6 +5247,52 @@ program
       target,
       timeoutSeconds,
       dryRun: Boolean(options.dryRun)
+    });
+    console.log(JSON.stringify({ results }, null, 2));
+  });
+
+program
+  .command("mcp:serve")
+  .description("Start the ai-collab MCP stdio server (for IDE MCP integration)")
+  .action(async () => {
+    // The MCP server module self-starts on import.
+    await import("./mcp-stdio-server.js");
+  });
+
+program
+  .command("mcp:setup")
+  .description("One-click setup: configure MCP server entry and timeouts for AI IDEs")
+  .option("--target <target>", "auto, claude, codex, or cursor", "auto")
+  .option("--timeout <seconds>", "MCP tool timeout seconds", "3600")
+  .option("--role <role>", "Pre-declare role for tool isolation: host or worker")
+  .option("--dry-run", "Print planned changes without writing files", false)
+  .action(async (options: {
+    target: string;
+    timeout: string;
+    role?: string;
+    dryRun?: boolean;
+  }) => {
+    const target = options.target as McpSetupTarget;
+    if (!["auto", "claude", "codex", "cursor"].includes(target)) {
+      throw new Error(`Unknown MCP setup target: ${options.target}`);
+    }
+    const timeoutSeconds = Number(options.timeout);
+    if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+      throw new Error(`Invalid timeout seconds: ${options.timeout}`);
+    }
+    let role: "host" | "worker" | undefined;
+    if (options.role) {
+      if (options.role !== "host" && options.role !== "worker") {
+        throw new Error(`Invalid role: ${options.role}. Must be 'host' or 'worker'.`);
+      }
+      role = options.role;
+    }
+    const results = await setupMcp({
+      projectRoot,
+      target,
+      timeoutSeconds,
+      dryRun: Boolean(options.dryRun),
+      ...(role ? { role } : {})
     });
     console.log(JSON.stringify({ results }, null, 2));
   });

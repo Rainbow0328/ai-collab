@@ -50,7 +50,8 @@ import {
   WebAgentRuntimeService,
   WebSocketService,
   WindowBindingService,
-  WorkflowDefinitionService
+  WorkflowDefinitionService,
+  StdioMcpRegistryService
 } from "./services/index.js";
 
 export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) => {
@@ -141,6 +142,7 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
   );
   const externalMcpService = new ExternalMcpService();
   const mcpToolService = new McpToolService(webAgentRuntimeRepository);
+  const stdioMcpRegistryService = new StdioMcpRegistryService();
   const webAgentRuntimeService = new WebAgentRuntimeService(
     webAgentRuntimeRepository,
     sessionRepository,
@@ -175,6 +177,7 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     modelConfigService: modelConfigRepository,
     externalMcpService,
     mcpToolService,
+    stdioMcpRegistryService,
     collaborationWaitService,
     webAgentRuntimeService,
     webAgentRuntimeExecutorService,
@@ -196,6 +199,7 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
   return {
     server,
     databaseManager,
+    stdioMcpRegistryService,
     close: async () => {
       webAgentRuntimeExecutorService.stopAll();
       await server.close();

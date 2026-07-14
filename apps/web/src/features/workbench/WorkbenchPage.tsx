@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ConsoleMember, MessageRecord, WebAgentRuntime } from "@ai-collab/protocol";
+import type {
+  ConsoleMember,
+  ConsoleTaskThread,
+  MessageRecord,
+  WebAgentRuntime,
+} from "@ai-collab/protocol";
 import { useWebSocket } from "@/lib/websocket-client";
-import { formatJson, formatMessageText, truncateText } from "./text";
+import { formatMessageText, formatJson, formatTime, formatTimeFull, truncateText } from "./text";
 import {
   getRuntimeForAgent,
   getSelectedSessionId,
@@ -10,6 +15,7 @@ import {
   useAddKnowledgeKeeperMutation,
   useConsoleQuery,
   useCreateHostSessionMutation,
+  useDeleteRuntimeMutation,
   useEnsureHostRuntimeMutation,
   useMessagesQuery,
   useModelsQuery,
@@ -18,14 +24,19 @@ import {
   useSendHostMessageMutation,
   useSessionsQuery,
 } from "./workbench-queries";
+import { PageHeader } from "@/components/PageHeader";
+import { Badge, StatusBadge, RoleBadge, Dialog, Field, EmptyState, Loading, pushToast, ConfirmDialog } from "@/components/ui";
+
+/* ==================== Workbench Page ==================== */
 
 export function WorkbenchPage() {
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const sessionsQuery = useSessionsQuery();
   const modelsQuery = useModelsQuery();
   const [explicitSessionId, setExplicitSessionId] = useState<string | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<MessageRecord | null>(null);
+  const [detailMessage, setDetailMessage] = useState<MessageRecord | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const sessions = sessionsQuery.data ?? [];
   const sessionId = getSelectedSessionId(sessions, explicitSessionId);
@@ -36,34 +47,41 @@ export function WorkbenchPage() {
   useWebSocket({
     enabled: Boolean(sessionId),
     sessionId: sessionId ?? undefined,
-    onConsoleUpdate: () => invalidateSession(queryClient, sessionId),
-    onInboxMessage: () => invalidateSession(queryClient, sessionId),
-    onMessageClaimed: () => invalidateSession(queryClient, sessionId),
-    onProgressUpdate: () => invalidateSession(queryClient, sessionId),
+    onConsoleUpdate: () => invalidateSession(qc, sessionId),
+    onInboxMessage: () => invalidateSession(qc, sessionId),
+    onMessageClaimed: () => invalidateSession(qc, sessionId),
+    onProgressUpdate: () => invalidateSession(qc, sessionId),
   });
 
   const consoleData = consoleQuery.data ?? null;
-  const members = consoleData?.members ?? [];
   const messages = messagesQuery.data ?? [];
   const runtimes = runtimesQuery.data ?? [];
   const models = modelsQuery.data ?? [];
-  const host = members.find((member) => member.role === "host") ?? null;
-  const workers = members.filter((member) => member.role === "worker" || member.role === "knowledge_keeper");
-  const selectedWorker = workers.find((member) => member.agentId === selectedWorkerId) ?? workers[0] ?? null;
+
+  const members = consoleData?.members ?? [];
+  const host = members.find((m) => m.role === "host") ?? null;
+  const workers = members.filter((m) => m.role === "worker" || m.role === "knowledge_keeper");
+  const selectedWorker = workers.find((w) => w.agentId === selectedWorkerId) ?? workers[0] ?? null;
   const hostRuntime = getRuntimeForAgent(runtimes, host?.agentId);
   const selectedWorkerRuntime = getRuntimeForAgent(runtimes, selectedWorker?.agentId);
+  const taskThreads = consoleData?.taskThreads ?? [];
 
   useEffect(() => {
-    if (!selectedWorker || selectedWorker.agentId === selectedWorkerId) return;
-    setSelectedWorkerId(selectedWorker.agentId);
+    if (selectedWorker && selectedWorker.agentId !== selectedWorkerId) {
+      setSelectedWorkerId(selectedWorker.agentId);
+    }
   }, [selectedWorker, selectedWorkerId]);
+
+  const agentMap = useMemo(() => new Map(members.map((m) => [m.agentId, m])), [members]);
 
   const hostMessages = useMemo(
     () => filterHostMessages(messages, host, members),
     [messages, host, members]
   );
   const workerMessages = useMemo(
-    () => selectedWorker ? messages.filter((message) => message.fromAgentId === selectedWorker.agentId || message.toAgentId === selectedWorker.agentId) : [],
+    () => selectedWorker
+      ? messages.filter((m) => m.fromAgentId === selectedWorker.agentId || m.toAgentId === selectedWorker.agentId)
+      : [],
     [messages, selectedWorker]
   );
 
@@ -71,203 +89,256 @@ export function WorkbenchPage() {
 
   return (
     <>
-      <header className="workbench-topbar">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold" style={{ color: "var(--color-text-secondary)" }}>Collaborative Session Workbench</div>
-          <div className="flex items-center gap-3">
-            <strong className="truncate text-xl" style={{ color: "var(--color-text-primary)" }}>
-              {consoleData?.session.name ?? sessions.find((session) => session.id === sessionId)?.name ?? "No active session"}
-            </strong>
-            {hostRuntime && <RuntimeBadge runtime={hostRuntime} />}
-          </div>
+      <PageHeader
+        title={consoleData?.session.name ?? "协作工作台"}
+        subtitle={host ? `${host.displayName} · ${members.length} 成员 · ${taskThreads.length} 任务链` : "未选择会话"}
+        actions={
+          <>
+            <select
+              className="input"
+              style={{ width: 200 }}
+              value={sessionId ?? ""}
+              onChange={(e) => setExplicitSessionId(e.target.value || null)}
+            >
+              {sessions.length === 0 && <option value="">暂无会话</option>}
+              {sessions.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary" onClick={() => setShowCreateDialog(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              新建会话
+            </button>
+          </>
+        }
+      />
+
+      {loading && !consoleData ? (
+        <Loading text="正在加载工作台数据…" />
+      ) : !sessionId || !consoleData ? (
+        <EmptyState
+          icon={<EmptyIcon />}
+          title="暂无活跃会话"
+          desc="创建一个新的协作会话以开始工作"
+          action={
+            <button className="btn btn-primary" onClick={() => setShowCreateDialog(true)}>
+              新建会话
+            </button>
+          }
+        />
+      ) : (
+        <div style={{
+          flex: 1,
+          overflow: "hidden",
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) 300px minmax(0, 1fr)",
+          gap: "1px",
+          background: "var(--c-border)",
+        }}>
+          {/* Left: Host Panel */}
+          <HostPanel
+            host={host}
+            hostRuntime={hostRuntime}
+            messages={hostMessages}
+            models={models}
+            sessionId={sessionId}
+            onOpenDetail={setDetailMessage}
+          />
+
+          {/* Middle: Workers Panel */}
+          <WorkersPanel
+            workers={workers}
+            runtimes={runtimes}
+            models={models}
+            sessionId={sessionId}
+            selectedWorkerId={selectedWorker?.agentId ?? null}
+            onSelectWorker={setSelectedWorkerId}
+          />
+
+          {/* Right: Inspector Panel */}
+          <InspectorPanel
+            worker={selectedWorker}
+            runtime={selectedWorkerRuntime}
+            messages={workerMessages}
+            agentMap={agentMap}
+            onOpenDetail={setDetailMessage}
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            className="control-input min-w-[220px]"
-            value={sessionId ?? ""}
-            onChange={(event) => setExplicitSessionId(event.target.value || null)}
-          >
-            {sessions.length === 0 ? <option value="">No sessions</option> : null}
-            {sessions.map((session) => (
-              <option key={session.id} value={session.id}>{session.name}</option>
-            ))}
-          </select>
-          <CreateHostButton models={models} />
-        </div>
-      </header>
-
-      <main className="workbench-content">
-        {loading && !consoleData ? (
-          <CenteredState title="Loading workbench" detail="Reading sessions, members, runtimes, and message history." />
-        ) : !sessionId || !consoleData ? (
-          <CenteredState title="No session" detail="Create a Web Host session to start the workbench." />
-        ) : (
-          <div className="workbench-grid">
-            <HostPane
-              host={host}
-              hostRuntime={hostRuntime}
-              messages={hostMessages}
-              models={models}
-              sessionId={sessionId}
-              onSelectMessage={setSelectedMessage}
-            />
-            <WorkersPane
-              workers={workers}
-              runtimes={runtimes}
-              models={models}
-              sessionId={sessionId}
-              selectedWorkerId={selectedWorker?.agentId ?? null}
-              onSelectWorker={setSelectedWorkerId}
-            />
-            <InspectorPane
-              worker={selectedWorker}
-              runtime={selectedWorkerRuntime}
-              messages={workerMessages}
-              selectedMessage={selectedMessage}
-              onSelectMessage={setSelectedMessage}
-            />
-          </div>
-        )}
-      </main>
-    </>
-  );
-}
-
-function CreateHostButton({ models }: { models: Array<{ id: string; name: string; modelId: string }> }) {
-  const [open, setOpen] = useState(false);
-  const [sessionName, setSessionName] = useState(`web-session-${new Date().toISOString().slice(0, 10)}`);
-  const [modelConfigId, setModelConfigId] = useState("");
-  const createHost = useCreateHostSessionMutation();
-  const firstModelId = models[0]?.id ?? "";
-
-  useEffect(() => {
-    if (!modelConfigId && firstModelId) setModelConfigId(firstModelId);
-  }, [firstModelId, modelConfigId]);
-
-  return (
-    <>
-      <button type="button" className="btn-primary rounded-md border px-4 py-2 text-sm font-semibold" onClick={() => setOpen(true)}>
-        New Host
-      </button>
-      {open && (
-        <Dialog title="Create Web Host" onClose={() => setOpen(false)}>
-          <div className="space-y-4">
-            <Field label="Session name">
-              <input className="control-input w-full" value={sessionName} onChange={(event) => setSessionName(event.target.value)} />
-            </Field>
-            <Field label="Model">
-              <ModelSelect models={models} value={modelConfigId} onChange={setModelConfigId} />
-            </Field>
-            <div className="flex justify-end gap-2">
-              <button className="btn-secondary rounded-md border px-4 py-2 text-sm" type="button" onClick={() => setOpen(false)}>Cancel</button>
-              <button
-                className="btn-primary rounded-md border px-4 py-2 text-sm font-semibold disabled:opacity-50"
-                type="button"
-                disabled={!sessionName.trim() || !modelConfigId || createHost.isPending}
-                onClick={() => {
-                  createHost.mutate({ sessionName: sessionName.trim(), modelConfigId }, { onSuccess: () => setOpen(false) });
-                }}
-              >
-                {createHost.isPending ? "Creating..." : "Create"}
-              </button>
-            </div>
-            {createHost.error && <p className="text-sm" style={{ color: "var(--color-error)" }}>{createHost.error.message}</p>}
-          </div>
-        </Dialog>
       )}
+
+      {/* Message Detail Dialog */}
+      <MessageDetailDialog
+        message={detailMessage}
+        allMessages={messages}
+        agentMap={agentMap}
+        taskThreads={taskThreads}
+        onClose={() => setDetailMessage(null)}
+      />
+
+      <CreateSessionDialog
+        open={showCreateDialog}
+        onClose={() => setShowCreateDialog(false)}
+        models={models}
+        onCreated={(sid) => setExplicitSessionId(sid)}
+      />
     </>
   );
 }
 
-function HostPane({
+/* ==================== Host Panel ==================== */
+
+function HostPanel({
   host,
   hostRuntime,
   messages,
   models,
   sessionId,
-  onSelectMessage,
+  onOpenDetail,
 }: {
   host: ConsoleMember | null;
   hostRuntime: WebAgentRuntime | null;
   messages: MessageRecord[];
   models: Array<{ id: string; name: string; modelId: string }>;
   sessionId: string;
-  onSelectMessage: (message: MessageRecord) => void;
+  onOpenDetail: (m: MessageRecord) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const [modelConfigId, setModelConfigId] = useState(models[0]?.id ?? "");
+  const [modelConfigId, setModelConfigId] = useState("");
   const ensureRuntime = useEnsureHostRuntimeMutation(sessionId);
   const runtimeCommand = useRuntimeCommandMutation(sessionId);
   const sendMessage = useSendHostMessageMutation(sessionId);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!modelConfigId && models[0]?.id) setModelConfigId(models[0].id);
   }, [modelConfigId, models]);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  const hasHost = Boolean(host);
+  const hasHostRuntime = Boolean(hostRuntime);
+
+  const handleSend = () => {
+    if (!host || !draft.trim()) return;
+    sendMessage.mutate(
+      { hostAgentId: host.agentId, content: draft.trim() },
+      {
+        onSuccess: () => { setDraft(""); pushToast("消息已发送", "success"); },
+        onError: (e) => pushToast(e.message, "error"),
+      }
+    );
+  };
+
   return (
-    <section className="workbench-pane">
-      <PaneHeader
-        title={host ? `${host.displayName} · Host` : "Host"}
-        subtitle={hostRuntime ? "Web Host runtime is controlled by the backend." : host ? "Host is present. Create a web runtime to take over from the browser." : "No Host in this session."}
-        extra={hostRuntime ? <RuntimeControls runtime={hostRuntime} onCommand={(command) => runtimeCommand.mutate({ runtimeId: hostRuntime.id, command })} /> : null}
-      />
-      <div className="workbench-pane__body space-y-2">
-        {!host ? (
-          <EmptyBlock text="Create or select a session with a Host." />
-        ) : !hostRuntime ? (
-          <div className="space-y-3">
-            <EmptyBlock text="This Host is visible, but it is not yet a backend web runtime." />
-            <ModelSelect models={models} value={modelConfigId} onChange={setModelConfigId} />
-            <button
-              type="button"
-              className="btn-primary rounded-md border px-4 py-2 text-sm font-semibold disabled:opacity-50"
-              disabled={!modelConfigId || ensureRuntime.isPending}
-              onClick={() => ensureRuntime.mutate({ host, modelConfigId })}
-            >
-              {ensureRuntime.isPending ? "Binding..." : "Enable Web Host"}
-            </button>
+    <section style={{ background: "var(--c-bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Panel header */}
+      <div style={{
+        padding: "var(--sp-3) var(--sp-4)",
+        borderBottom: "1px solid var(--c-border)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+          <RoleBadge role="host" />
+          <span style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }}>
+            {host?.displayName ?? "Host"}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+          {hostRuntime && (
+            <>
+              <StatusBadge status={hostRuntime.status} label={hostRuntime.status} />
+              <RuntimeControls runtime={hostRuntime} onCommand={(c) => runtimeCommand.mutate({ runtimeId: hostRuntime.id, command: c })} compact />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflow: "auto", padding: "var(--sp-3)" }}>
+        {!hasHost ? (
+          <EmptyState title="暂无 Host" desc="创建会话后将自动出现 Host" />
+        ) : !hasHostRuntime ? (
+          <div style={{ padding: "var(--sp-4)", textAlign: "center" }}>
+            <p style={{ fontSize: "var(--fs-sm)", color: "var(--c-text-tertiary)", marginBottom: "var(--sp-3)" }}>
+              Host 已就位，但尚未启用 Web 运行时
+            </p>
+            <select className="input" style={{ marginBottom: "var(--sp-3)", maxWidth: 300 }} value={modelConfigId} onChange={(e) => setModelConfigId(e.target.value)}>
+              {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.modelId})</option>)}
+            </select>
+            <div>
+              <button
+                className="btn btn-primary"
+                disabled={!modelConfigId || ensureRuntime.isPending}
+                onClick={() => ensureRuntime.mutate({ host: host!, modelConfigId }, {
+                  onSuccess: () => pushToast("Web Host 已启用", "success"),
+                  onError: (e) => pushToast(e.message, "error"),
+                })}
+              >
+                {ensureRuntime.isPending ? "启用中…" : "启用 Web Host"}
+              </button>
+            </div>
           </div>
         ) : messages.length === 0 ? (
-          <EmptyBlock text="No Host messages yet." />
+          <EmptyState title="暂无消息" desc="在下方输入框中向 Host 发送消息" />
         ) : (
-          messages.map((message) => (
-            <MessageCard key={message.id} message={message} members={[host]} onSelect={() => onSelectMessage(message)} />
-          ))
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+            {messages.map((msg) => (
+              <MessageCard
+                key={msg.id}
+                message={msg}
+                role="host"
+                onOpenDetail={() => onOpenDetail(msg)}
+              />
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
         )}
       </div>
-      <div className="workbench-pane__footer">
-        <div className="flex gap-2">
-          <textarea
-            className="control-input min-h-[76px] flex-1 resize-none"
-            placeholder={hostRuntime ? "Send a message to Host..." : "Enable Web Host before sending messages..."}
-            value={draft}
-            disabled={!host || !hostRuntime}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                if (host && draft.trim()) {
-                  sendMessage.mutate({ hostAgentId: host.agentId, content: draft.trim() }, { onSuccess: () => setDraft("") });
+
+      {/* Input */}
+      {hasHost && hasHostRuntime && (
+        <div style={{
+          padding: "var(--sp-3)",
+          borderTop: "1px solid var(--c-border)",
+          flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+            <textarea
+              className="input"
+              style={{ minHeight: 60, resize: "none", flex: 1 }}
+              placeholder="向 Host 发送消息…  (Enter 发送, Shift+Enter 换行)"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
                 }
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="btn-primary self-end rounded-md border px-4 py-2 text-sm font-semibold disabled:opacity-50"
-            disabled={!host || !hostRuntime || !draft.trim() || sendMessage.isPending}
-            onClick={() => host && sendMessage.mutate({ hostAgentId: host.agentId, content: draft.trim() }, { onSuccess: () => setDraft("") })}
-          >
-            Send
-          </button>
+              }}
+            />
+            <button
+              className="btn btn-primary"
+              style={{ alignSelf: "flex-end" }}
+              disabled={!draft.trim() || sendMessage.isPending}
+              onClick={handleSend}
+            >
+              {sendMessage.isPending ? "发送中…" : "发送"}
+            </button>
+          </div>
         </div>
-        {sendMessage.error && <p className="mt-2 text-sm" style={{ color: "var(--color-error)" }}>{sendMessage.error.message}</p>}
-      </div>
+      )}
     </section>
   );
 }
 
-function WorkersPane({
+/* ==================== Workers Panel ==================== */
+
+function WorkersPanel({
   workers,
   runtimes,
   models,
@@ -280,117 +351,255 @@ function WorkersPane({
   models: Array<{ id: string; name: string; modelId: string }>;
   sessionId: string;
   selectedWorkerId: string | null;
-  onSelectWorker: (agentId: string) => void;
+  onSelectWorker: (id: string) => void;
 }) {
-  const [modelConfigId, setModelConfigId] = useState(models[0]?.id ?? "");
+  const [modelConfigId, setModelConfigId] = useState("");
+  const [showDeleteId, setShowDeleteId] = useState<string | null>(null);
   const addKeeper = useAddKnowledgeKeeperMutation(sessionId);
   const runtimeCommand = useRuntimeCommandMutation(sessionId);
-  const hasKeeper = workers.some((worker) => worker.role === "knowledge_keeper");
+  const deleteRuntime = useDeleteRuntimeMutation(sessionId);
+  const hasKeeper = workers.some((w) => w.role === "knowledge_keeper");
 
   useEffect(() => {
     if (!modelConfigId && models[0]?.id) setModelConfigId(models[0].id);
   }, [modelConfigId, models]);
 
   return (
-    <section className="workbench-pane">
-      <PaneHeader
-        title="Session Workers"
-        subtitle="AI IDE workers and web workers share one session worker list."
-      />
-      <div className="workbench-pane__body space-y-2">
-        {workers.length === 0 ? (
-          <EmptyBlock text="No workers have joined this session." />
-        ) : (
-          workers.map((worker) => {
-            const runtime = getRuntimeForAgent(runtimes, worker.agentId);
-            return (
-              <button
-                key={worker.agentId}
-                type="button"
-                className={`worker-button ${selectedWorkerId === worker.agentId ? "worker-button--selected" : ""}`}
-                onClick={() => onSelectWorker(worker.agentId)}
-              >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <strong className="block truncate text-sm">{worker.displayName || worker.agentName}</strong>
-                    <span className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>{worker.role}</span>
-                  </div>
-                  <StatusBadge status={worker.status} />
-                </div>
-                <div className="message-text text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                  {worker.duty || "No role description."}
-                </div>
-                {runtime && (
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <RuntimeBadge runtime={runtime} />
-                    <RuntimeControls runtime={runtime} onCommand={(command) => runtimeCommand.mutate({ runtimeId: runtime.id, command })} compact />
-                  </div>
-                )}
-              </button>
-            );
-          })
-        )}
-      </div>
-      <div className="workbench-pane__footer space-y-2">
-        <div className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Add Worker</div>
-        <div className="flex gap-2">
-          <ModelSelect models={models} value={modelConfigId} onChange={setModelConfigId} />
-          <button
-            type="button"
-            className="btn-primary whitespace-nowrap rounded-md border px-4 py-2 text-sm font-semibold disabled:opacity-50"
-            disabled={!modelConfigId || addKeeper.isPending || hasKeeper}
-            onClick={() => addKeeper.mutate({ modelConfigId })}
-          >
-            {hasKeeper ? "Keeper Added" : addKeeper.isPending ? "Adding..." : "Add Keeper"}
-          </button>
+    <>
+      <section style={{ background: "var(--c-bg-elevated)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{
+          padding: "var(--sp-3) var(--sp-4)",
+          borderBottom: "1px solid var(--c-border)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexShrink: 0,
+        }}>
+          <div>
+            <span style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }}>
+              会话成员
+            </span>
+            <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)", marginLeft: "var(--sp-2)" }}>
+              {workers.length} 人
+            </span>
+          </div>
         </div>
-        {addKeeper.error && <p className="text-sm" style={{ color: "var(--color-error)" }}>{addKeeper.error.message}</p>}
-      </div>
-    </section>
+
+        {/* Worker list */}
+        <div style={{ flex: 1, overflow: "auto", padding: "var(--sp-2)" }}>
+          {workers.length === 0 ? (
+            <EmptyState title="暂无成员" desc="其他 AI 通过 IDE/CLI 加入会话" />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-1)" }}>
+              {workers.map((worker) => {
+                const runtime = getRuntimeForAgent(runtimes, worker.agentId);
+                const isSelected = selectedWorkerId === worker.agentId;
+                return (
+                  <div
+                    key={worker.agentId}
+                    onClick={() => onSelectWorker(worker.agentId)}
+                    style={{
+                      padding: "var(--sp-3)",
+                      borderRadius: "var(--r-md)",
+                      border: isSelected ? "1px solid var(--c-accent)" : "1px solid transparent",
+                      background: isSelected ? "var(--c-accent-subtle)" : "transparent",
+                      cursor: "pointer",
+                      transition: "all var(--t-fast)",
+                    }}
+                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "var(--c-bg-hover)"; }}
+                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
+                  >
+                    {/* Top row: name + status */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--sp-1)" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{
+                          fontSize: "var(--fs-sm)", fontWeight: 600,
+                          color: "var(--c-text-primary)",
+                          display: "flex", alignItems: "center", gap: "var(--sp-2)",
+                        }}>
+                          <span className="truncate">{worker.displayName || worker.agentName}</span>
+                          <RoleBadge role={worker.role} />
+                        </div>
+                        {worker.duty && (
+                          <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)", marginTop: "2px" }}>
+                            {worker.duty}
+                          </div>
+                        )}
+                      </div>
+                      <StatusBadge status={worker.status} />
+                    </div>
+
+                    {/* Current task / latest report */}
+                    {worker.currentTask && (
+                      <div style={{
+                        marginTop: "var(--sp-2)", padding: "var(--sp-2)",
+                        borderRadius: "var(--r-sm)",
+                        background: "var(--c-bg-subtle)",
+                        fontSize: "var(--fs-xs)", color: "var(--c-text-secondary)",
+                      }}>
+                        <div style={{ fontWeight: 600, marginBottom: "2px", color: "var(--c-text-tertiary)" }}>当前任务</div>
+                        <div className="message-content" style={{ fontSize: "var(--fs-xs)" }}>
+                          {truncateText(worker.currentTask.content || worker.currentTask.result || "—", 120)}
+                        </div>
+                      </div>
+                    )}
+                    {worker.latestReport && !worker.currentTask && (
+                      <div style={{
+                        marginTop: "var(--sp-2)", padding: "var(--sp-2)",
+                        borderRadius: "var(--r-sm)",
+                        background: "var(--c-bg-subtle)",
+                        fontSize: "var(--fs-xs)", color: "var(--c-text-secondary)",
+                      }}>
+                        <div style={{ fontWeight: 600, marginBottom: "2px", color: "var(--c-text-tertiary)" }}>最新回报</div>
+                        <div className="message-content" style={{ fontSize: "var(--fs-xs)" }}>
+                          {truncateText(worker.latestReport.result || worker.latestReport.content || "—", 120)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stats row */}
+                    <div style={{ display: "flex", gap: "var(--sp-3)", marginTop: "var(--sp-2)", fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+                      {worker.pendingCount > 0 && <span>待处理 {worker.pendingCount}</span>}
+                      {worker.claimedCount > 0 && <span>已领取 {worker.claimedCount}</span>}
+                      {worker.lastHeartbeatAt && <span>{formatTime(worker.lastHeartbeatAt)}</span>}
+                    </div>
+
+                    {/* Runtime controls */}
+                    {runtime && (
+                      <div style={{
+                        marginTop: "var(--sp-2)",
+                        paddingTop: "var(--sp-2)",
+                        borderTop: "1px solid var(--c-border-subtle)",
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                      }}>
+                        <StatusBadge status={runtime.status} label={`运行时: ${runtime.status}`} />
+                        {worker.role === "knowledge_keeper" ? (
+                          <div style={{ display: "flex", gap: "var(--sp-1)" }}>
+                            <RuntimeControls runtime={runtime} onCommand={(c) => runtimeCommand.mutate({ runtimeId: runtime.id, command: c })} compact />
+                            <button className="btn btn-ghost btn-icon btn-sm" onClick={(e) => { e.stopPropagation(); setShowDeleteId(runtime.id); }} title="删除运行时">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                              </svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+                            IDE 控制
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Add Keeper */}
+        <div style={{
+          padding: "var(--sp-3)",
+          borderTop: "1px solid var(--c-border)",
+          flexShrink: 0,
+        }}>
+          <div style={{ fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--c-text-tertiary)", marginBottom: "var(--sp-2)" }}>
+            添加知识库维护者
+          </div>
+          <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+            <select className="input" value={modelConfigId} onChange={(e) => setModelConfigId(e.target.value)}>
+              {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <button
+              className="btn btn-secondary"
+              disabled={!modelConfigId || addKeeper.isPending || hasKeeper}
+              onClick={() => addKeeper.mutate({ modelConfigId }, {
+                onSuccess: () => pushToast("Knowledge Keeper 已添加", "success"),
+                onError: (e) => pushToast(e.message, "error"),
+              })}
+            >
+              {hasKeeper ? "已添加" : addKeeper.isPending ? "添加中…" : "添加"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <ConfirmDialog
+        open={showDeleteId !== null}
+        onClose={() => setShowDeleteId(null)}
+        onConfirm={() => {
+          if (showDeleteId) deleteRuntime.mutate(showDeleteId, {
+            onSuccess: () => pushToast("运行时已删除", "success"),
+            onError: (e) => pushToast(e.message, "error"),
+          });
+        }}
+        title="删除运行时"
+        message="确定要删除此运行时吗？此操作不可撤销。"
+        confirmText="删除"
+        danger
+      />
+    </>
   );
 }
 
-function InspectorPane({
+/* ==================== Inspector Panel ==================== */
+
+function InspectorPanel({
   worker,
   runtime,
   messages,
-  selectedMessage,
-  onSelectMessage,
+  agentMap,
+  onOpenDetail,
 }: {
   worker: ConsoleMember | null;
   runtime: WebAgentRuntime | null;
   messages: MessageRecord[];
-  selectedMessage: MessageRecord | null;
-  onSelectMessage: (message: MessageRecord) => void;
+  agentMap: Map<string, ConsoleMember>;
+  onOpenDetail: (m: MessageRecord) => void;
 }) {
-  const inspected = selectedMessage ?? messages[0] ?? null;
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
   return (
-    <section className="workbench-pane">
-      <PaneHeader
-        title={worker ? `${worker.displayName || worker.agentName} History` : "Worker History"}
-        subtitle={runtime?.currentStep || worker?.duty || "Select a worker to inspect messages."}
-        extra={runtime ? <RuntimeBadge runtime={runtime} /> : null}
-      />
-      <div className="workbench-pane__body space-y-3">
-        {messages.length === 0 ? (
-          <EmptyBlock text="No messages for this worker yet." />
+    <section style={{ background: "var(--c-bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{
+        padding: "var(--sp-3) var(--sp-4)",
+        borderBottom: "1px solid var(--c-border)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+          {worker && <RoleBadge role={worker.role} />}
+          <span style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }}>
+            {worker ? `${worker.displayName || worker.agentName} · 消息历史` : "消息详情"}
+          </span>
+        </div>
+        {runtime && <StatusBadge status={runtime.status} />}
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflow: "auto", padding: "var(--sp-3)" }}>
+        {!worker ? (
+          <EmptyState title="选择一个成员" desc="点击中间面板的成员以查看消息历史" />
+        ) : messages.length === 0 ? (
+          <EmptyState title="暂无消息" desc="此成员还没有消息记录" />
         ) : (
-          <div className="space-y-2">
-            {messages.map((message) => (
-              <MessageCard key={message.id} message={message} members={worker ? [worker] : []} selected={inspected?.id === message.id} onSelect={() => onSelectMessage(message)} />
-            ))}
-          </div>
-        )}
-        {inspected && (
-          <div className="rounded-md border p-3" style={{ borderColor: "var(--color-border)", background: "var(--color-bg)" }}>
-            <div className="mb-2 text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>Selected Message</div>
-            <div className="message-text">{formatMessageText(inspected.payload) || "No readable content."}</div>
-            <details className="mt-3">
-              <summary className="cursor-pointer text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Raw Payload</summary>
-              <pre className="mt-2 overflow-auto rounded-md p-3 text-xs" style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
-                {formatJson(inspected.payload)}
-              </pre>
-            </details>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+            {messages.map((msg) => {
+              const fromMember = agentMap.get(msg.fromAgentId);
+              return (
+                <MessageCard
+                  key={msg.id}
+                  message={msg}
+                  role={worker.role}
+                  fromName={fromMember?.displayName ?? msg.fromAgentId}
+                  onOpenDetail={() => onOpenDetail(msg)}
+                />
+              );
+            })}
+            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
@@ -398,151 +607,421 @@ function InspectorPane({
   );
 }
 
-function PaneHeader({ title, subtitle, extra }: { title: string; subtitle: string; extra?: React.ReactNode }) {
-  return (
-    <div className="workbench-pane__header">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-base font-bold" style={{ color: "var(--color-text-primary)" }}>{title}</h2>
-          <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>
-        </div>
-        {extra && <div className="flex-shrink-0">{extra}</div>}
-      </div>
-    </div>
-  );
-}
+/* ==================== Message Card ==================== */
 
-function MessageCard({ message, members, selected, onSelect }: { message: MessageRecord; members: ConsoleMember[]; selected?: boolean; onSelect: () => void }) {
-  const role = members.find((member) => member.agentId === message.fromAgentId)?.role;
-  const variant = message.type === "error" || message.processingStatus === "failed"
-    ? "message-card--error"
-    : role === "host"
-      ? "message-card--host"
-      : role === "knowledge_keeper"
-        ? "message-card--keeper"
-        : role === "worker"
-          ? "message-card--worker"
-          : "";
+function MessageCard({
+  message,
+  role,
+  fromName,
+  onOpenDetail,
+}: {
+  message: MessageRecord;
+  role: string;
+  fromName?: string;
+  onOpenDetail: () => void;
+}) {
+  const isError = message.type === "error" || message.processingStatus === "failed";
   const text = formatMessageText(message.payload);
+
   return (
-    <button type="button" className={`message-card ${variant}`} style={selected ? { outline: "2px solid var(--color-accent)" } : undefined} onClick={onSelect}>
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <StatusBadge status={message.processingStatus === "claimed" ? "working" : message.processingStatus} text={message.type} />
-        <span className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>{formatTime(message.createdAt)}</span>
-      </div>
-      <div className="message-text">{text ? truncateText(text) : "No readable message content."}</div>
-    </button>
-  );
-}
-
-function RuntimeBadge({ runtime }: { runtime: WebAgentRuntime }) {
-  return <StatusBadge status={runtime.status === "running" ? "working" : runtime.status} text={runtime.status} />;
-}
-
-function StatusBadge({ status, text }: { status: string; text?: string }) {
-  const variant = getStatusVariant(status);
-  return (
-    <span className={`badge ${variant}`}>
-      <span
-        aria-hidden="true"
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{ background: "currentColor" }}
-      />
-      {text || status}
-    </span>
-  );
-}
-
-function getStatusVariant(status: string): string {
-  if (["active", "online", "completed", "processed"].includes(status)) return "badge-active";
-  if (["working", "running", "claimed"].includes(status)) return "badge-working";
-  if (["waiting", "pending", "idle", "paused", "stopped"].includes(status)) return "badge-warning";
-  if (["error", "failed", "offline"].includes(status)) return "badge-error";
-  return "badge-offline";
-}
-
-function RuntimeControls({ runtime, onCommand, compact = false }: { runtime: WebAgentRuntime; onCommand: (command: "start" | "pause" | "stop") => void; compact?: boolean }) {
-  const buttonClass = compact ? "rounded border px-2 py-1 text-xs" : "rounded-md border px-3 py-1.5 text-xs font-semibold";
-  return (
-    <div className="flex items-center gap-1">
-      {runtime.status !== "running" ? (
-        <button type="button" className={`btn-primary ${buttonClass}`} onClick={() => onCommand("start")}>Start</button>
-      ) : (
-        <button type="button" className={`btn-secondary ${buttonClass}`} onClick={() => onCommand("pause")}>Pause</button>
-      )}
-      <button type="button" className={`btn-secondary ${buttonClass}`} onClick={() => onCommand("stop")}>Stop</button>
-    </div>
-  );
-}
-
-function ModelSelect({ models, value, onChange }: { models: Array<{ id: string; name: string; modelId: string }>; value: string; onChange: (value: string) => void }) {
-  return (
-    <select className="control-input min-w-0 flex-1" value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">Select model...</option>
-      {models.map((model) => (
-        <option key={model.id} value={model.id}>{model.name} ({model.modelId})</option>
-      ))}
-    </select>
-  );
-}
-
-function Dialog({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: 460 }} onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b p-4" style={{ borderColor: "var(--color-border)" }}>
-          <h2 className="text-base font-bold">{title}</h2>
-          <button type="button" className="btn-secondary rounded-md border px-2 py-1 text-sm" onClick={onClose}>Close</button>
+    <div
+      style={{
+        padding: "var(--sp-3)",
+        borderRadius: "var(--r-md)",
+        border: "1px solid var(--c-border-subtle)",
+        background: "var(--c-bg-elevated)",
+        transition: "border-color var(--t-fast), box-shadow var(--t-fast)",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--c-border)"; e.currentTarget.style.boxShadow = "var(--shadow-xs)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--c-border-subtle)"; e.currentTarget.style.boxShadow = "none"; }}
+    >
+      {/* Top row */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: "var(--sp-2)",
+        marginBottom: "var(--sp-1)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", minWidth: 0 }}>
+          {isError ? (
+            <Badge variant="error" dot>{message.type}</Badge>
+          ) : (
+            <Badge variant={role === "host" ? "accent" : role === "knowledge_keeper" ? "success" : "info"} dot>
+              {message.type}
+            </Badge>
+          )}
+          {fromName && (
+            <span style={{ fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--c-text-secondary)" }} className="truncate">
+              {fromName}
+            </span>
+          )}
+          <span style={{
+            fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)",
+            padding: "1px var(--sp-1)", borderRadius: "var(--r-xs)",
+            background: "var(--c-bg-subtle)",
+          }}>
+            {message.processingStatus}
+          </span>
         </div>
-        <div className="p-4">{children}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", flexShrink: 0 }}>
+          <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+            {formatTime(message.createdAt)}
+          </span>
+          {/* Detail button */}
+          <button
+            className="btn-link"
+            onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
+            title="查看消息详情"
+          >
+            详情
+          </button>
+        </div>
+      </div>
+      {/* Content */}
+      <div className="message-content" style={{ color: "var(--c-text-secondary)" }}>
+        {text ? truncateText(text, 280) : "无可读内容"}
       </div>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-semibold" style={{ color: "var(--color-text-secondary)" }}>{label}</span>
-      {children}
-    </label>
-  );
-}
+/* ==================== Message Detail Dialog ==================== */
 
-function EmptyBlock({ text }: { text: string }) {
-  return (
-    <div className="rounded-md border border-dashed p-6 text-center text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-tertiary)" }}>
-      {text}
-    </div>
-  );
-}
+function MessageDetailDialog({
+  message,
+  allMessages,
+  agentMap,
+  taskThreads,
+  onClose,
+}: {
+  message: MessageRecord | null;
+  allMessages: MessageRecord[];
+  agentMap: Map<string, ConsoleMember>;
+  taskThreads: ConsoleTaskThread[];
+  onClose: () => void;
+}) {
+  if (!message) return null;
 
-function CenteredState({ title, detail }: { title: string; detail: string }) {
+  const fromMember = agentMap.get(message.fromAgentId);
+  const toMember = message.toAgentId ? agentMap.get(message.toAgentId) : null;
+
+  // Find related messages by correlationId
+  const related = message.correlationId
+    ? allMessages.filter((m) => m.correlationId === message.correlationId && m.id !== message.id)
+    : [];
+
+  // Find matching task thread
+  const thread = taskThreads.find((t) => t.correlationId === message.correlationId);
+
+  // Build the conversation chain: sort by time
+  const chain = [message, ...related].sort((a, b) =>
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  const text = formatMessageText(message.payload);
+
   return (
-    <div className="flex h-full items-center justify-center p-8 text-center">
-      <div>
-        <h1 className="text-xl font-bold" style={{ color: "var(--color-text-primary)" }}>{title}</h1>
-        <p className="mt-2 text-sm" style={{ color: "var(--color-text-secondary)" }}>{detail}</p>
+    <Dialog open={Boolean(message)} onClose={onClose} title="消息详情" width={680}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+        {/* Message meta */}
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: "var(--sp-3)",
+          padding: "var(--sp-3)",
+          borderRadius: "var(--r-md)",
+          background: "var(--c-bg-subtle)",
+          border: "1px solid var(--c-border-subtle)",
+        }}>
+          <MetaItem label="消息 ID" value={message.id} mono />
+          <MetaItem label="类型" value={message.type} />
+          <MetaItem label="发送方" value={`${fromMember?.displayName ?? message.fromAgentId} (${fromMember?.role ?? "unknown"})`} />
+          {toMember && <MetaItem label="接收方" value={`${toMember.displayName} (${toMember.role})`} />}
+          {message.correlationId && <MetaItem label="关联 ID" value={message.correlationId} mono />}
+          <MetaItem label="处理状态" value={message.processingStatus} />
+          <MetaItem label="投递状态" value={message.deliveryStatus} />
+          <MetaItem label="时间" value={formatTimeFull(message.createdAt)} />
+        </div>
+
+        {/* Conversation chain */}
+        {chain.length > 1 && (
+          <div>
+            <div style={{
+              fontSize: "var(--fs-xs)", fontWeight: 600,
+              color: "var(--c-text-secondary)", marginBottom: "var(--sp-2)",
+              display: "flex", alignItems: "center", gap: "var(--sp-2)",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+              消息链（{chain.length} 条）
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+              {chain.map((cm, idx) => {
+                const cmFrom = agentMap.get(cm.fromAgentId);
+                const cmTo = cm.toAgentId ? agentMap.get(cm.toAgentId) : null;
+                const isCurrent = cm.id === message.id;
+                return (
+                  <div
+                    key={cm.id}
+                    style={{
+                      padding: "var(--sp-3)",
+                      borderRadius: "var(--r-md)",
+                      border: isCurrent ? "2px solid var(--c-accent)" : "1px solid var(--c-border-subtle)",
+                      background: isCurrent ? "var(--c-accent-subtle)" : "var(--c-bg-elevated)",
+                    }}
+                  >
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: "var(--sp-2)",
+                      marginBottom: "var(--sp-1)",
+                      flexWrap: "wrap",
+                    }}>
+                      <span style={{
+                        width: 20, height: 20, borderRadius: "var(--r-full)",
+                        background: "var(--c-bg-subtle)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "var(--fs-xs)", fontWeight: 700,
+                        color: "var(--c-text-tertiary)",
+                        flexShrink: 0,
+                      }}>
+                        {idx + 1}
+                      </span>
+                      <Badge variant={cmFrom?.role === "host" ? "accent" : cmFrom?.role === "knowledge_keeper" ? "success" : "info"} dot>
+                        {cmFrom?.role ?? "unknown"}
+                      </Badge>
+                      <span style={{ fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--c-text-secondary)" }}>
+                        {cmFrom?.displayName ?? cm.fromAgentId}
+                      </span>
+                      {cmTo && (
+                        <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+                          → {cmTo.displayName}
+                        </span>
+                      )}
+                      <Badge variant="neutral">{cm.type}</Badge>
+                      {isCurrent && <Badge variant="accent" dot>当前</Badge>}
+                      <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)", marginLeft: "auto" }}>
+                        {formatTime(cm.createdAt)}
+                      </span>
+                    </div>
+                    <div className="message-content" style={{ color: "var(--c-text-secondary)" }}>
+                      {formatMessageText(cm.payload) || "无可读内容"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Task thread info */}
+        {thread && (
+          <div style={{
+            padding: "var(--sp-3)",
+            borderRadius: "var(--r-md)",
+            background: "var(--c-bg-subtle)",
+            border: "1px solid var(--c-border-subtle)",
+          }}>
+            <div style={{
+              fontSize: "var(--fs-xs)", fontWeight: 600,
+              color: "var(--c-text-secondary)", marginBottom: "var(--sp-2)",
+            }}>
+              任务链状态
+            </div>
+            <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap" }}>
+              <MetaItem label="Worker" value={thread.workerName ?? "—"} />
+              <MetaItem label="状态" value={thread.status} />
+            </div>
+          </div>
+        )}
+
+        {/* Message content */}
+        <div>
+          <div style={{
+            fontSize: "var(--fs-xs)", fontWeight: 600,
+            color: "var(--c-text-secondary)", marginBottom: "var(--sp-2)",
+          }}>
+            消息内容
+          </div>
+          <div className="message-content" style={{
+            padding: "var(--sp-3)",
+            borderRadius: "var(--r-md)",
+            background: "var(--c-bg-elevated)",
+            border: "1px solid var(--c-border)",
+            color: "var(--c-text-primary)",
+            lineHeight: 1.7,
+          }}>
+            {text || "无可读内容"}
+          </div>
+        </div>
+
+        {/* Raw payload */}
+        <details>
+          <summary style={{
+            cursor: "pointer", fontSize: "var(--fs-xs)", fontWeight: 500,
+            color: "var(--c-text-secondary)", userSelect: "none",
+          }}>
+            查看原始数据
+          </summary>
+          <pre style={{
+            marginTop: "var(--sp-2)", padding: "var(--sp-3)",
+            background: "var(--c-bg-subtle)", borderRadius: "var(--r-md)",
+            fontSize: "var(--fs-xs)", overflow: "auto",
+            color: "var(--c-text-secondary)",
+            maxHeight: 300,
+          }}>
+            {formatJson(message.payload)}
+          </pre>
+        </details>
       </div>
+    </Dialog>
+  );
+}
+
+function MetaItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+      <span style={{ fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--c-text-tertiary)" }}>{label}</span>
+      <span style={{
+        fontSize: "var(--fs-xs)", color: "var(--c-text-secondary)",
+        fontFamily: mono ? "var(--font-mono)" : "inherit",
+        wordBreak: "break-all",
+      }}>
+        {value}
+      </span>
     </div>
   );
 }
+
+/* ==================== Runtime Controls ==================== */
+
+function RuntimeControls({
+  runtime,
+  onCommand,
+  compact = false,
+}: {
+  runtime: WebAgentRuntime;
+  onCommand: (command: "start" | "pause" | "stop") => void;
+  compact?: boolean;
+}) {
+  const btnClass = compact ? "btn btn-sm" : "btn";
+  return (
+    <div style={{ display: "flex", gap: "var(--sp-1)" }}>
+      {runtime.status !== "running" ? (
+        <button className={`${btnClass} btn-secondary`} onClick={() => onCommand("start")}>启动</button>
+      ) : (
+        <button className={`${btnClass} btn-secondary`} onClick={() => onCommand("pause")}>暂停</button>
+      )}
+      <button className={`${btnClass} btn-ghost`} onClick={() => onCommand("stop")}>停止</button>
+    </div>
+  );
+}
+
+/* ==================== Create Session Dialog ==================== */
+
+function CreateSessionDialog({
+  open,
+  onClose,
+  models,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  models: Array<{ id: string; name: string; modelId: string }>;
+  onCreated: (sessionId: string) => void;
+}) {
+  const [sessionName, setSessionName] = useState(`web-session-${new Date().toISOString().slice(0, 10)}`);
+  const [modelConfigId, setModelConfigId] = useState("");
+  const createHost = useCreateHostSessionMutation();
+
+  useEffect(() => {
+    if (open && !modelConfigId && models[0]?.id) setModelConfigId(models[0].id);
+  }, [models, modelConfigId, open]);
+
+  useEffect(() => {
+    if (open) setSessionName(`web-session-${new Date().toISOString().slice(0, 10)}`);
+  }, [open]);
+
+  const handleCreate = () => {
+    createHost.mutate(
+      { sessionName: sessionName.trim(), modelConfigId },
+      {
+        onSuccess: (data) => {
+          pushToast("会话已创建，Web Host 已启动", "success");
+          onCreated(data.session.id);
+          onClose();
+        },
+        onError: (e) => pushToast(e.message, "error"),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="创建协作会话" width={460}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+        <Field label="会话名称" required hint="使用有辨识度的名称，如 ecommerce-v2">
+          <input
+            className="input"
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+            placeholder="my-project-session"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && sessionName.trim() && modelConfigId) handleCreate();
+            }}
+          />
+        </Field>
+        <Field label="模型" required>
+          <select className="input" value={modelConfigId} onChange={(e) => setModelConfigId(e.target.value)}>
+            <option value="">选择模型…</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.modelId})</option>)}
+          </select>
+        </Field>
+        {createHost.error && (
+          <div style={{
+            padding: "var(--sp-2) var(--sp-3)",
+            borderRadius: "var(--r-sm)",
+            background: "var(--c-error-subtle)",
+            border: "1px solid var(--c-error-subtle)",
+            fontSize: "var(--fs-sm)", color: "var(--c-error)",
+            lineHeight: 1.5,
+          }}>
+            {createHost.error.message}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-2)", marginTop: "var(--sp-2)" }}>
+          <button className="btn btn-secondary" onClick={onClose}>取消</button>
+          <button
+            className="btn btn-primary"
+            disabled={!sessionName.trim() || !modelConfigId || createHost.isPending}
+            onClick={handleCreate}
+          >
+            {createHost.isPending ? "创建中…" : "创建会话"}
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/* ==================== Helpers ==================== */
 
 function filterHostMessages(messages: MessageRecord[], host: ConsoleMember | null, members: ConsoleMember[]): MessageRecord[] {
   if (!host) return [];
-  const roleById = new Map(members.map((member) => [member.agentId, member.role]));
-  return messages.filter((message) => {
-    const fromRole = roleById.get(message.fromAgentId);
-    const toRole = message.toAgentId ? roleById.get(message.toAgentId) : null;
+  const roleById = new Map(members.map((m) => [m.agentId, m.role]));
+  return messages.filter((msg) => {
+    const fromRole = roleById.get(msg.fromAgentId);
+    const toRole = msg.toAgentId ? roleById.get(msg.toAgentId) : null;
     return (
-      message.fromAgentId === host.agentId ||
-      message.toAgentId === host.agentId ||
+      msg.fromAgentId === host.agentId ||
+      msg.toAgentId === host.agentId ||
       fromRole === "host" ||
-      ((fromRole === "worker" || fromRole === "knowledge_keeper") && (!message.toAgentId || toRole === "host"))
+      ((fromRole === "worker" || fromRole === "knowledge_keeper") && (!msg.toAgentId || toRole === "host"))
     );
   });
 }
 
-function formatTime(value?: string | null): string {
-  return value ? new Date(value).toLocaleString("zh-CN") : "-";
+function EmptyIcon() {
+  return (
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+    </svg>
+  );
 }

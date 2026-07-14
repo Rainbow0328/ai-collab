@@ -83,6 +83,7 @@ import type {
   WebSocketService,
   ExternalMcpService,
   McpToolService,
+  StdioMcpRegistryService,
   WorkflowDefinitionService
 } from "../services/index.js";
 import type { ModelConfigRepository } from "@ai-collab/store";
@@ -106,6 +107,7 @@ export type ServerServices = {
   modelConfigService: ModelConfigRepository;
   externalMcpService: ExternalMcpService;
   mcpToolService: McpToolService;
+  stdioMcpRegistryService: StdioMcpRegistryService;
   collaborationWaitService: CollaborationWaitService;
   webAgentRuntimeService: WebAgentRuntimeService;
   webAgentRuntimeExecutorService: WebAgentRuntimeExecutorService;
@@ -878,6 +880,40 @@ export const createServer = async (
     return successResponse(services.modelConfigService.list());
   });
 
+  server.post("/api/models", async (request) => {
+    const body = request.body as {
+      id?: string;
+      name: string;
+      provider: string;
+      modelId: string;
+      baseUrl?: string;
+      apiKey?: string;
+    };
+    const timestamp = new Date().toISOString();
+    const id = body.id ?? `model-${Date.now()}`;
+    services.modelConfigService.upsert({
+      id,
+      name: body.name,
+      provider: body.provider,
+      modelId: body.modelId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    if (body.baseUrl) {
+      process.env[`${body.provider.toUpperCase()}_BASE_URL`] = body.baseUrl;
+    }
+    if (body.apiKey) {
+      process.env[`${body.provider.toUpperCase()}_API_KEY`] = body.apiKey;
+    }
+    return successResponse(services.modelConfigService.findById(id));
+  });
+
+  server.delete("/api/models/:modelId", async (request) => {
+    const params = request.params as { modelId: string };
+    services.modelConfigService.delete(params.modelId);
+    return successResponse({ deleted: true });
+  });
+
   server.post("/api/llm/chat", async (request) => {
     const body = request.body as {
       modelConfigId?: string;
@@ -1108,6 +1144,59 @@ export const createServer = async (
     }
 
     return successResponse(metrics);
+  });
+
+  // --- stdio MCP server lifecycle API ---
+
+  server.post("/api/mcp-stdio/register", async (request) => {
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as { pid?: number; ideLabel?: string })
+        : {};
+    const pid = Number(body.pid ?? process.pid);
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new CoreError("INVALID_INPUT", "Valid pid is required.");
+    }
+    const registration = services.stdioMcpRegistryService.register(
+      pid,
+      body.ideLabel
+    );
+    return successResponse({ registration });
+  });
+
+  server.post("/api/mcp-stdio/heartbeat", async (request) => {
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as { pid?: number })
+        : {};
+    const pid = Number(body.pid ?? process.pid);
+    const ok = services.stdioMcpRegistryService.heartbeat(pid);
+    return successResponse({ ok });
+  });
+
+  server.delete("/api/mcp-stdio/unregister", async (request) => {
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as { pid?: number })
+        : {};
+    const pid = Number(body.pid ?? process.pid);
+    const ok = services.stdioMcpRegistryService.unregister(pid);
+    return successResponse({ ok });
+  });
+
+  server.get("/api/mcp-stdio/list", async () => {
+    // Prune dead entries before returning
+    services.stdioMcpRegistryService.pruneDeadProcesses((pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return successResponse({
+      servers: services.stdioMcpRegistryService.list()
+    });
   });
 
   services.websocketService.register(server);

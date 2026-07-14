@@ -2,13 +2,15 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { KnowledgeLevel } from "@ai-collab/protocol";
 import { api } from "@/lib/api-client";
+import { renderMarkdown } from "@/lib/markdown";
+import { PageHeader, PageContainer } from "@/components/PageHeader";
+import { Badge, EmptyState, Loading, pushToast } from "@/components/ui";
+import { formatTime, formatTimeFull } from "@/features/workbench/text";
 
-const levels: KnowledgeLevel[] = ["l1", "l2", "l3"];
-
-const levelLabels: Record<KnowledgeLevel, string> = {
-  l1: "L1 Direction",
-  l2: "L2 Map",
-  l3: "L3 Details",
+const LEVEL_CONFIG: Record<KnowledgeLevel, { label: string; desc: string; variant: "warning" | "info" | "success" }> = {
+  l1: { label: "L1 · 项目方向", desc: "长期原则、当前方向、需求约束", variant: "warning" },
+  l2: { label: "L2 · 领域规则", desc: "模块边界、协议、状态机", variant: "info" },
+  l3: { label: "L3 · 字段对齐", desc: "字段、接口参数、数据结构", variant: "success" },
 };
 
 export function KnowledgePage() {
@@ -28,79 +30,95 @@ export function KnowledgePage() {
     queryFn: () => api.knowledge.listChanges({ limit: 20 }),
   });
   const documentQuery = useQuery({
-    queryKey: ["knowledge", "document", selectedLevel, selectedSlug],
+    queryKey: ["knowledge", "doc", selectedLevel, selectedSlug],
     queryFn: () => api.knowledge.get(selectedLevel as KnowledgeLevel, selectedSlug as string),
     enabled: Boolean(selectedLevel && selectedSlug),
   });
 
   const items = listQuery.data ?? [];
-  const grouped = useMemo(
-    () => ({
-      l1: items.filter((item) => item.level === "l1"),
-      l2: items.filter((item) => item.level === "l2"),
-      l3: items.filter((item) => item.level === "l3"),
-    }),
-    [items]
-  );
+  const grouped = useMemo(() => ({
+    l1: items.filter((i) => i.level === "l1"),
+    l2: items.filter((i) => i.level === "l2"),
+    l3: items.filter((i) => i.level === "l3"),
+  }), [items]);
+
   const activeItem = selectedLevel && selectedSlug
-    ? items.find((item) => item.level === selectedLevel && item.slug === selectedSlug)
+    ? items.find((i) => i.level === selectedLevel && i.slug === selectedSlug)
     : items[0] ?? null;
   const effectiveLevel = selectedLevel ?? activeItem?.level ?? null;
   const effectiveSlug = selectedSlug ?? activeItem?.slug ?? null;
   const document = effectiveLevel === selectedLevel && effectiveSlug === selectedSlug ? documentQuery.data : null;
   const counts = manifestQuery.data?.counts ?? { l1: grouped.l1.length, l2: grouped.l2.length, l3: grouped.l3.length };
 
+  const refreshAll = () => {
+    void manifestQuery.refetch();
+    void listQuery.refetch();
+    void changesQuery.refetch();
+    void documentQuery.refetch();
+    pushToast("已刷新", "info");
+  };
+
   return (
     <>
-      <header className="workbench-topbar">
-        <div>
-          <div className="text-sm font-semibold" style={{ color: "var(--color-text-secondary)" }}>Repository Memory</div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--color-text-primary)" }}>Knowledge</h1>
-        </div>
-        <button
-          className="btn-secondary rounded-md border px-4 py-2 text-sm"
-          onClick={() => {
-            void manifestQuery.refetch();
-            void listQuery.refetch();
-            void changesQuery.refetch();
-            void documentQuery.refetch();
-          }}
-        >
-          Refresh
-        </button>
-      </header>
-      <main className="workbench-content overflow-hidden p-4">
-        <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[300px_minmax(0,1fr)_340px]">
-          <section className="workbench-pane">
-            <PaneTitle title="Documents" subtitle={`${items.length} knowledge files`} />
-            <div className="workbench-pane__body">
+      <PageHeader
+        title="知识库"
+        subtitle={`${manifestQuery.data?.rootPath ?? "—"} · ${items.length} 篇文档`}
+        actions={
+          <button className="btn btn-secondary" onClick={refreshAll}>刷新</button>
+        }
+      />
+      <PageContainer>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "280px 1fr 320px",
+          gap: "var(--sp-4)",
+          height: "calc(100vh - var(--header-h) - var(--sp-10))",
+        }}>
+          {/* Document tree */}
+          <div className="card" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ padding: "var(--sp-3) var(--sp-4)", borderBottom: "1px solid var(--c-border-subtle)" }}>
+              <div style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }}>文档列表</div>
+            </div>
+            <div style={{ flex: 1, overflow: "auto", padding: "var(--sp-2)" }}>
               {listQuery.isLoading ? (
-                <EmptyText text="Loading knowledge..." />
+                <Loading text="加载中…" />
               ) : items.length === 0 ? (
-                <EmptyText text="Knowledge base is empty." />
+                <EmptyState title="知识库为空" desc="AI 在协作过程中会自动写入" />
               ) : (
-                <div className="space-y-4">
-                  {levels.map((level) => (
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}>
+                  {(Object.keys(LEVEL_CONFIG) as KnowledgeLevel[]).map((level) => (
                     <div key={level}>
-                      <div className="mb-2 flex items-center justify-between text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
-                        <span>{levelLabels[level]}</span>
-                        <span>{counts[level]}</span>
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "0 var(--sp-2) var(--sp-1)",
+                      }}>
+                        <Badge variant={LEVEL_CONFIG[level].variant} dot>
+                          {LEVEL_CONFIG[level].label}
+                        </Badge>
+                        <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>{counts[level]}</span>
                       </div>
-                      <div className="space-y-1">
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                         {grouped[level].map((item) => {
                           const active = effectiveLevel === item.level && effectiveSlug === item.slug;
                           return (
                             <button
                               key={`${item.level}:${item.slug}`}
-                              className={`worker-button ${active ? "worker-button--selected" : ""}`}
-                              type="button"
-                              onClick={() => {
-                                setSelectedLevel(item.level);
-                                setSelectedSlug(item.slug);
+                              onClick={() => { setSelectedLevel(item.level); setSelectedSlug(item.slug); }}
+                              style={{
+                                display: "block", width: "100%", textAlign: "left",
+                                padding: "var(--sp-2) var(--sp-3)",
+                                borderRadius: "var(--r-md)",
+                                border: "1px solid transparent",
+                                background: active ? "var(--c-accent-subtle)" : "transparent",
+                                fontSize: "var(--fs-sm)", fontWeight: active ? 600 : 400,
+                                color: active ? "var(--c-accent)" : "var(--c-text-primary)",
+                                transition: "all var(--t-fast)",
                               }}
+                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--c-bg-hover)"; }}
+                              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
                             >
-                              <div className="truncate text-sm font-semibold">{item.title}</div>
-                              <div className="truncate text-xs" style={{ color: "var(--color-text-tertiary)" }}>{item.level}/{item.slug}</div>
+                              <div className="truncate">{item.title}</div>
+                              <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>{item.level}/{item.slug}</div>
                             </button>
                           );
                         })}
@@ -110,84 +128,117 @@ export function KnowledgePage() {
                 </div>
               )}
             </div>
-          </section>
+          </div>
 
-          <section className="workbench-pane">
-            <PaneTitle title={activeItem?.title ?? "Document"} subtitle={activeItem ? `${activeItem.level}/${activeItem.slug}` : "Select a document"} />
-            <div className="workbench-pane__body">
+          {/* Document content */}
+          <div className="card" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ padding: "var(--sp-3) var(--sp-4)", borderBottom: "1px solid var(--c-border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }} className="truncate">
+                  {activeItem?.title ?? "选择文档"}
+                </div>
+                {activeItem && (
+                  <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+                    {activeItem.level}/{activeItem.slug} · v{activeItem.version} · {formatTime(activeItem.updatedAt)}
+                  </div>
+                )}
+              </div>
+              {activeItem && (
+                <Badge variant={LEVEL_CONFIG[activeItem.level].variant} dot>
+                  {LEVEL_CONFIG[activeItem.level].label}
+                </Badge>
+              )}
+            </div>
+            <div style={{ flex: 1, overflow: "auto", padding: "var(--sp-4)" }}>
               {!activeItem ? (
-                <EmptyText text="Select a document from the left." />
+                <EmptyState title="未选择文档" desc="从左侧列表中选择一篇文档" />
               ) : documentQuery.isLoading && selectedSlug ? (
-                <EmptyText text="Loading document..." />
+                <Loading text="加载文档…" />
               ) : document ? (
-                <article className="space-y-4">
+                <article>
                   {document.summary && (
-                    <div className="rounded-md border p-4 text-sm" style={{ borderColor: "var(--color-border)", background: "var(--color-bg)", color: "var(--color-text-secondary)" }}>
-                      {document.summary}
-                    </div>
+                    <div style={{
+                      padding: "var(--sp-3) var(--sp-4)",
+                      marginBottom: "var(--sp-4)",
+                      borderRadius: "var(--r-md)",
+                      background: "var(--c-bg-subtle)",
+                      border: "1px solid var(--c-border-subtle)",
+                      fontSize: "var(--fs-sm)", color: "var(--c-text-secondary)",
+                      lineHeight: 1.6,
+                    }}>
+                        {document.summary}
+                      </div>
                   )}
                   {document.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {document.tags.map((tag) => <span key={tag} className="tag-pill">{tag}</span>)}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--sp-1)", marginBottom: "var(--sp-4)" }}>
+                      {document.tags.map((tag) => (
+                        <Badge key={tag} variant="neutral">{tag}</Badge>
+                      ))}
                     </div>
                   )}
-                  <pre className="message-text m-0 font-sans">{document.content || "No document content."}</pre>
+                  <div
+                    className="markdown-body"
+                    style={{
+                      color: "var(--c-text-primary)",
+                      lineHeight: 1.7,
+                    }}
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(document.content || "无文档内容") }}
+                  />
                 </article>
               ) : (
-                <EmptyText text="Select the document again to load its content." />
+                <EmptyState title="点击文档重新加载" desc="文档内容加载失败" />
               )}
-              {documentQuery.error && <ErrorText text={documentQuery.error.message} />}
             </div>
-          </section>
+          </div>
 
-          <section className="workbench-pane">
-            <PaneTitle title="Recent Changes" subtitle={`${changesQuery.data?.length ?? 0} records`} />
-            <div className="workbench-pane__body">
+          {/* Recent changes */}
+          <div className="card" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ padding: "var(--sp-3) var(--sp-4)", borderBottom: "1px solid var(--c-border-subtle)" }}>
+              <div style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }}>
+                近期变更
+              </div>
+              <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+                {changesQuery.data?.length ?? 0} 条记录
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: "auto", padding: "var(--sp-2)" }}>
               {changesQuery.isLoading ? (
-                <EmptyText text="Loading changes..." />
+                <Loading text="加载中…" />
               ) : (changesQuery.data ?? []).length === 0 ? (
-                <EmptyText text="No knowledge changes yet." />
+                <EmptyState title="暂无变更" />
               ) : (
-                <div className="space-y-3">
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
                   {(changesQuery.data ?? []).map((change) => (
-                    <article key={`${change.level}:${change.slug}:${change.createdAt}`} className="rounded-md border p-3" style={{ borderColor: "var(--color-border)", background: "var(--color-bg)" }}>
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <strong className="truncate text-sm">{change.level}/{change.slug}</strong>
-                        <span className="badge badge-working">{change.kind}</span>
+                    <div key={`${change.level}:${change.slug}:${change.createdAt}`} style={{
+                      padding: "var(--sp-3)",
+                      borderRadius: "var(--r-md)",
+                      border: "1px solid var(--c-border-subtle)",
+                      background: "var(--c-bg-elevated)",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--sp-1)" }}>
+                        <span style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }} className="truncate">
+                          {change.level}/{change.slug}
+                        </span>
+                        <Badge variant={change.kind === "created" ? "success" : change.kind === "deleted" ? "error" : "info"}>
+                          {change.kind}
+                        </Badge>
                       </div>
-                      <div className="text-xs leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
-                        {formatTime(change.createdAt)}
-                        {change.summary ? <><br />{change.summary}</> : null}
+                      <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+                        {formatTimeFull(change.createdAt)}
                       </div>
-                    </article>
+                      {change.summary && (
+                        <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-secondary)", marginTop: "var(--sp-1)" }}>
+                          {change.summary}
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
             </div>
-          </section>
+          </div>
         </div>
-      </main>
+      </PageContainer>
     </>
   );
-}
-
-function PaneTitle({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className="workbench-pane__header">
-      <h2 className="truncate text-base font-bold" style={{ color: "var(--color-text-primary)" }}>{title}</h2>
-      <p className="mt-1 truncate text-xs" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>
-    </div>
-  );
-}
-
-function EmptyText({ text }: { text: string }) {
-  return <div className="rounded-md border border-dashed p-8 text-center text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-tertiary)" }}>{text}</div>;
-}
-
-function ErrorText({ text }: { text: string }) {
-  return <p className="mt-3 text-sm" style={{ color: "var(--color-error)" }}>{text}</p>;
-}
-
-function formatTime(value?: string | null): string {
-  return value ? new Date(value).toLocaleString("zh-CN") : "-";
 }

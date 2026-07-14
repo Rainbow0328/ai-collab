@@ -1006,6 +1006,26 @@ export class AiCollabClient {
     return this.request("/api/models");
   }
 
+  public async createModel(input: {
+    id?: string;
+    name: string;
+    provider: string;
+    modelId: string;
+    baseUrl?: string;
+    apiKey?: string;
+  }): Promise<{ id: string; name: string; provider: string; modelId: string }> {
+    return this.request("/api/models", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  public async deleteModel(modelId: string): Promise<{ deleted: boolean }> {
+    return this.request(`/api/models/${modelId}`, {
+      method: "DELETE",
+    });
+  }
+
   // MCP Servers
   public async listMcpServers(): Promise<Array<{ id: string; name: string; url: string; description: string | null; transport: "stdio" | "sse"; enabled: boolean; toolCount: number; createdAt: string; updatedAt: string }>> {
     return this.request("/api/mcp-servers");

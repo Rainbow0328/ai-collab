@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ai-collab": {
+      "command": "npx",
+      "args": [
+        "ai-collab",
+        "mcp:serve"
+      ],
+      "timeout": 3600000
+    }
+  }
+}

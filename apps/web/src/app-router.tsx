@@ -6,39 +6,13 @@ import { KnowledgePage } from "@/features/knowledge/KnowledgePage";
 import { McpPage } from "@/features/mcp/McpPage";
 import { PreferencesPage } from "@/features/preferences/PreferencesPage";
 
-const rootRoute = createRootRoute({
-  component: AppShell,
-});
+const rootRoute = createRootRoute({ component: AppShell });
 
-const workbenchRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  component: WorkbenchPage,
-});
-
-const modelsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/models",
-  component: ModelsPage,
-});
-
-const mcpRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/mcp",
-  component: McpPage,
-});
-
-const knowledgeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/knowledge",
-  component: KnowledgePage,
-});
-
-const preferencesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/preferences",
-  component: PreferencesPage,
-});
+const workbenchRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: WorkbenchPage });
+const modelsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/models", component: ModelsPage });
+const mcpRoute = createRoute({ getParentRoute: () => rootRoute, path: "/mcp", component: McpPage });
+const knowledgeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/knowledge", component: KnowledgePage });
+const preferencesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/preferences", component: PreferencesPage });
 
 const routeTree = rootRoute.addChildren([
   workbenchRoute,
@@ -51,9 +25,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({ routeTree });
 
 declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
+  interface Register { router: typeof router; }
 }
 
 export function AppRouter() {

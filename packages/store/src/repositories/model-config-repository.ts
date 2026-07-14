@@ -84,6 +84,11 @@ export class ModelConfigRepository {
       updatedAt: record.updatedAt,
     });
   }
+
+  public delete(id: string): void {
+    const statement = this.db.prepare("DELETE FROM model_configs WHERE id = ?");
+    statement.run(id);
+  }
 }
 
 const resolveModelBaseUrl = (provider: string): string => {

@@ -1,13 +1,16 @@
 import type {
-  Agent,
-  Session,
-  MessageRecord,
   MessageType,
-  Task,
-  SessionInsight,
-  AgentQueueStats,
+  KnowledgeLevel,
+  McpToolDefinition,
+  McpCallRequest,
+  UpsertUserPreferenceInput,
+  ListUserPreferencesInput,
+  SendMessageInput,
+  MessageProcessCompleteInput,
+  MessageProcessFailInput,
+  UpsertProgressInput,
+  ListProgressFilter,
   AttachSessionInput,
-  JoinSessionByNameInput
 } from "@ai-collab/protocol";
 import { createAiCollabClient, AiCollabClient } from "@ai-collab/sdk";
 
@@ -52,11 +55,10 @@ export const api = {
     get: (messageId: string) => getApiClient().getMessageById(messageId),
     claimNext: (agentId: string, options?: { types?: MessageType[] }) =>
       getApiClient().claimNext(agentId, options),
-    send: (input: import("@ai-collab/protocol").SendMessageInput) =>
-      getApiClient().sendMessage(input),
-    complete: (messageId: string, input: import("@ai-collab/protocol").MessageProcessCompleteInput) =>
+    send: (input: SendMessageInput) => getApiClient().sendMessage(input),
+    complete: (messageId: string, input: MessageProcessCompleteInput) =>
       getApiClient().completeMessage(messageId, input),
-    fail: (messageId: string, input: import("@ai-collab/protocol").MessageProcessFailInput) =>
+    fail: (messageId: string, input: MessageProcessFailInput) =>
       getApiClient().failMessage(messageId, input),
   },
 
@@ -65,46 +67,19 @@ export const api = {
   },
 
   progress: {
-    upsert: (input: import("@ai-collab/protocol").UpsertProgressInput) =>
-      getApiClient().upsertProgress(input),
-    get: (sessionId: string, agentId: string) =>
-      getApiClient().getProgress(sessionId, agentId),
-    list: (filter?: import("@ai-collab/protocol").ListProgressFilter) =>
-      getApiClient().listProgress(filter ?? {}),
+    upsert: (input: UpsertProgressInput) => getApiClient().upsertProgress(input),
+    get: (sessionId: string, agentId: string) => getApiClient().getProgress(sessionId, agentId),
+    list: (filter?: ListProgressFilter) => getApiClient().listProgress(filter ?? {}),
     clear: (sessionId: string) => getApiClient().clearProgress(sessionId),
   },
 
   knowledge: {
     getManifest: () => getApiClient().getKnowledgeManifest(),
-    list: (input?: import("@ai-collab/protocol").ListKnowledgeInput) =>
-      getApiClient().listKnowledge(input),
-    get: (level: import("@ai-collab/protocol").KnowledgeLevel, slug: string) =>
-      getApiClient().getKnowledge(level, slug),
-    listChanges: (input?: import("@ai-collab/protocol").ListKnowledgeChangesInput) =>
-      getApiClient().listKnowledgeChanges(input),
-  },
-
-  workflows: {
-    list: () => getApiClient().listWorkflows(),
-    get: (workflowId: string) => getApiClient().getWorkflow(workflowId),
-    create: (input: {
-      id?: string;
-      name: string;
-      description?: string | null;
-      role: import("@ai-collab/protocol").AgentRole;
-      nodes: import("@ai-collab/protocol").WorkflowNodeDefinition[];
-      edges: import("@ai-collab/protocol").WorkflowEdgeDefinition[];
-      enabled?: boolean;
-    }) => getApiClient().createWorkflow(input),
-    update: (workflowId: string, input: {
-      name?: string;
-      description?: string | null;
-      role?: import("@ai-collab/protocol").AgentRole;
-      nodes?: import("@ai-collab/protocol").WorkflowNodeDefinition[];
-      edges?: import("@ai-collab/protocol").WorkflowEdgeDefinition[];
-      enabled?: boolean;
-    }) => getApiClient().updateWorkflow(workflowId, input),
-    delete: (workflowId: string) => getApiClient().deleteWorkflow(workflowId),
+    list: (input?: { level?: KnowledgeLevel; tag?: string; query?: string }) =>
+      getApiClient().listKnowledge(input ?? {}),
+    get: (level: KnowledgeLevel, slug: string) => getApiClient().getKnowledge(level, slug),
+    listChanges: (input?: { level?: KnowledgeLevel; slug?: string; limit?: number }) =>
+      getApiClient().listKnowledgeChanges(input ?? {}),
   },
 
   webRuntimes: {
@@ -118,32 +93,15 @@ export const api = {
       toolsetId?: string | null;
     }) => getApiClient().createWebAgentRuntime(input),
     get: (runtimeId: string) => getApiClient().getWebAgentRuntime(runtimeId),
-    update: (runtimeId: string, input: {
-      toolsetId?: string | null;
-      modelConfigId?: string;
-      status?: string;
-      currentStep?: string | null;
-      lastError?: string | null;
-      lastTickAt?: string | null;
-    }) => getApiClient().updateWebAgentRuntime(runtimeId, input),
     delete: (runtimeId: string) => getApiClient().deleteWebAgentRuntime(runtimeId),
     start: (runtimeId: string) => getApiClient().startWebAgentRuntime(runtimeId),
     pause: (runtimeId: string) => getApiClient().pauseWebAgentRuntime(runtimeId),
     stop: (runtimeId: string) => getApiClient().stopWebAgentRuntime(runtimeId),
   },
 
-  userProfile: {
-    get: (agentId: string) => getApiClient().getUserProfile(agentId),
-    set: (key: string, value: string, agentId: string) =>
-      getApiClient().setUserProfileEntry(agentId, key, value),
-    delete: (key: string, agentId: string) =>
-      getApiClient().deleteUserProfileEntry(agentId, key),
-  },
-
   userPreferences: {
-    list: (input?: import("@ai-collab/protocol").ListUserPreferencesInput) =>
-      getApiClient().listUserPreferences(input),
-    upsert: (key: string, input: Omit<import("@ai-collab/protocol").UpsertUserPreferenceInput, "key">) =>
+    list: (input?: ListUserPreferencesInput) => getApiClient().listUserPreferences(input),
+    upsert: (key: string, input: Omit<UpsertUserPreferenceInput, "key">) =>
       getApiClient().upsertUserPreference(key, input),
     delete: (key: string) => getApiClient().deleteUserPreference(key),
   },
@@ -170,26 +128,40 @@ export const api = {
 
   models: {
     list: () => getApiClient().listModels(),
+    create: (input: {
+      name: string;
+      provider: string;
+      modelId: string;
+      baseUrl?: string;
+      apiKey?: string;
+    }) => getApiClient().createModel(input),
+    delete: (modelId: string) => getApiClient().deleteModel(modelId),
   },
 
   mcpServers: {
     list: () => getApiClient().listMcpServers(),
-    create: (input: { name: string; url: string; description?: string | null; transport?: "stdio" | "sse"; headers?: Record<string, string> | null; enabled?: boolean }) =>
-      getApiClient().createMcpServer(input),
-    update: (serverId: string, input: { name?: string; url?: string; description?: string | null; transport?: "stdio" | "sse"; headers?: Record<string, string> | null; enabled?: boolean }) =>
-      getApiClient().updateMcpServer(serverId, input),
+    create: (input: {
+      name: string;
+      url: string;
+      description?: string | null;
+      transport?: "stdio" | "sse";
+      headers?: Record<string, string> | null;
+      enabled?: boolean;
+    }) => getApiClient().createMcpServer(input),
+    update: (serverId: string, input: {
+      name?: string;
+      url?: string;
+      description?: string | null;
+      transport?: "stdio" | "sse";
+      headers?: Record<string, string> | null;
+      enabled?: boolean;
+    }) => getApiClient().updateMcpServer(serverId, input),
     delete: (serverId: string) => getApiClient().deleteMcpServer(serverId),
     listTools: (serverId: string) => getApiClient().listMcpServerTools(serverId),
   },
 
-  agentProfiles: {
-    get: (profileId: string) => getApiClient().getAgentProfile(profileId),
-    list: () => getApiClient().listAgentProfiles(),
-  },
-
   mcp: {
-    call: (input: import("@ai-collab/protocol").McpCallRequest) =>
-      getApiClient().callMcpTool(input),
+    call: (input: McpCallRequest) => getApiClient().callMcpTool(input),
     getTools: (options?: { toolsetId?: string; extraToolNames?: string[] }) =>
       getApiClient().getMcpTools(options),
   },
@@ -199,15 +171,10 @@ export const api = {
       modelConfigId?: string;
       messages: Array<{ role: string; content: string }>;
       stream?: boolean;
-      tools?: import("@ai-collab/protocol").McpToolDefinition[];
+      tools?: McpToolDefinition[];
       tool_choice?: unknown;
       temperature?: number;
     }) => getApiClient().llmChat(input),
-  },
-
-  skills: {
-    get: (skillId: string) => getApiClient().getSkill(skillId),
-    list: () => getApiClient().listSkills(),
   },
 } as const;
 

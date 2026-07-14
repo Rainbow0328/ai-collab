@@ -22,8 +22,6 @@ export type UseWebSocketOptions = Partial<AiCollabWebSocketClientOptions> & {
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const clientRef = useRef<AiCollabWebSocketClient | null>(null);
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected" | "reconnecting">("disconnected");
-  const [lastMessage, setLastMessage] = useState<WsServerMessage | null>(null);
-  const [lastProgressUpdate, setLastProgressUpdate] = useState<WsProgressUpdateNotification | null>(null);
   const optionsRef = useRef(options);
 
   useEffect(() => {
@@ -34,7 +32,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     if (clientRef.current) {
       clientRef.current.disconnect();
     }
-
     setStatus("connecting");
     const client = new AiCollabWebSocketClient(opts);
 
@@ -53,7 +50,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     });
 
     client.on("inbox:message", (message: WsInboxMessageNotification) => {
-      setLastMessage(message);
       optionsRef.current.onInboxMessage?.(message);
       optionsRef.current.onMessage?.(message);
     });
@@ -64,20 +60,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     });
 
     client.on("progress:update", (message: WsProgressUpdateNotification) => {
-      setLastProgressUpdate(message);
       optionsRef.current.onProgressUpdate?.(message);
       optionsRef.current.onMessage?.(message);
     });
 
     client.on("console:update", (message: WsConsoleUpdateNotification) => {
-      setLastMessage(message);
       optionsRef.current.onConsoleUpdate?.(message);
       optionsRef.current.onMessage?.(message);
     });
 
     client.connect();
     clientRef.current = client;
-
     return client;
   }, []);
 
@@ -89,14 +82,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     }
   }, []);
 
-  const send = useCallback((message: never) => {
-    clientRef.current?.send(message);
-  }, []);
-
   useEffect(() => {
-    return () => {
-      disconnect();
-    };
+    return () => { disconnect(); };
   }, [disconnect]);
 
   useEffect(() => {
@@ -116,9 +103,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       sessionId: options.sessionId,
     });
 
-    return () => {
-      disconnect();
-    };
+    return () => { disconnect(); };
   }, [
     options.enabled,
     options.baseUrl,
@@ -131,13 +116,5 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     disconnect,
   ]);
 
-  return {
-    status,
-    lastMessage,
-    lastProgressUpdate,
-    connect,
-    disconnect,
-    send,
-    client: clientRef.current,
-  };
+  return { status, disconnect, client: clientRef.current };
 }
