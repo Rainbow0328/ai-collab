@@ -1,5 +1,5 @@
 {
-  "name": "@ai-collab/core",
+  "name": "@loopmarshal/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,9 +17,9 @@
     "test": "vitest run --dir src"
   },
   "dependencies": {
-    "@ai-collab/protocol": "workspace:*",
-    "@ai-collab/shared": "workspace:*",
-    "@ai-collab/store": "workspace:*",
+    "@loopmarshal/protocol": "workspace:*",
+    "@loopmarshal/shared": "workspace:*",
+    "@loopmarshal/store": "workspace:*",
     "@fastify/websocket": "^11.0.2",
     "fastify": "^5.8.5",
     "pino": "^9.6.0",

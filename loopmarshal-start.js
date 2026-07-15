@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * AI Collab 统一启动脚本
+ * LoopMarshal 统一启动脚本
  * 同时启动前端和后端
  */
 
@@ -131,7 +131,7 @@ function startFrontend() {
 function main() {
   console.log('');
   console.log(`${colors.blue}╔═══════════════════════════════════════════════════════════╗${colors.reset}`);
-  console.log(`${colors.blue}║${colors.reset}  ${colors.cyan}🚀 AI Collab - 本地多AI协同开发工具${colors.reset}                     ${colors.blue}║${colors.reset}`);
+  console.log(`${colors.blue}║${colors.reset}  ${colors.cyan}🚀 LoopMarshal - 本地多AI协同开发工具${colors.reset}                  ${colors.blue}║${colors.reset}`);
   console.log(`${colors.blue}╚═══════════════════════════════════════════════════════════╝${colors.reset}`);
   console.log('');
 
@@ -152,7 +152,7 @@ function main() {
 
     console.log('');
     console.log(`${colors.green}╔═══════════════════════════════════════════════════════════╗${colors.reset}`);
-    console.log(`${colors.green}║${colors.reset}  ${colors.cyan}✅ AI Collab 启动成功！${colors.reset}                                  ${colors.green}║${colors.reset}`);
+    console.log(`${colors.green}║${colors.reset}  ${colors.cyan}✅ LoopMarshal 启动成功！${colors.reset}                               ${colors.green}║${colors.reset}`);
     console.log(`${colors.green}╠═══════════════════════════════════════════════════════════╣${colors.reset}`);
     console.log(`${colors.green}║${colors.reset}  ${colors.blue}📱 前端地址:${colors.reset} http://localhost:5173                      ${colors.green}║${colors.reset}`);
     console.log(`${colors.green}║${colors.reset}  ${colors.blue}🔌 后端地址:${colors.reset} http://127.0.0.1:42688                     ${colors.green}║${colors.reset}`);

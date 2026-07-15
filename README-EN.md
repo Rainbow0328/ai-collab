@@ -1,4 +1,4 @@
-# ai-collab
+# loopmarshal
 
 > A runtime for stable collaboration of multiple AI agents on the same project
 
@@ -15,7 +15,7 @@ When you have multiple AI clients like Trae, Cursor, and Claude Desktop working 
 - Context synchronization relies entirely on human effort
 - No unified session state management
 
-`ai-collab` solves this exact problem: let one AI act as Host to orchestrate, while other AI agents act as Workers specializing in their respective areas, forming a stable collaboration loop.
+`loopmarshal` solves this exact problem: let one AI act as Host to orchestrate, while other AI agents act as Workers specializing in their respective areas, forming a stable collaboration loop.
 
 #### Use Cases
 
@@ -69,7 +69,7 @@ Workers enter the wait chain via the `await` command, automatically claiming tas
 ## Technical Architecture
 
 ```
-ai-collab/
+loopmarshal/
 ├── apps/
 │   ├── cli/           # CLI entry (23 commands)
 │   ├── core/          # Local collaboration service (Fastify HTTP)
@@ -98,8 +98,8 @@ ai-collab/
 
 ```powershell
 # Clone repository
-git clone https://github.com/<owner>/ai-collab.git
-cd ai-collab
+git clone https://github.com/<owner>/loopmarshal.git
+cd loopmarshal
 
 # Install dependencies and build
 pnpm install
@@ -107,7 +107,7 @@ pnpm run build
 pnpm run link:cli
 
 # Start service (backend + web dashboard)
-ai-collab start
+loopmarshal start
 ```
 
 After startup, both the backend service (Fastify, port 42688) and the web dashboard (Vite, port 5173) will be running. Use `--no-web` to skip the frontend, `--daemon` to run in background.
@@ -189,47 +189,47 @@ But Rule is a hard law that must not be violated under any circumstances. This i
 ### Service Management
 
 ```bash
-ai-collab start [--no-web] [--daemon]   # Start service (with web dashboard)
-ai-collab stop                           # Stop service
-ai-collab status                         # Check status
-ai-collab doctor                         # Diagnostic check
-ai-collab logs                           # View logs
+loopmarshal start [--no-web] [--daemon]   # Start service (with web dashboard)
+loopmarshal stop                           # Stop service
+loopmarshal status                         # Check status
+loopmarshal doctor                         # Diagnostic check
+loopmarshal logs                           # View logs
 ```
 
 ### Session & Agent
 
 ```bash
-ai-collab attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<duty>"
-ai-collab reset <name> --session <session>
-ai-collab members --session <session>
+loopmarshal attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<duty>"
+loopmarshal reset <name> --session <session>
+loopmarshal members --session <session>
 ```
 
 ### Task Dispatch & Execution
 
 ```bash
-ai-collab dispatch-many --session <session> --tasks '[...]'
-ai-collab await <name> --session <session>
-ai-collab submit <name> --session <session> --content "<result>"
-ai-collab resolve --session <session> --message-id <id> --action <approve|reject|revise>
+loopmarshal dispatch-many --session <session> --tasks '[...]'
+loopmarshal await <name> --session <session>
+loopmarshal submit <name> --session <session> --content "<result>"
+loopmarshal resolve --session <session> --message-id <id> --action <approve|reject|revise>
 ```
 
 ### Knowledge Base
 
 ```bash
-ai-collab knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
-ai-collab knowledge list --session <session>
-ai-collab knowledge judge --session <session> --message-id <id>
-ai-collab knowledge fulfil-judgement --session <session> --judgement-id <id>
-ai-collab knowledge read-current --session <session>
-ai-collab knowledge update-current --session <session>
+loopmarshal knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
+loopmarshal knowledge list --session <session>
+loopmarshal knowledge judge --session <session> --message-id <id>
+loopmarshal knowledge fulfil-judgement --session <session> --judgement-id <id>
+loopmarshal knowledge read-current --session <session>
+loopmarshal knowledge update-current --session <session>
 ```
 
 ### User Profile
 
 ```bash
-ai-collab profile get <name> --session <session> [key]
-ai-collab profile set <name> --session <session> <key> <value>
-ai-collab profile delete <name> --session <session> <key>
+loopmarshal profile get <name> --session <session> [key]
+loopmarshal profile set <name> --session <session> <key> <value>
+loopmarshal profile delete <name> --session <session> <key>
 ```
 
 ---
@@ -240,26 +240,26 @@ All data is stored locally, never uploaded to cloud.
 
 | Content | Default Location |
 |---------|-----------------|
-| Project config | `.ai-collab/config.json` |
-| Session/message/task database | `.ai-collab/ai-collab.sqlite` |
+| Project config | `.loopmarshal/config.json` |
+| Session/message/task database | `.loopmarshal/loopmarshal.sqlite` |
 | Runtime logs | `log/log.txt` |
-| CLI local state (Windows) | `%LOCALAPPDATA%\ai-collab` |
+| CLI local state (Windows) | `%LOCALAPPDATA%\loopmarshal` |
 
 ### Environment Variables
 
 | Variable Name | Purpose |
 |---------------|---------|
-| `AI_COLLAB_LOG_DIR` | Custom log directory |
-| `AI_COLLAB_COMMAND_TRACE_FILE` | Custom command trace file |
-| `AI_COLLAB_CLI_STATE_DIR` | Custom CLI state directory |
-| `AI_COLLAB_TIMEZONE` | Custom timezone display |
+| `LOOPMARSHAL_LOG_DIR` | Custom log directory |
+| `LOOPMARSHAL_COMMAND_TRACE_FILE` | Custom command trace file |
+| `LOOPMARSHAL_CLI_STATE_DIR` | Custom CLI state directory |
+| `LOOPMARSHAL_TIMEZONE` | Custom timezone display |
 
 ---
 
 ## Repository Structure
 
 ```text
-ai-collab/
+loopmarshal/
 ├── apps/
 │   ├── cli/           # Command line entry
 │   ├── core/          # Local collaboration service
@@ -307,7 +307,7 @@ The project is under active development, but the core workflow is already stable
 ### Q: Why not build a fully autonomous agent?
 
 Because current AI can't yet achieve 100% reliable autonomous planning and execution.
-`ai-collab` follows a **human-in-the-loop collaborative** approach:
+`loopmarshal` follows a **human-in-the-loop collaborative** approach:
 - AI handles execution, integration, communication
 - Humans handle final acceptance and direction control
 
@@ -345,7 +345,7 @@ The wait chain automatically:
 
 ## One Final Note
 
-`ai-collab` doesn't aim to replace you with AI -- it simply makes managing multiple AI workers less exhausting.
+`loopmarshal` doesn't aim to replace you with AI -- it simply makes managing multiple AI workers less exhausting.
 
 ---
 

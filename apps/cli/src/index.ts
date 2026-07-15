@@ -7,10 +7,10 @@ import path from "node:path";
 import fs from "node:fs";
 import { Command } from "commander";
 import {
-  createAiCollabClient,
-  AiCollabSdkError
-} from "@ai-collab/sdk";
-import { wrapForDisplay } from "@ai-collab/shared";
+  createLoopMarshalClient,
+  LoopMarshalSdkError
+} from "@loopmarshal/sdk";
+import { wrapForDisplay } from "@loopmarshal/shared";
 import {
   errorCodes,
   type Agent,
@@ -20,7 +20,7 @@ import {
   type MessageRecord,
   type MessageType,
   type WindowBinding
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 import {
   clearCliIdentity,
@@ -86,10 +86,10 @@ import {
 
 const projectRoot = process.cwd();
 const program = new Command();
-const client = createAiCollabClient({
+const client = createLoopMarshalClient({
   headers: {
-    "x-ai-collab-client": "cli",
-    "x-ai-collab-process": String(process.pid)
+    "x-loopmarshal-client": "cli",
+    "x-loopmarshal-process": String(process.pid)
   }
 });
 const cliLeaseOwnerToken = `cli:${process.pid}:${randomUUID()}`;
@@ -99,7 +99,7 @@ const runtimeTerminalProgressHints = [
   "background"
 ] as const;
 const finalRuntimeResultPreamble =
-  "INTERNAL: this JSON is the final completed result of the ai-collab wait command. Ignore any earlier terminal progress text such as running, no output, background status, or streaming command wrappers. ";
+  "INTERNAL: this JSON is the final completed result of the loopmarshal wait command. Ignore any earlier terminal progress text such as running, no output, background status, or streaming command wrappers. ";
 
 const printJson = (value: unknown) => {
   console.log(JSON.stringify(wrapForDisplay(value), null, 2));
@@ -150,7 +150,7 @@ const requireLiveCliIdentity = async (
       await clearCliIdentity(projectRoot, identity);
       await clearWindowProfilesForIdentity(projectRoot, identity);
       throw new Error(
-        `identity="${identity}" 的本地绑定已失效，已自动清理：远端会话中已不存在成员 "${context.agentName}"。请重新执行 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。`
+        `identity="${identity}" 的本地绑定已失效，已自动清理：远端会话中已不存在成员 "${context.agentName}"。请重新执行 loopmarshal attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。`
       );
     }
   } catch (error: unknown) {
@@ -176,7 +176,7 @@ const requireLiveCliIdentity = async (
         await clearWindowProfilesForIdentity(projectRoot, identity);
       }
       throw new Error(
-        `identity="${identity}" 的本地绑定已失效，已自动清理：${error.message}。请重新执行 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。`
+        `identity="${identity}" 的本地绑定已失效，已自动清理：${error.message}。请重新执行 loopmarshal attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。`
       );
     }
 
@@ -1356,13 +1356,13 @@ const computeAdaptiveSleepMs = (options: {
 const isSdkErrorCode = (
   error: unknown,
   code: string
-): error is AiCollabSdkError => {
-  return error instanceof AiCollabSdkError && error.code === code;
+): error is LoopMarshalSdkError => {
+  return error instanceof LoopMarshalSdkError && error.code === code;
 };
 
-const isWaitChainControlError = (error: unknown): error is AiCollabSdkError => {
+const isWaitChainControlError = (error: unknown): error is LoopMarshalSdkError => {
   return (
-    error instanceof AiCollabSdkError &&
+    error instanceof LoopMarshalSdkError &&
     (error.code === errorCodes.identityBusy ||
       error.code === errorCodes.waitChainSuperseded)
   );
@@ -1406,7 +1406,7 @@ const buildRuntimeResumeCommand = (
   subcommand: string,
   options: Array<[string, string | boolean | string[] | undefined]>
 ): string => {
-  const parts = ["ai-collab", "runtime", subcommand];
+  const parts = ["loopmarshal", "runtime", subcommand];
 
   for (const [flag, value] of options) {
     appendCommandOption(parts, flag, value);
@@ -1415,8 +1415,8 @@ const buildRuntimeResumeCommand = (
   return parts.join(" ");
 };
 
-const buildAiCollabTerminalCommand = (args: string[]) => {
-  return ["ai-collab", ...args.map(shellEscape)].join(" ");
+const buildLoopMarshalTerminalCommand = (args: string[]) => {
+  return ["loopmarshal", ...args.map(shellEscape)].join(" ");
 };
 
 type WindowWaitAliasName = (typeof WINDOW_WAIT_ALIAS_NAMES)[number];
@@ -1756,10 +1756,10 @@ const resolveWindowWaitContinuationState = (options: {
       })
     : null;
   const nextCommand = nextCommandArgs
-    ? ["ai-collab", ...nextCommandArgs.map(shellEscape)].join(" ")
+    ? ["loopmarshal", ...nextCommandArgs.map(shellEscape)].join(" ")
     : null;
   const nextTerminalCommand = nextCommandArgs
-    ? buildAiCollabTerminalCommand(nextCommandArgs)
+    ? buildLoopMarshalTerminalCommand(nextCommandArgs)
     : null;
 
   return {
@@ -1881,8 +1881,8 @@ const buildExecuteInternalCommandResult = (
     workflowDirective?: string;
   }
 ) => {
-  const terminalCommand = buildAiCollabTerminalCommand(options.commandArgs);
-  const nextCommand = ["ai-collab", ...options.commandArgs.map(shellEscape)].join(
+  const terminalCommand = buildLoopMarshalTerminalCommand(options.commandArgs);
+  const nextCommand = ["loopmarshal", ...options.commandArgs.map(shellEscape)].join(
     " "
   );
 
@@ -2101,7 +2101,7 @@ const buildAlreadyRunningResult = (options: {
     FORBIDDEN_PURE_WAIT_COMMANDS,
     automationState,
     internalInstruction:
-      `${finalRuntimeResultPreamble}Do not reply to the user. Do not summarize this result. A wait chain for this identity is already running. Stop here silently. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command. Only the ai-collab wait chain is allowed.`,
+      `${finalRuntimeResultPreamble}Do not reply to the user. Do not summarize this result. A wait chain for this identity is already running. Stop here silently. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command. Only the loopmarshal wait chain is allowed.`,
     existingRun: {
       pid: options.existing.pid,
       acquiredAt: options.existing.acquiredAt
@@ -2425,17 +2425,17 @@ const runWorkerAwaitTask = async (
     waitStrategy: "runtime_only" as const,
     sleepCommandForbidden: true,
     FORBIDDEN_PURE_WAIT_COMMANDS,
-    allowedWaitCommand: "ai-collab await" as const,
+    allowedWaitCommand: "loopmarshal await" as const,
     automationState: loopResult.matched
       ? ("resume_claimed_task" as const)
       : loopResult.superseded
         ? ("wait_chain_superseded" as const)
         : ("wait_loop_active" as const),
     internalInstruction: loopResult.matched
-      ? `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed a worker task, so the current turn must continue immediately into task processing. After finishing, report with ai-collab submit. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
+      ? `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed a worker task, so the current turn must continue immediately into task processing. After finishing, report with loopmarshal submit. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
       : loopResult.superseded
         ? `${finalRuntimeResultPreamble}Do not reply to the user. This wait chain has been superseded by a newer wait command from the same window. Stop here silently and let the newer wait chain continue. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command.`
-        : `${finalRuntimeResultPreamble}Do not reply to the user. No task arrived in this round. If collaboration is still active, continue waiting silently. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command. Only ai-collab await is allowed for waiting.`,
+        : `${finalRuntimeResultPreamble}Do not reply to the user. No task arrived in this round. If collaboration is still active, continue waiting silently. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command. Only loopmarshal await is allowed for waiting.`,
     startedAt: loopResult.startedAt,
     finishedAt: loopResult.finishedAt
   };
@@ -2684,7 +2684,7 @@ const runHostAwaitMessage = async (
     waitStrategy: "runtime_only" as const,
     sleepCommandForbidden: true,
     FORBIDDEN_PURE_WAIT_COMMANDS,
-    allowedWaitCommand: "ai-collab await" as const,
+    allowedWaitCommand: "loopmarshal await" as const,
     automationState: loopResult.matched
       ? loopResult.itemKind === "task"
         ? ("host_execute_local" as const)
@@ -2696,13 +2696,13 @@ const runHostAwaitMessage = async (
         : ("host_wait_loop_active" as const),
     internalInstruction: loopResult.matched
       ? loopResult.itemKind === "task"
-        ? `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed a host task, so the current turn must continue immediately into host-side processing. After finishing, resolve it with ai-collab resolve. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
-        : `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed the worker report, so the current turn must continue immediately into report review. After finishing the review, resolve it with ai-collab resolve. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
+        ? `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed a host task, so the current turn must continue immediately into host-side processing. After finishing, resolve it with loopmarshal resolve. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
+        : `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed the worker report, so the current turn must continue immediately into report review. After finishing the review, resolve it with loopmarshal resolve. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
       : loopResult.superseded
         ? `${finalRuntimeResultPreamble}Do not reply to the user. This wait chain has been superseded by a newer wait command from the same window. Stop here silently and let the newer wait chain continue. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command.`
         : allWorkersWaiting
           ? `${finalRuntimeResultPreamble}All workers in this session are waiting or idle and there are no pending or claimed messages. Do not continue the wait loop. Continue host planning now: check whether the user intent has been satisfied, decide whether knowledge needs to be updated, dispatch the next tasks if work remains, or report closure to the user.`
-        : `${finalRuntimeResultPreamble}Do not reply to the user. No host message arrived in this round. If collaboration is still active, continue waiting silently. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command. Only ai-collab await is allowed for waiting.`,
+        : `${finalRuntimeResultPreamble}Do not reply to the user. No host message arrived in this round. If collaboration is still active, continue waiting silently. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command. Only loopmarshal await is allowed for waiting.`,
     acknowledgedMessageIds: loopResult.acknowledgedMessageIds,
     startedAt: loopResult.startedAt,
     finishedAt: loopResult.finishedAt
@@ -4109,7 +4109,7 @@ const renderSdkError = (error: unknown) => {
     "statusCode" in error &&
     "message" in error
   ) {
-    const sdkError = error as AiCollabSdkError;
+    const sdkError = error as LoopMarshalSdkError;
     return {
       message: sdkError.message,
       statusCode: sdkError.statusCode,
@@ -4129,8 +4129,8 @@ const renderSdkError = (error: unknown) => {
 };
 
 program
-  .name("ai-collab")
-  .description("CLI for the local ai-collab collaboration hub")
+  .name("loopmarshal")
+  .description("CLI for the local loopmarshal collaboration hub")
   .version("0.1.0");
 
 program
@@ -4407,7 +4407,7 @@ program
 
         if (!claimedMessage) {
           throw new Error(
-            `name="${name}" 当前没有已领取的 worker 任务，不能执行 submit。请先执行 ai-collab await ${name} --session ${options.session}。`
+            `name="${name}" 当前没有已领取的 worker 任务，不能执行 submit。请先执行 loopmarshal await ${name} --session ${options.session}。`
           );
         }
         trace.step("binding_validated", {
@@ -4579,7 +4579,7 @@ program
 
         if (!claimedMessage) {
           throw new Error(
-            `name="${name}" 当前没有已领取的 host 消息，不能执行 resolve。请先执行 ai-collab await ${name} --session ${options.session}。`
+            `name="${name}" 当前没有已领取的 host 消息，不能执行 resolve。请先执行 loopmarshal await ${name} --session ${options.session}。`
           );
         }
 
@@ -5073,7 +5073,7 @@ const executeWindowWaitCommand = async (options: {
 
 program
   .command("start")
-  .description("Start the local ai-collab core service and web dashboard")
+  .description("Start the local loopmarshal core service and web dashboard")
   .option("--daemon", "Start the local core as a background process")
   .option("--core-only", "Start only the core service without the web dashboard")
   .action(async (options: { daemon?: boolean; coreOnly?: boolean }) => {
@@ -5103,7 +5103,7 @@ program
       JSON.stringify(
         {
           mode: "foreground",
-          message: "Starting ai-collab core in the foreground. Press Ctrl+C to stop.",
+          message: "Starting loopmarshal core in the foreground. Press Ctrl+C to stop.",
           dashboardUrl: runtime.getDashboardUrl(),
           webDashboardUrl: startWeb ? "http://localhost:5173" : null,
           webDir: startWeb ? webDir : null
@@ -5117,7 +5117,7 @@ program
 
 program
   .command("stop")
-  .description("Stop the local ai-collab core service")
+  .description("Stop the local loopmarshal core service")
   .action(async () => {
     const runtime = await loadRuntimeModule();
     const status = await runtime.stopCore(projectRoot);
@@ -5135,7 +5135,7 @@ program
 
 program
   .command("status")
-  .description("Show current ai-collab service status")
+  .description("Show current loopmarshal service status")
   .action(async () => {
     const runtime = await loadRuntimeModule();
     const status = await runtime.getCoreStatus(projectRoot);
@@ -5158,8 +5158,12 @@ program
     );
   });
 
-program
-  .command("mcp:status")
+const mcpCommand = program
+  .command("mcp")
+  .description("Manage LoopMarshal MCP integration");
+
+mcpCommand
+  .command("status")
   .description("Show status of MCP stdio servers connected to the core")
   .action(async () => {
     const runtime = await loadRuntimeModule();
@@ -5168,7 +5172,7 @@ program
       console.log(
         JSON.stringify(
           {
-            error: "ai-collab core is not running. Start it with 'ai-collab start --daemon'."
+            error: "loopmarshal core is not running. Start it with 'loopmarshal start --daemon'."
           },
           null,
           2
@@ -5219,7 +5223,7 @@ program
 
 program
   .command("config:init")
-  .description("Create the default .ai-collab config for the current project")
+  .description("Create the default .loopmarshal config for the current project")
   .action(async () => {
     const runtime = await loadRuntimeModule();
     const configPath = runtime.initializeConfig(projectRoot);
@@ -5234,9 +5238,9 @@ program
     );
   });
 
-program
-  .command("mcp:configure-timeout")
-  .description("Configure supported AI IDE MCP tool timeouts for ai-collab")
+mcpCommand
+  .command("configure-timeout")
+  .description("Configure supported AI IDE MCP tool timeouts for loopmarshal")
   .option("--target <target>", "auto, claude, codex, cursor, or trae", "auto")
   .option("--timeout <seconds>", "MCP client tool timeout seconds", "3600")
   .option("--dry-run", "Print planned changes without writing files", false)
@@ -5262,16 +5266,16 @@ program
     console.log(JSON.stringify({ results }, null, 2));
   });
 
-program
-  .command("mcp:serve")
-  .description("Start the ai-collab MCP stdio server (for IDE MCP integration)")
+mcpCommand
+  .command("serve")
+  .description("Start the loopmarshal MCP stdio server (for IDE MCP integration)")
   .action(async () => {
     // The MCP server module self-starts on import.
     await import("./mcp-stdio-server.js");
   });
 
-program
-  .command("mcp:setup")
+mcpCommand
+  .command("setup")
   .description("One-click setup: configure MCP server entry and timeouts for AI IDEs")
   .option("--target <target>", "auto, claude, codex, or cursor", "auto")
   .option("--timeout <seconds>", "MCP tool timeout seconds", "3600")

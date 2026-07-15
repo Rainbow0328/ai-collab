@@ -15,12 +15,12 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
-process.env.AI_COLLAB_LOG_ROTATION = "false";
+process.env.LOOPMARSHAL_LOG_ROTATION = "false";
 
 const smokePort = 42782;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
 const rootDir = process.cwd();
-const stateDir = resolve(rootDir, ".ai-collab-test", "smoke-websocket-console-update");
+const stateDir = resolve(rootDir, ".loopmarshal-test", "smoke-websocket-console-update");
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -67,13 +67,13 @@ const waitForConsoleReasons = (wsClient, expectedReasons, timeoutMs = 5_000) => 
 };
 
 const main = async () => {
-  await mkdir(resolve(rootDir, ".ai-collab-test"), { recursive: true });
+  await mkdir(resolve(rootDir, ".loopmarshal-test"), { recursive: true });
   await rm(stateDir, { recursive: true, force: true });
   await mkdir(stateDir, { recursive: true });
 
-  process.env.AI_COLLAB_KNOWLEDGE_ROOT = resolve(stateDir, ".knowledge");
-  const { startCoreServer } = await import("@ai-collab/core");
-  const { AiCollabWebSocketClient, createAiCollabClient } = await import("@ai-collab/sdk");
+  process.env.LOOPMARSHAL_KNOWLEDGE_ROOT = resolve(stateDir, ".knowledge");
+  const { startCoreServer } = await import("@loopmarshal/core");
+  const { LoopMarshalWebSocketClient, createLoopMarshalClient } = await import("@loopmarshal/sdk");
 
   const instance = await startCoreServer({
     host: "127.0.0.1",
@@ -83,7 +83,7 @@ const main = async () => {
   let wsClient;
 
   try {
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `ws-console-${Date.now()}`;
 
     const host = await client.attachSession({
@@ -99,7 +99,7 @@ const main = async () => {
       roleDescription: "execute tasks"
     });
 
-    wsClient = new AiCollabWebSocketClient({
+    wsClient = new LoopMarshalWebSocketClient({
       baseUrl: smokeBaseUrl,
       agentId: host.agent.id,
       sessionId: host.session.id,

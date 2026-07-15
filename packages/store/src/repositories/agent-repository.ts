@@ -20,7 +20,7 @@ import type {
   UpdateWindowBindingDefaultsInput,
   UpdateWindowRuntimeStateInput,
   WindowBinding
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 type AgentRow = Omit<Agent, "capabilities"> & { capabilitiesJson: string };
 

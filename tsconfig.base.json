@@ -16,11 +16,11 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "@ai-collab/core": ["apps/core/src/index.ts"],
-      "@ai-collab/protocol": ["packages/protocol/src/index.ts"],
-      "@ai-collab/store": ["packages/store/src/index.ts"],
-      "@ai-collab/sdk": ["packages/sdk/src/index.ts"],
-      "@ai-collab/shared": ["packages/shared/src/index.ts"]
+      "@loopmarshal/core": ["apps/core/src/index.ts"],
+      "@loopmarshal/protocol": ["packages/protocol/src/index.ts"],
+      "@loopmarshal/store": ["packages/store/src/index.ts"],
+      "@loopmarshal/sdk": ["packages/sdk/src/index.ts"],
+      "@loopmarshal/shared": ["packages/shared/src/index.ts"]
     }
   }
 }

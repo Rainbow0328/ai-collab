@@ -5,9 +5,9 @@ import type {
   WsProgressUpdateNotification,
   WsMessageClaimedNotification,
   WsConsoleUpdateNotification,
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
-export type AiCollabWebSocketClientOptions = {
+export type LoopMarshalWebSocketClientOptions = {
   baseUrl: string;
   agentId: string;
   sessionId: string;
@@ -30,14 +30,14 @@ type WebSocketEventMap = {
   maxReconnectAttemptsReached: [];
 };
 
-export class AiCollabWebSocketClient {
+export class LoopMarshalWebSocketClient {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
   private listeners: { [K in keyof WebSocketEventMap]?: ((...args: WebSocketEventMap[K]) => void)[] } = {};
 
-  constructor(private options: AiCollabWebSocketClientOptions) {}
+  constructor(private options: LoopMarshalWebSocketClientOptions) {}
 
   public on<K extends keyof WebSocketEventMap>(
     event: K,

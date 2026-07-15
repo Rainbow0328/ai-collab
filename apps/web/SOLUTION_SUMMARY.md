@@ -1,4 +1,4 @@
-# AI Collab 前端项目修复方案 - 方案3：纯 CSS
+# LoopMarshal 前端项目修复方案 - 方案3：纯 CSS
 
 ## 一、已完成的工作
 

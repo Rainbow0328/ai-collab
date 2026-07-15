@@ -14,7 +14,7 @@
  */
 import type { DatabaseSync } from "node:sqlite";
 
-import type { Session, SessionSummary } from "@ai-collab/protocol";
+import type { Session, SessionSummary } from "@loopmarshal/protocol";
 
 export class SessionRepository {
   public constructor(private readonly database: DatabaseSync) {}

@@ -3,8 +3,8 @@ import type {
   WsConsoleUpdateReason,
   WsInboxMessageNotification,
   WsProgressUpdateNotification,
-} from "@ai-collab/protocol";
-import { getLogger } from "@ai-collab/shared";
+} from "@loopmarshal/protocol";
+import { getLogger } from "@loopmarshal/shared";
 import type { FastifyRequest } from "fastify";
 
 const logger = getLogger();

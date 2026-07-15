@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import type { TaskEvent } from "@ai-collab/protocol";
+import type { TaskEvent } from "@loopmarshal/protocol";
 
 type TaskEventRow = Omit<TaskEvent, "payload"> & {
   payloadJson: string;

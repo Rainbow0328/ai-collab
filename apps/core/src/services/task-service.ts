@@ -5,13 +5,13 @@ import type {
   CreateTaskInput,
   Task,
   TaskEvent
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import type {
   AgentRepository,
   SessionRepository,
   TaskEventRepository,
   TaskRepository
-} from "@ai-collab/store";
+} from "@loopmarshal/store";
 
 import { coreErrors } from "../errors.js";
 

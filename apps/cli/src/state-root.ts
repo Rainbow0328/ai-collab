@@ -15,12 +15,12 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const defaultWindowsStateDirName = "ai-collab";
-const defaultPosixStateDirName = ".ai-collab";
+const defaultWindowsStateDirName = "loopmarshal";
+const defaultPosixStateDirName = ".loopmarshal";
 
 export const getCliStateRoot = (projectRoot: string): string => {
   void projectRoot;
-  const explicitStateRoot = process.env.AI_COLLAB_CLI_STATE_DIR?.trim();
+  const explicitStateRoot = process.env.LOOPMARSHAL_CLI_STATE_DIR?.trim();
   if (explicitStateRoot) {
     return explicitStateRoot;
   }
@@ -34,5 +34,5 @@ export const getCliStateRoot = (projectRoot: string): string => {
 };
 
 export const getLegacyProjectStateRoot = (projectRoot: string): string => {
-  return join(projectRoot, ".ai-collab");
+  return join(projectRoot, ".loopmarshal");
 };

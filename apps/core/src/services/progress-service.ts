@@ -17,7 +17,7 @@ import type {
   ListProgressFilter,
   Progress,
   UpsertProgressInput
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 const DEFAULT_TTL_SECONDS = 3600;
 

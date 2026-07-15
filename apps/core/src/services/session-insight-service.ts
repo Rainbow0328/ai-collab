@@ -15,12 +15,12 @@
 import type {
   SessionInsight,
   UpdateSessionInsightInput
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import {
   AgentRepository,
   SessionInsightRepository,
   SessionRepository
-} from "@ai-collab/store";
+} from "@loopmarshal/store";
 
 import { coreErrors } from "../errors.js";
 

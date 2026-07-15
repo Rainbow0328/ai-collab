@@ -1,4 +1,4 @@
-import type { ApiResponse } from "@ai-collab/protocol";
+import type { ApiResponse } from "@loopmarshal/protocol";
 
 export const successResponse = <T>(
   data: T,

@@ -14,12 +14,12 @@
  */
 import { rm } from "node:fs/promises";
 
-import { startCoreServer } from "@ai-collab/core";
-import { AiCollabSdkError, createAiCollabClient } from "@ai-collab/sdk";
+import { startCoreServer } from "@loopmarshal/core";
+import { LoopMarshalSdkError, createLoopMarshalClient } from "@loopmarshal/sdk";
 
 const smokePort = 42711;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
-const databasePath = ".ai-collab-test/smoke-session-lifecycle.sqlite";
+const databasePath = ".loopmarshal-test/smoke-session-lifecycle.sqlite";
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -32,7 +32,7 @@ const expectNotFound = async (task, label) => {
     await task();
   } catch (error) {
     if (
-      error instanceof AiCollabSdkError &&
+      error instanceof LoopMarshalSdkError &&
       error.statusCode === 404
     ) {
       return;
@@ -54,7 +54,7 @@ const main = async () => {
   });
 
   try {
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `lifecycle-${Date.now()}`;
 
     const host = await client.createSession({

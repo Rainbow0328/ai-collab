@@ -1,5 +1,5 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
-import type { WorkflowDefinitionRecord } from "@ai-collab/protocol";
+import type { WorkflowDefinitionRecord } from "@loopmarshal/protocol";
 
 export class WorkflowDefinitionRepository {
   public constructor(private readonly database: DatabaseSync) {}

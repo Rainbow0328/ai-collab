@@ -18,7 +18,7 @@ import type {
   ReviewStatus,
   SessionInsight,
   UpdateSessionInsightInput
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 type SessionInsightRow = {
   sessionId: string;

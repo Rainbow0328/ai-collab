@@ -1243,7 +1243,7 @@ function DetailSkeleton() {
 ### 任务 9：运行构建验证
 
 ```bash
-cd d:\code\ai-collab\apps\web && npx tsc -b && npx vite build
+cd d:\code\loopmarshal\apps\web && npx tsc -b && npx vite build
 ```
 
 **预期**：0 错误，构建成功。

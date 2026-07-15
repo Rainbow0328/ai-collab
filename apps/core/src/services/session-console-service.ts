@@ -11,7 +11,7 @@ import type {
   MessageType,
   Progress,
   SessionConsole,
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 import type { KnowledgeService } from "./knowledge-service.js";
 import type { MessageService } from "./message-service.js";

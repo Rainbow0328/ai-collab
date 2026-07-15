@@ -25,7 +25,7 @@ import {
   TaskRepository,
   WebAgentRuntimeRepository,
   WorkflowDefinitionRepository
-} from "@ai-collab/store";
+} from "@loopmarshal/store";
 
 import type { CoreConfig } from "./config.js";
 import { defaultCoreConfig } from "./config.js";
@@ -76,8 +76,8 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     modelConfigRepository.upsert({
       id: "default-model",
       name: "Default Model",
-      provider: process.env.AI_COLLAB_LLM_PROVIDER ?? "openai",
-      modelId: process.env.AI_COLLAB_LLM_MODEL ?? "gpt-4o-mini",
+      provider: process.env.LOOPMARSHAL_LLM_PROVIDER ?? "openai",
+      modelId: process.env.LOOPMARSHAL_LLM_MODEL ?? "gpt-4o-mini",
       apiKey: null,
       baseUrl: null,
       createdAt: timestamp,

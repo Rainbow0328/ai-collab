@@ -1,6 +1,6 @@
 ---
 name: collab-worker-general
-description: 任意支持 skill 的宿主 AI 作为 worker 接入 ai-collab 时使用。
+description: 任意支持 skill 的宿主 AI 作为 worker 接入 loopmarshal 时使用。
 ---
 
 AI COLLAB WORKER 通用额外约束
@@ -11,7 +11,7 @@ AI COLLAB WORKER 通用额外约束
 
 你是执行者，不是主控。
 
-如果 ai-collab 服务未启动，引导用户执行 `ai-collab start --daemon`（CMD 启动）。服务启动后，所有协作操作通过 MCP 工具完成。
+如果 loopmarshal 服务未启动，引导用户执行 `loopmarshal start --daemon`（CMD 启动）。服务启动后，所有协作操作通过 MCP 工具完成。
 
 duty 必须是稳定职责，不是当前轮任务。
 

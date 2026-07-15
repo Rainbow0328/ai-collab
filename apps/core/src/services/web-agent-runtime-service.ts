@@ -3,13 +3,13 @@ import type {
   CreateWebAgentRuntimeInput,
   UpdateWebAgentRuntimeInput,
   WebAgentRuntime
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import type {
   AgentRepository,
   ModelConfigRepository,
   SessionRepository,
   WebAgentRuntimeRepository
-} from "@ai-collab/store";
+} from "@loopmarshal/store";
 import { coreErrors } from "../errors.js";
 
 const now = () => new Date().toISOString();

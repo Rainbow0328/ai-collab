@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 import { randomUUID } from "node:crypto";
-import { appendProjectLogEntry, getProjectLogPath } from "@ai-collab/shared";
+import { appendProjectLogEntry, getProjectLogPath } from "@loopmarshal/shared";
 
 export type CommandTraceEvent =
   | "command_start"
@@ -55,7 +55,7 @@ type CommandTraceEntry = {
 };
 
 const getCommandTracePath = (projectRoot: string): string => {
-  return process.env.AI_COLLAB_COMMAND_TRACE_FILE ?? getProjectLogPath(projectRoot);
+  return process.env.LOOPMARSHAL_COMMAND_TRACE_FILE ?? getProjectLogPath(projectRoot);
 };
 
 const serializeTraceData = (value: unknown): unknown => {

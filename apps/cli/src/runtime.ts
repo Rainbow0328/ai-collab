@@ -47,7 +47,7 @@ export const getDashboardUrl = (metadata?: RuntimeMetadata | null): string => {
 };
 
 const ensureRuntimeDir = (projectRoot: string): string => {
-  const runtimeDir = join(projectRoot, ".ai-collab", "runtime");
+  const runtimeDir = join(projectRoot, ".loopmarshal", "runtime");
   mkdirSync(runtimeDir, { recursive: true });
   return runtimeDir;
 };
@@ -61,7 +61,7 @@ const getLogPath = (projectRoot: string): string => {
 };
 
 const getConfigPath = (projectRoot: string): string => {
-  return join(projectRoot, ".ai-collab", "config.json");
+  return join(projectRoot, ".loopmarshal", "config.json");
 };
 
 const readRuntimeMetadata = (projectRoot: string): RuntimeMetadata | null => {
@@ -101,7 +101,7 @@ const isProcessRunning = (pid: number): boolean => {
 };
 
 const getCoreEntryPath = (): string => {
-  const resolved = import.meta.resolve("@ai-collab/core");
+  const resolved = import.meta.resolve("@loopmarshal/core");
   return fileURLToPath(resolved);
 };
 
@@ -211,7 +211,7 @@ export const runCoreForeground = async (
 
   const running = await isCoreReachable();
   if (running) {
-    throw new Error("ai-collab core is already running on 127.0.0.1:42688.");
+    throw new Error("loopmarshal core is already running on 127.0.0.1:42688.");
   }
 
   // Spawn the web dev server (vite) if a web directory is provided.
@@ -243,7 +243,7 @@ export const runCoreForeground = async (
     });
   }
 
-  const { startCoreServer } = await import("@ai-collab/core");
+  const { startCoreServer } = await import("@loopmarshal/core");
   const instance = await startCoreServer();
   const metadata: RuntimeMetadata = {
     pid: process.pid,
@@ -348,7 +348,7 @@ export const getRegisteredMcpServers = async (
 
 /**
  * Kill all MCP stdio servers registered with the core service.
- * Called during `ai-collab stop` to ensure MCP servers don't outlive the core.
+ * Called during `loopmarshal stop` to ensure MCP servers don't outlive the core.
  */
 const killRegisteredMcpServers = async (
   host = defaultHost,

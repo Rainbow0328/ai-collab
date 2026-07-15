@@ -37,7 +37,7 @@ export const defaultConfig: AppConfig = {
   core: {
     host: "127.0.0.1",
     port: 42688,
-    databasePath: ".ai-collab/ai-collab.sqlite"
+    databasePath: ".loopmarshal/loopmarshal.sqlite"
   },
   websocket: {
     enabled: false,
@@ -56,7 +56,7 @@ export const defaultConfig: AppConfig = {
     enableRotation: true,
     maxFileSize: "10MB",
     maxFiles: 5,
-    destination: ".ai-collab/logs/core.log"
+    destination: ".loopmarshal/logs/core.log"
   }
 };
 
@@ -76,52 +76,52 @@ export const loadConfig = (overrides?: Partial<AppConfig>): AppConfig => {
 
   return {
     core: {
-      host: env.AI_COLLAB_HOST ?? defaultConfig.core.host,
-      port: parseNumber(env.AI_COLLAB_PORT, defaultConfig.core.port),
-      databasePath: env.AI_COLLAB_DATABASE_PATH ?? defaultConfig.core.databasePath
+      host: env.LOOPMARSHAL_HOST ?? defaultConfig.core.host,
+      port: parseNumber(env.LOOPMARSHAL_PORT, defaultConfig.core.port),
+      databasePath: env.LOOPMARSHAL_DATABASE_PATH ?? defaultConfig.core.databasePath
     },
     websocket: {
-      enabled: parseBoolean(env.AI_COLLAB_WS_ENABLED, defaultConfig.websocket.enabled),
+      enabled: parseBoolean(env.LOOPMARSHAL_WS_ENABLED, defaultConfig.websocket.enabled),
       heartbeatIntervalSeconds: parseNumber(
-        env.AI_COLLAB_WS_HEARTBEAT_INTERVAL,
+        env.LOOPMARSHAL_WS_HEARTBEAT_INTERVAL,
         defaultConfig.websocket.heartbeatIntervalSeconds
       ),
       disconnectTimeoutSeconds: parseNumber(
-        env.AI_COLLAB_WS_DISCONNECT_TIMEOUT,
+        env.LOOPMARSHAL_WS_DISCONNECT_TIMEOUT,
         defaultConfig.websocket.disconnectTimeoutSeconds
       )
     },
     waitChain: {
       defaultIntervalSeconds: parseNumber(
-        env.AI_COLLAB_WAIT_INTERVAL,
+        env.LOOPMARSHAL_WAIT_INTERVAL,
         defaultConfig.waitChain.defaultIntervalSeconds
       ),
       defaultMaxRounds: parseNumber(
-        env.AI_COLLAB_WAIT_MAX_ROUNDS,
+        env.LOOPMARSHAL_WAIT_MAX_ROUNDS,
         defaultConfig.waitChain.defaultMaxRounds
       ),
       pollBackoffGrowth: parseNumber(
-        env.AI_COLLAB_POLL_BACKOFF_GROWTH,
+        env.LOOPMARSHAL_POLL_BACKOFF_GROWTH,
         defaultConfig.waitChain.pollBackoffGrowth
       ),
       pollBackoffMaxFactor: parseNumber(
-        env.AI_COLLAB_POLL_BACKOFF_MAX_FACTOR,
+        env.LOOPMARSHAL_POLL_BACKOFF_MAX_FACTOR,
         defaultConfig.waitChain.pollBackoffMaxFactor
       ),
       pollJitterRatio: parseNumber(
-        env.AI_COLLAB_POLL_JITTER_RATIO,
+        env.LOOPMARSHAL_POLL_JITTER_RATIO,
         defaultConfig.waitChain.pollJitterRatio
       )
     },
     logging: {
-      level: (env.AI_COLLAB_LOG_LEVEL as LoggingConfig["level"]) ?? defaultConfig.logging.level,
+      level: (env.LOOPMARSHAL_LOG_LEVEL as LoggingConfig["level"]) ?? defaultConfig.logging.level,
       enableRotation: parseBoolean(
-        env.AI_COLLAB_LOG_ROTATION,
+        env.LOOPMARSHAL_LOG_ROTATION,
         defaultConfig.logging.enableRotation
       ),
-      maxFileSize: env.AI_COLLAB_LOG_MAX_SIZE ?? defaultConfig.logging.maxFileSize,
-      maxFiles: parseNumber(env.AI_COLLAB_LOG_MAX_FILES, defaultConfig.logging.maxFiles),
-      destination: env.AI_COLLAB_LOG_DESTINATION ?? defaultConfig.logging.destination
+      maxFileSize: env.LOOPMARSHAL_LOG_MAX_SIZE ?? defaultConfig.logging.maxFileSize,
+      maxFiles: parseNumber(env.LOOPMARSHAL_LOG_MAX_FILES, defaultConfig.logging.maxFiles),
+      destination: env.LOOPMARSHAL_LOG_DESTINATION ?? defaultConfig.logging.destination
     },
     ...overrides
   };

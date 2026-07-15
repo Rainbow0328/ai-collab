@@ -5,7 +5,7 @@ import type {
   SessionConsole,
   SessionSummary,
   WebAgentRuntime,
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import { api } from "@/lib/api-client";
 
 /* ==================== Query Keys ==================== */

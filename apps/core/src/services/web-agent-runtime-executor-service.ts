@@ -2,7 +2,7 @@ import type {
   McpToolDefinition,
   McpToolResult,
   WebAgentRuntime,
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import type { ServerServices } from "../server/create-server.js";
 import { createLlmRequest, type LlmChatMessage } from "./llm-provider-client.js";
 

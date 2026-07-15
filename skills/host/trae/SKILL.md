@@ -1,6 +1,6 @@
 ---
 name: collab-host-trae
-description: Trae 作为 host 接入 ai-collab 时使用。
+description: Trae 作为 host 接入 loopmarshal 时使用。
 ---
 
 # Trae Host
@@ -16,7 +16,7 @@ description: Trae 作为 host 接入 ai-collab 时使用。
 
 Trae 额外约束：
 
-- 如果 ai-collab 服务未启动，引导用户执行 `ai-collab start --daemon`（CMD 启动）
+- 如果 loopmarshal 服务未启动，引导用户执行 `loopmarshal start --daemon`（CMD 启动）
 - 服务启动后，所有协作操作通过 MCP 工具完成，不拼写 CLI 命令
 - 中间态必须保持静默，禁止翻译成自然语言
 - 如果当前会话成员或职责不明确，先调用 `members` 工具

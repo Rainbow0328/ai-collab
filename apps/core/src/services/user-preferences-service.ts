@@ -15,7 +15,7 @@ import type {
   UpsertUserPreferenceInput,
   UserPreference,
   UserPreferencesManifest
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import { coreErrors } from "../errors.js";
 
 type UserPreferencesFile = {
@@ -190,9 +190,9 @@ export class UserPreferencesService {
 }
 
 function defaultUserPreferencesPath(): string {
-  return process.env.AI_COLLAB_USER_PREFERENCES_PATH
-    ? resolve(process.env.AI_COLLAB_USER_PREFERENCES_PATH)
-    : resolve(homedir(), ".ai-collab", "user-preferences.json");
+  return process.env.LOOPMARSHAL_USER_PREFERENCES_PATH
+    ? resolve(process.env.LOOPMARSHAL_USER_PREFERENCES_PATH)
+    : resolve(homedir(), ".loopmarshal", "user-preferences.json");
 }
 
 function findLegacyCurrentKnowledgeFiles(rootPath: string): string[] {

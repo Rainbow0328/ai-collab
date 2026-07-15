@@ -12,11 +12,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { startCoreServer } from "@ai-collab/core";
+import { startCoreServer } from "@loopmarshal/core";
 import {
-  AiCollabSdkError,
-  createAiCollabClient
-} from "@ai-collab/sdk";
+  LoopMarshalSdkError,
+  createLoopMarshalClient
+} from "@loopmarshal/sdk";
 
 const smokePort = 42700;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
@@ -31,11 +31,11 @@ const main = async () => {
   const instance = await startCoreServer({
     host: "127.0.0.1",
     port: smokePort,
-    databasePath: ".ai-collab-test/smoke-duplicate-agent-name.sqlite"
+    databasePath: ".loopmarshal-test/smoke-duplicate-agent-name.sqlite"
   });
 
   try {
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `duplicate-agent-${Date.now()}`;
 
     await client.hostSessionByName(sessionName, {
@@ -68,7 +68,7 @@ const main = async () => {
         connectionMode: "skill-bridge"
       });
     } catch (error) {
-      if (error instanceof AiCollabSdkError) {
+      if (error instanceof LoopMarshalSdkError) {
         duplicateErrorCode = error.code ?? null;
         duplicateStatusCode = error.statusCode;
       } else {

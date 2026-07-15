@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { AiCollabWebSocketClient, type AiCollabWebSocketClientOptions } from "@ai-collab/sdk";
+import { LoopMarshalWebSocketClient, type LoopMarshalWebSocketClientOptions } from "@loopmarshal/sdk";
 import type {
   WsServerMessage,
   WsProgressUpdateNotification,
   WsInboxMessageNotification,
   WsMessageClaimedNotification,
   WsConsoleUpdateNotification,
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
-export type UseWebSocketOptions = Partial<AiCollabWebSocketClientOptions> & {
+export type UseWebSocketOptions = Partial<LoopMarshalWebSocketClientOptions> & {
   enabled?: boolean;
   onMessage?: (message: WsServerMessage) => void;
   onProgressUpdate?: (message: WsProgressUpdateNotification) => void;
@@ -20,7 +20,7 @@ export type UseWebSocketOptions = Partial<AiCollabWebSocketClientOptions> & {
 };
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
-  const clientRef = useRef<AiCollabWebSocketClient | null>(null);
+  const clientRef = useRef<LoopMarshalWebSocketClient | null>(null);
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected" | "reconnecting">("disconnected");
   const optionsRef = useRef(options);
 
@@ -28,12 +28,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     optionsRef.current = options;
   }, [options]);
 
-  const connect = useCallback((opts: AiCollabWebSocketClientOptions) => {
+  const connect = useCallback((opts: LoopMarshalWebSocketClientOptions) => {
     if (clientRef.current) {
       clientRef.current.disconnect();
     }
     setStatus("connecting");
-    const client = new AiCollabWebSocketClient(opts);
+    const client = new LoopMarshalWebSocketClient(opts);
 
     client.on("connected", () => {
       setStatus("connected");

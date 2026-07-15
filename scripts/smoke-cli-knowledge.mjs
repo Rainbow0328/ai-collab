@@ -16,13 +16,13 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
-process.env.AI_COLLAB_LOG_ROTATION = "false";
+process.env.LOOPMARSHAL_LOG_ROTATION = "false";
 
 const smokePort = 42780;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
 const rootDir = process.cwd();
 const cliEntry = resolve(rootDir, "apps/cli/dist/apps/cli/src/index.js");
-const stateDir = resolve(rootDir, ".ai-collab-test", "smoke-cli-knowledge");
+const stateDir = resolve(rootDir, ".loopmarshal-test", "smoke-cli-knowledge");
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -75,13 +75,13 @@ const runCliJson = async (input) => {
 };
 
 const main = async () => {
-  await mkdir(resolve(rootDir, ".ai-collab-test"), { recursive: true });
+  await mkdir(resolve(rootDir, ".loopmarshal-test"), { recursive: true });
   await rm(stateDir, { recursive: true, force: true });
   await mkdir(stateDir, { recursive: true });
 
-  process.env.AI_COLLAB_KNOWLEDGE_ROOT = resolve(stateDir, ".knowledge");
-  const { startCoreServer } = await import("@ai-collab/core");
-  const { createAiCollabClient } = await import("@ai-collab/sdk");
+  process.env.LOOPMARSHAL_KNOWLEDGE_ROOT = resolve(stateDir, ".knowledge");
+  const { startCoreServer } = await import("@loopmarshal/core");
+  const { createLoopMarshalClient } = await import("@loopmarshal/sdk");
 
   const instance = await startCoreServer({
     host: "127.0.0.1",
@@ -91,10 +91,10 @@ const main = async () => {
 
   try {
     const env = {
-      AI_COLLAB_BASE_URL: smokeBaseUrl,
-      AI_COLLAB_CLI_STATE_DIR: resolve(stateDir, ".ai-collab")
+      LOOPMARSHAL_BASE_URL: smokeBaseUrl,
+      LOOPMARSHAL_CLI_STATE_DIR: resolve(stateDir, ".loopmarshal")
     };
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `knowledge-${Date.now()}`;
     const hostName = "main-host";
     const workerName = "worker-one";

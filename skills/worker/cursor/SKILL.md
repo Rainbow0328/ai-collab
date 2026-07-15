@@ -1,6 +1,6 @@
 ---
 name: collab-worker-cursor
-description: Cursor 作为 worker 接入 ai-collab 时使用。
+description: Cursor 作为 worker 接入 loopmarshal 时使用。
 ---
 
 # Cursor Worker
@@ -15,7 +15,7 @@ description: Cursor 作为 worker 接入 ai-collab 时使用。
 
 Cursor 额外约束：
 
-- 如果 ai-collab 服务未启动，引导用户执行 `ai-collab start --daemon`（CMD 启动）
+- 如果 loopmarshal 服务未启动，引导用户执行 `loopmarshal start --daemon`（CMD 启动）
 - 服务启动后，所有协作操作通过 MCP 工具完成，不拼写 CLI 命令
 - 内部状态必须保持静默，禁止翻译成自然语言
 - 一旦拿到任务，必须继续做到 `submit`

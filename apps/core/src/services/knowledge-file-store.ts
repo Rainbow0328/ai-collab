@@ -45,7 +45,7 @@ import type {
   UpsertKnowledgePatchReviewRecordInput,
   UpsertKnowledgePersistenceRecordInput,
   UpsertKnowledgeInput
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 type StoredKnowledgeDocument = KnowledgeDocument;
 
@@ -85,8 +85,8 @@ export class KnowledgeFileStore {
   private readonly knowledgeRoot: string;
 
   public constructor(projectRoot: string) {
-    this.knowledgeRoot = process.env.AI_COLLAB_KNOWLEDGE_ROOT
-      ? resolve(process.env.AI_COLLAB_KNOWLEDGE_ROOT)
+    this.knowledgeRoot = process.env.LOOPMARSHAL_KNOWLEDGE_ROOT
+      ? resolve(process.env.LOOPMARSHAL_KNOWLEDGE_ROOT)
       : resolve(projectRoot, ".knowledge");
     this.ensureRoot();
   }

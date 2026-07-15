@@ -18,7 +18,7 @@ import type {
   AgentQueueStats,
   MessageRecord,
   MessageType
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 type MessageRow = Omit<MessageRecord, "payload"> & {
   payloadJson: string;

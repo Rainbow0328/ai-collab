@@ -44,10 +44,10 @@ import type {
   UpdateWindowBindingDefaultsInput,
   UpdateWindowRuntimeStateInput,
   WindowBinding
-} from "@ai-collab/protocol";
-import { errorCodes } from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
+import { errorCodes } from "@loopmarshal/protocol";
 
-export class AiCollabSdkError extends Error {
+export class LoopMarshalSdkError extends Error {
   public readonly statusCode: number;
   public readonly code: string | undefined;
 
@@ -64,7 +64,7 @@ export class AiCollabSdkError extends Error {
   }
 }
 
-export type AiCollabClientOptions = {
+export type LoopMarshalClientOptions = {
   baseUrl?: string;
   headers?: Record<string, string> | (() => Record<string, string>);
 };
@@ -77,14 +77,14 @@ export type AttachSessionResult = SessionJoinResult & {
   reusedExistingSession: boolean;
 };
 
-export class AiCollabClient {
+export class LoopMarshalClient {
   private readonly baseUrl: string;
   private readonly headerProvider: () => Record<string, string>;
 
-  public constructor(options: AiCollabClientOptions = {}) {
+  public constructor(options: LoopMarshalClientOptions = {}) {
     this.baseUrl =
       options.baseUrl ??
-      (typeof process !== "undefined" ? process.env.AI_COLLAB_BASE_URL : undefined) ??
+      (typeof process !== "undefined" ? process.env.LOOPMARSHAL_BASE_URL : undefined) ??
       "http://127.0.0.1:42688";
     this.headerProvider =
       typeof options.headers === "function"
@@ -222,9 +222,9 @@ export class AiCollabClient {
 
   public async listHeartbeats(
     sessionId: string
-  ): Promise<import("@ai-collab/protocol").AgentHeartbeat[]> {
+  ): Promise<import("@loopmarshal/protocol").AgentHeartbeat[]> {
     const response = await this.request<{
-      heartbeats: import("@ai-collab/protocol").AgentHeartbeat[];
+      heartbeats: import("@loopmarshal/protocol").AgentHeartbeat[];
     }>(`/api/sessions/${sessionId}/heartbeats`);
     return response.heartbeats;
   }
@@ -518,10 +518,10 @@ export class AiCollabClient {
   }
 
   public async upsertProgress(
-    input: import("@ai-collab/protocol").UpsertProgressInput
-  ): Promise<import("@ai-collab/protocol").Progress> {
+    input: import("@loopmarshal/protocol").UpsertProgressInput
+  ): Promise<import("@loopmarshal/protocol").Progress> {
     const response = await this.request<{
-      progress: import("@ai-collab/protocol").Progress;
+      progress: import("@loopmarshal/protocol").Progress;
     }>("/api/progress", {
       method: "PUT",
       body: input
@@ -532,23 +532,23 @@ export class AiCollabClient {
   public async getProgress(
     sessionId: string,
     agentId: string
-  ): Promise<import("@ai-collab/protocol").Progress | undefined> {
+  ): Promise<import("@loopmarshal/protocol").Progress | undefined> {
     const response = await this.request<{
-      progress: import("@ai-collab/protocol").Progress | undefined;
+      progress: import("@loopmarshal/protocol").Progress | undefined;
     }>(`/api/progress/${encodeURIComponent(sessionId)}/${encodeURIComponent(agentId)}`);
     return response.progress;
   }
 
   public async listProgress(
-    filter: import("@ai-collab/protocol").ListProgressFilter = {}
-  ): Promise<import("@ai-collab/protocol").Progress[]> {
+    filter: import("@loopmarshal/protocol").ListProgressFilter = {}
+  ): Promise<import("@loopmarshal/protocol").Progress[]> {
     const searchParams = new URLSearchParams();
     if (filter.sessionId) searchParams.set("sessionId", filter.sessionId);
     if (filter.agentId) searchParams.set("agentId", filter.agentId);
     if (filter.status) searchParams.set("status", filter.status);
 
     const response = await this.request<{
-      progressList: import("@ai-collab/protocol").Progress[];
+      progressList: import("@loopmarshal/protocol").Progress[];
     }>(
       `/api/progress${searchParams.size > 0 ? `?${searchParams.toString()}` : ""}`
     );
@@ -564,26 +564,26 @@ export class AiCollabClient {
   }
 
   public async getKnowledgeManifest(): Promise<
-    import("@ai-collab/protocol").KnowledgeManifest
+    import("@loopmarshal/protocol").KnowledgeManifest
   > {
     const response = await this.request<{
-      manifest: import("@ai-collab/protocol").KnowledgeManifest;
-      items: import("@ai-collab/protocol").KnowledgeListItem[];
+      manifest: import("@loopmarshal/protocol").KnowledgeManifest;
+      items: import("@loopmarshal/protocol").KnowledgeListItem[];
     }>("/api/knowledge");
     return response.manifest;
   }
 
   public async listKnowledge(
-    input: import("@ai-collab/protocol").ListKnowledgeInput = {}
-  ): Promise<import("@ai-collab/protocol").KnowledgeListItem[]> {
+    input: import("@loopmarshal/protocol").ListKnowledgeInput = {}
+  ): Promise<import("@loopmarshal/protocol").KnowledgeListItem[]> {
     const searchParams = new URLSearchParams();
     if (input.level) searchParams.set("level", input.level);
     if (input.tag) searchParams.set("tag", input.tag);
     if (input.query) searchParams.set("query", input.query);
 
     const response = await this.request<{
-      manifest: import("@ai-collab/protocol").KnowledgeManifest;
-      items: import("@ai-collab/protocol").KnowledgeListItem[];
+      manifest: import("@loopmarshal/protocol").KnowledgeManifest;
+      items: import("@loopmarshal/protocol").KnowledgeListItem[];
     }>(
       `/api/knowledge${searchParams.size > 0 ? `?${searchParams.toString()}` : ""}`
     );
@@ -591,27 +591,27 @@ export class AiCollabClient {
   }
 
   public async getKnowledge(
-    level: import("@ai-collab/protocol").KnowledgeLevel,
+    level: import("@loopmarshal/protocol").KnowledgeLevel,
     slug: string
-  ): Promise<import("@ai-collab/protocol").KnowledgeDocument | undefined> {
+  ): Promise<import("@loopmarshal/protocol").KnowledgeDocument | undefined> {
     const response = await this.request<{
-      document: import("@ai-collab/protocol").KnowledgeDocument | undefined;
+      document: import("@loopmarshal/protocol").KnowledgeDocument | undefined;
     }>(`/api/knowledge/${level}/${encodeURIComponent(slug)}`);
     return response.document;
   }
 
   public async getKnowledgeByRef(
     ref: string
-  ): Promise<import("@ai-collab/protocol").KnowledgeDocument | undefined> {
+  ): Promise<import("@loopmarshal/protocol").KnowledgeDocument | undefined> {
     const parsed = this.parseKnowledgeRef(ref);
     return this.getKnowledge(parsed.level, parsed.slug);
   }
 
   public async upsertKnowledge(
-    input: import("@ai-collab/protocol").UpsertKnowledgeInput
-  ): Promise<import("@ai-collab/protocol").KnowledgeDocument> {
+    input: import("@loopmarshal/protocol").UpsertKnowledgeInput
+  ): Promise<import("@loopmarshal/protocol").KnowledgeDocument> {
     const response = await this.request<{
-      document: import("@ai-collab/protocol").KnowledgeDocument;
+      document: import("@loopmarshal/protocol").KnowledgeDocument;
     }>(
       `/api/knowledge/${input.level}/${encodeURIComponent(input.slug)}`,
       {
@@ -638,7 +638,7 @@ export class AiCollabClient {
   }
 
   public async deleteKnowledge(
-    input: import("@ai-collab/protocol").DeleteKnowledgeInput
+    input: import("@loopmarshal/protocol").DeleteKnowledgeInput
   ): Promise<{ deleted: boolean }> {
     return this.request(
       `/api/knowledge/${input.level}/${encodeURIComponent(input.slug)}`,
@@ -658,15 +658,15 @@ export class AiCollabClient {
   }
 
   public async listKnowledgeChanges(
-    input: import("@ai-collab/protocol").ListKnowledgeChangesInput = {}
-  ): Promise<import("@ai-collab/protocol").KnowledgeChangeRecord[]> {
+    input: import("@loopmarshal/protocol").ListKnowledgeChangesInput = {}
+  ): Promise<import("@loopmarshal/protocol").KnowledgeChangeRecord[]> {
     const searchParams = new URLSearchParams();
     if (input.level) searchParams.set("level", input.level);
     if (input.slug) searchParams.set("slug", input.slug);
     if (input.limit !== undefined) searchParams.set("limit", String(input.limit));
 
     const response = await this.request<{
-      changes: import("@ai-collab/protocol").KnowledgeChangeRecord[];
+      changes: import("@loopmarshal/protocol").KnowledgeChangeRecord[];
     }>(
       `/api/knowledge/changes${
         searchParams.size > 0 ? `?${searchParams.toString()}` : ""
@@ -676,22 +676,22 @@ export class AiCollabClient {
   }
 
   public async listPendingKnowledgePatches(): Promise<
-    import("@ai-collab/protocol").KnowledgePatchRecord[]
+    import("@loopmarshal/protocol").KnowledgePatchRecord[]
   > {
     const response = await this.request<{
-      patches: import("@ai-collab/protocol").KnowledgePatchRecord[];
+      patches: import("@loopmarshal/protocol").KnowledgePatchRecord[];
     }>("/api/knowledge/patches/pending");
     return response.patches;
   }
 
   public async listKnowledgePatches(
-    input: import("@ai-collab/protocol").ListKnowledgePatchRecordsInput = {}
-  ): Promise<import("@ai-collab/protocol").KnowledgePatchRecord[]> {
+    input: import("@loopmarshal/protocol").ListKnowledgePatchRecordsInput = {}
+  ): Promise<import("@loopmarshal/protocol").KnowledgePatchRecord[]> {
     const searchParams = new URLSearchParams();
     if (input.status) searchParams.set("status", input.status);
 
     const response = await this.request<{
-      patches: import("@ai-collab/protocol").KnowledgePatchRecord[];
+      patches: import("@loopmarshal/protocol").KnowledgePatchRecord[];
     }>(
       `/api/knowledge/patches${
         searchParams.size > 0 ? `?${searchParams.toString()}` : ""
@@ -703,14 +703,14 @@ export class AiCollabClient {
   public async getKnowledgePatch(
     patchId: string
   ): Promise<{
-    patch: import("@ai-collab/protocol").KnowledgePatchRecord;
-    review: import("@ai-collab/protocol").KnowledgePatchReviewRecord | null;
-    persistence: import("@ai-collab/protocol").KnowledgePersistenceRecord | null;
+    patch: import("@loopmarshal/protocol").KnowledgePatchRecord;
+    review: import("@loopmarshal/protocol").KnowledgePatchReviewRecord | null;
+    persistence: import("@loopmarshal/protocol").KnowledgePersistenceRecord | null;
   }> {
     const response = await this.request<{
-      patch: import("@ai-collab/protocol").KnowledgePatchRecord;
-      review: import("@ai-collab/protocol").KnowledgePatchReviewRecord | null;
-      persistence: import("@ai-collab/protocol").KnowledgePersistenceRecord | null;
+      patch: import("@loopmarshal/protocol").KnowledgePatchRecord;
+      review: import("@loopmarshal/protocol").KnowledgePatchReviewRecord | null;
+      persistence: import("@loopmarshal/protocol").KnowledgePersistenceRecord | null;
     }>(`/api/knowledge/patches/${encodeURIComponent(patchId)}`);
     return response;
   }
@@ -718,18 +718,18 @@ export class AiCollabClient {
   public async adjudicateKnowledgePatch(
     patchId: string,
     input: Omit<
-      import("@ai-collab/protocol").AdjudicateKnowledgePatchInput,
+      import("@loopmarshal/protocol").AdjudicateKnowledgePatchInput,
       "patchId"
     >
   ): Promise<{
-    patchRecord: import("@ai-collab/protocol").KnowledgePatchRecord | null;
-    reviewRecord: import("@ai-collab/protocol").KnowledgePatchReviewRecord;
-    persistenceRecord: import("@ai-collab/protocol").KnowledgePersistenceRecord;
+    patchRecord: import("@loopmarshal/protocol").KnowledgePatchRecord | null;
+    reviewRecord: import("@loopmarshal/protocol").KnowledgePatchReviewRecord;
+    persistenceRecord: import("@loopmarshal/protocol").KnowledgePersistenceRecord;
   }> {
     const response = await this.request<{
-      patchRecord: import("@ai-collab/protocol").KnowledgePatchRecord | null;
-      reviewRecord: import("@ai-collab/protocol").KnowledgePatchReviewRecord;
-      persistenceRecord: import("@ai-collab/protocol").KnowledgePersistenceRecord;
+      patchRecord: import("@loopmarshal/protocol").KnowledgePatchRecord | null;
+      reviewRecord: import("@loopmarshal/protocol").KnowledgePatchReviewRecord;
+      persistenceRecord: import("@loopmarshal/protocol").KnowledgePersistenceRecord;
     }>(`/api/knowledge/patches/${encodeURIComponent(patchId)}/adjudicate`, {
       method: "POST",
       body: input
@@ -739,9 +739,9 @@ export class AiCollabClient {
 
   public async executeKnowledgePatchPersistence(
     patchId: string
-  ): Promise<import("@ai-collab/protocol").ExecuteKnowledgePatchPersistenceResult> {
+  ): Promise<import("@loopmarshal/protocol").ExecuteKnowledgePatchPersistenceResult> {
     const response = await this.request<
-      import("@ai-collab/protocol").ExecuteKnowledgePatchPersistenceResult
+      import("@loopmarshal/protocol").ExecuteKnowledgePatchPersistenceResult
     >(`/api/knowledge/patches/${encodeURIComponent(patchId)}/execute`, {
       method: "POST",
       body: {}
@@ -760,14 +760,14 @@ export class AiCollabClient {
   }
 
   private parseKnowledgeRef(ref: string): {
-    level: import("@ai-collab/protocol").KnowledgeLevel;
+    level: import("@loopmarshal/protocol").KnowledgeLevel;
     slug: string;
   } {
     const withoutHash = ref.split("#", 1)[0] ?? "";
     const normalized = withoutHash.replace(/^knowledge:/i, "").replace(/^\/+/, "");
     const [level, ...slugParts] = normalized.split("/");
     if ((level !== "l1" && level !== "l2" && level !== "l3") || slugParts.length === 0) {
-      throw new AiCollabSdkError(`Invalid knowledge ref "${ref}".`, {
+      throw new LoopMarshalSdkError(`Invalid knowledge ref "${ref}".`, {
         statusCode: 400,
         code: errorCodes.invalidInput
       });
@@ -810,7 +810,7 @@ export class AiCollabClient {
       };
     } catch (error: unknown) {
       if (
-        !(error instanceof AiCollabSdkError) ||
+        !(error instanceof LoopMarshalSdkError) ||
         error.code !== errorCodes.duplicateSessionName
       ) {
         throw error;
@@ -843,11 +843,11 @@ export class AiCollabClient {
   }
 
   // Workflow Management
-  public async listWorkflows(): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord[]> {
+  public async listWorkflows(): Promise<import("@loopmarshal/protocol").WorkflowDefinitionRecord[]> {
     return this.request("/api/workflows");
   }
 
-  public async getWorkflow(workflowId: string): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord> {
+  public async getWorkflow(workflowId: string): Promise<import("@loopmarshal/protocol").WorkflowDefinitionRecord> {
     return this.request(`/api/workflows/${encodeURIComponent(workflowId)}`);
   }
 
@@ -855,11 +855,11 @@ export class AiCollabClient {
     id?: string;
     name: string;
     description?: string | null;
-    role: import("@ai-collab/protocol").AgentRole;
-    nodes: import("@ai-collab/protocol").WorkflowNodeDefinition[];
-    edges: import("@ai-collab/protocol").WorkflowEdgeDefinition[];
+    role: import("@loopmarshal/protocol").AgentRole;
+    nodes: import("@loopmarshal/protocol").WorkflowNodeDefinition[];
+    edges: import("@loopmarshal/protocol").WorkflowEdgeDefinition[];
     enabled?: boolean;
-  }): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord> {
+  }): Promise<import("@loopmarshal/protocol").WorkflowDefinitionRecord> {
     return this.request("/api/workflows", {
       method: "POST",
       body: input,
@@ -871,12 +871,12 @@ export class AiCollabClient {
     input: {
       name?: string;
       description?: string | null;
-      role?: import("@ai-collab/protocol").AgentRole;
-      nodes?: import("@ai-collab/protocol").WorkflowNodeDefinition[];
-      edges?: import("@ai-collab/protocol").WorkflowEdgeDefinition[];
+      role?: import("@loopmarshal/protocol").AgentRole;
+      nodes?: import("@loopmarshal/protocol").WorkflowNodeDefinition[];
+      edges?: import("@loopmarshal/protocol").WorkflowEdgeDefinition[];
       enabled?: boolean;
     }
-  ): Promise<import("@ai-collab/protocol").WorkflowDefinitionRecord> {
+  ): Promise<import("@loopmarshal/protocol").WorkflowDefinitionRecord> {
     return this.request(`/api/workflows/${encodeURIComponent(workflowId)}`, {
       method: "PUT",
       body: input,
@@ -890,7 +890,7 @@ export class AiCollabClient {
   }
 
   // Web Agent Runtime Management
-  public async listWebAgentRuntimes(sessionId?: string): Promise<import("@ai-collab/protocol").WebAgentRuntime[]> {
+  public async listWebAgentRuntimes(sessionId?: string): Promise<import("@loopmarshal/protocol").WebAgentRuntime[]> {
     const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
     return this.request(`/api/web-agent-runtimes${query}`);
   }
@@ -902,14 +902,14 @@ export class AiCollabClient {
     modelConfigId?: string;
     agentProfileId?: string | null;
     toolsetId?: string | null;
-  }): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+  }): Promise<import("@loopmarshal/protocol").WebAgentRuntime> {
     return this.request("/api/web-agent-runtimes", {
       method: "POST",
       body: input,
     });
   }
 
-  public async getWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+  public async getWebAgentRuntime(runtimeId: string): Promise<import("@loopmarshal/protocol").WebAgentRuntime> {
     return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}`);
   }
 
@@ -920,7 +920,7 @@ export class AiCollabClient {
     currentStep?: string | null;
     lastError?: string | null;
     lastTickAt?: string | null;
-  }): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+  }): Promise<import("@loopmarshal/protocol").WebAgentRuntime> {
     return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}`, {
       method: "PATCH",
       body: input,
@@ -933,19 +933,19 @@ export class AiCollabClient {
     });
   }
 
-  public async startWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+  public async startWebAgentRuntime(runtimeId: string): Promise<import("@loopmarshal/protocol").WebAgentRuntime> {
     return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}/start`, {
       method: "POST",
     });
   }
 
-  public async pauseWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+  public async pauseWebAgentRuntime(runtimeId: string): Promise<import("@loopmarshal/protocol").WebAgentRuntime> {
     return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}/pause`, {
       method: "POST",
     });
   }
 
-  public async stopWebAgentRuntime(runtimeId: string): Promise<import("@ai-collab/protocol").WebAgentRuntime> {
+  public async stopWebAgentRuntime(runtimeId: string): Promise<import("@loopmarshal/protocol").WebAgentRuntime> {
     return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}/stop`, {
       method: "POST",
     });
@@ -970,9 +970,9 @@ export class AiCollabClient {
   }
 
   // Global User Preferences
-  public async listUserPreferences(input: import("@ai-collab/protocol").ListUserPreferencesInput = {}): Promise<{
-    manifest: import("@ai-collab/protocol").UserPreferencesManifest;
-    preferences: import("@ai-collab/protocol").UserPreference[];
+  public async listUserPreferences(input: import("@loopmarshal/protocol").ListUserPreferencesInput = {}): Promise<{
+    manifest: import("@loopmarshal/protocol").UserPreferencesManifest;
+    preferences: import("@loopmarshal/protocol").UserPreference[];
   }> {
     const searchParams = new URLSearchParams();
     if (input.category) searchParams.set("category", input.category);
@@ -983,9 +983,9 @@ export class AiCollabClient {
 
   public async upsertUserPreference(
     key: string,
-    input: Omit<import("@ai-collab/protocol").UpsertUserPreferenceInput, "key">
-  ): Promise<import("@ai-collab/protocol").UserPreference> {
-    const response = await this.request<{ preference: import("@ai-collab/protocol").UserPreference }>(
+    input: Omit<import("@loopmarshal/protocol").UpsertUserPreferenceInput, "key">
+  ): Promise<import("@loopmarshal/protocol").UserPreference> {
+    const response = await this.request<{ preference: import("@loopmarshal/protocol").UserPreference }>(
       `/api/user-preferences/${encodeURIComponent(key)}`,
       {
         method: "PUT",
@@ -1057,11 +1057,11 @@ export class AiCollabClient {
   }
 
   // MCP Tool Calls
-  public async callMcpTool(input: import("@ai-collab/protocol").McpCallRequest): Promise<import("@ai-collab/protocol").McpCallResponse> {
+  public async callMcpTool(input: import("@loopmarshal/protocol").McpCallRequest): Promise<import("@loopmarshal/protocol").McpCallResponse> {
     return this.request("/api/mcp/call", { method: "POST", body: input });
   }
 
-  public async getMcpTools(options?: { toolsetId?: string; extraToolNames?: string[] }): Promise<{ tools: import("@ai-collab/protocol").McpToolDefinition[] }> {
+  public async getMcpTools(options?: { toolsetId?: string; extraToolNames?: string[] }): Promise<{ tools: import("@loopmarshal/protocol").McpToolDefinition[] }> {
     const params = new URLSearchParams();
     if (options?.toolsetId) params.set("toolsetId", options.toolsetId);
     if (options?.extraToolNames?.length) params.set("extraToolNames", options.extraToolNames.join(","));
@@ -1074,24 +1074,24 @@ export class AiCollabClient {
     modelConfigId?: string;
     messages: Array<{ role: string; content: string }>;
     stream?: boolean;
-    tools?: import("@ai-collab/protocol").McpToolDefinition[];
+    tools?: import("@loopmarshal/protocol").McpToolDefinition[];
     tool_choice?: unknown;
     temperature?: number;
   }): Promise<{
     content: string | null;
     role: string;
     usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
-    tool_calls: import("@ai-collab/protocol").McpToolCall[] | null;
+    tool_calls: import("@loopmarshal/protocol").McpToolCall[] | null;
   }> {
     return this.request("/api/llm/chat", { method: "POST", body: input });
   }
 
   // Skills
-  public async getSkill(skillId: string): Promise<import("@ai-collab/protocol").SkillDefinition> {
+  public async getSkill(skillId: string): Promise<import("@loopmarshal/protocol").SkillDefinition> {
     return this.request(`/api/skills/${encodeURIComponent(skillId)}`);
   }
 
-  public async listSkills(): Promise<import("@ai-collab/protocol").SkillDefinition[]> {
+  public async listSkills(): Promise<import("@loopmarshal/protocol").SkillDefinition[]> {
     return this.request("/api/skills");
   }
 
@@ -1104,7 +1104,7 @@ export class AiCollabClient {
     modelConfigId?: string;
     agentProfileId?: string | null;
     roleDescription?: string | null;
-  }): Promise<{ agent: import("@ai-collab/protocol").Agent }> {
+  }): Promise<{ agent: import("@loopmarshal/protocol").Agent }> {
     return this.request("/api/sessions/join-with-agent", {
       method: "POST",
       body: input,
@@ -1118,7 +1118,7 @@ export class AiCollabClient {
     modelConfigId?: string;
     agentProfileId?: string | null;
     roleDescription?: string | null;
-  }): Promise<{ agent: import("@ai-collab/protocol").Agent; session: import("@ai-collab/protocol").SessionSummary }> {
+  }): Promise<{ agent: import("@loopmarshal/protocol").Agent; session: import("@loopmarshal/protocol").SessionSummary }> {
     return this.request("/api/sessions/create-with-agent", {
       method: "POST",
       body: input,
@@ -1154,7 +1154,7 @@ export class AiCollabClient {
     };
 
     if (!result.success || !result.data) {
-      throw new AiCollabSdkError(
+      throw new LoopMarshalSdkError(
         result.error?.message ?? `Request failed for ${path}.`,
         {
           statusCode: response.status,
@@ -1167,13 +1167,13 @@ export class AiCollabClient {
   }
 }
 
-export const createAiCollabClient = (
-  options?: AiCollabClientOptions
-): AiCollabClient => {
-  return new AiCollabClient(options);
+export const createLoopMarshalClient = (
+  options?: LoopMarshalClientOptions
+): LoopMarshalClient => {
+  return new LoopMarshalClient(options);
 };
 
 export {
-  AiCollabWebSocketClient,
-  type AiCollabWebSocketClientOptions
+  LoopMarshalWebSocketClient,
+  type LoopMarshalWebSocketClientOptions
 } from "./websocket-client.js";

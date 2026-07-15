@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MessageRecord, WebAgentRuntime } from "@ai-collab/protocol";
+import type { MessageRecord, WebAgentRuntime } from "@loopmarshal/protocol";
 import { WebAgentRuntimeExecutorService } from "../services/web-agent-runtime-executor-service.js";
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));

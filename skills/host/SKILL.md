@@ -1,11 +1,11 @@
 ---
 name: collab-host
-description: 当当前聊天作为 host 接入 ai-collab，并需要稳定维护理解目标、构建知识库、编排 worker、等待回报、裁决知识库、继续推进闭环时使用。
+description: 当当前聊天作为 host 接入 loopmarshal，并需要稳定维护理解目标、构建知识库、编排 worker、等待回报、裁决知识库、继续推进闭环时使用。
 ---
 
 # AI COLLAB HOST 强规则
 
-本文件是 ai-collab Host 运行规则的唯一主规则源。`rule/` 目录只允许作为兼容入口；如果 `rule/`、docs、普通说明和本文件冲突，必须以本文件为准。
+本文件是 loopmarshal Host 运行规则的唯一主规则源。`rule/` 目录只允许作为兼容入口；如果 `rule/`、docs、普通说明和本文件冲突，必须以本文件为准。
 
 Host 是主控编排者、任务拆解者、知识库构建者、知识库裁决者。Host 不是消息转发器。
 
@@ -15,16 +15,16 @@ Host 是主控编排者、任务拆解者、知识库构建者、知识库裁决
 
 ### 阶段一：CMD 启动（一次性）
 
-ai-collab 核心服务必须先通过 CMD 命令启动。如果尚未启动，引导用户执行：
+loopmarshal 核心服务必须先通过 CMD 命令启动。如果尚未启动，引导用户执行：
 
 ```bash
-ai-collab start --daemon
+loopmarshal start --daemon
 ```
 
 如果 IDE 尚未配置 MCP 集成，引导用户执行：
 
 ```bash
-ai-collab mcp:setup
+loopmarshal mcp setup
 ```
 
 然后用 MCP 工具检查服务状态确认已启动。
@@ -57,11 +57,11 @@ CLI/MCP 已经负责填充后端顶层字段（`sessionId`、`fromAgentId`、`to
 - `submit` 的 `content` 参数接收回报内容字符串。
 - `submit` 写入后端的消息 payload 固定为 `{ "content": "<回报内容>", "result": "completed|failed|contested" }`。
 
-因此，ai-collab 的强 schema 必须放在 `payload.content` 这层。Host 不得把 `goal`、`boundary`、`knowledgeRefs`、`taskResult`、`knowledgeUpdateAssessment` 等字段当成 MCP 工具的顶层参数。
+因此，loopmarshal 的强 schema 必须放在 `payload.content` 这层。Host 不得把 `goal`、`boundary`、`knowledgeRefs`、`taskResult`、`knowledgeUpdateAssessment` 等字段当成 MCP 工具的顶层参数。
 
-Host 派发给 Worker 的 `payload.content` 必须是一个可被 `JSON.parse` 的单个 JSON 对象字符串，schema 必须为 `ai-collab.task.v1`。
+Host 派发给 Worker 的 `payload.content` 必须是一个可被 `JSON.parse` 的单个 JSON 对象字符串，schema 必须为 `loopmarshal.task.v1`。
 
-禁止同一轮给同一个 Worker 传多条 `task`。需要给同一 Worker 多个子任务时，必须放进同一个 `ai-collab.task.v1.items` 数组。
+禁止同一轮给同一个 Worker 传多条 `task`。需要给同一 Worker 多个子任务时，必须放进同一个 `loopmarshal.task.v1.items` 数组。
 
 ## 2. 不可违反的铁律
 
@@ -207,7 +207,7 @@ Host 派发给 Worker的 `payload.content` 必须使用以下 JSON schema。字�
 
 ```json
 {
-  "schema": "ai-collab.task.v1",
+  "schema": "loopmarshal.task.v1",
   "kind": "worker_task",
   "taskId": "TASK-001",
   "goal": "任务目标",
@@ -232,13 +232,13 @@ Host 派发给 Worker的 `payload.content` 必须使用以下 JSON schema。字�
   "items": [],
   "reportRequired": {
     "mustInclude": ["taskResult", "knowledgeRead", "knowledgeUpdateAssessment"],
-    "format": "ai-collab.worker-report.v1"
+    "format": "loopmarshal.worker-report.v1"
   }
 }
 ```
 
 字段强规则：
-- `schema` 必须固定为 `ai-collab.task.v1`。
+- `schema` 必须固定为 `loopmarshal.task.v1`。
 - `kind` 必须固定为 `worker_task`。
 - `taskId` 必须在当前会话内稳定，Worker 回报必须原样带回。
 - `goal` 必须是 Host 消化后的任务目标，不得是用户原话搬运。
@@ -247,7 +247,7 @@ Host 派发给 Worker的 `payload.content` 必须使用以下 JSON schema。字�
 - `knowledgeRefs` 只能传知识库引用，不得传知识库正文。
 - `knowledgeReadPurpose` 必须说明为什么读；不需要读时必须写明不读原因。
 - `items` 只用于同一 Worker 的多个子任务；没有子任务必须传空数组。
-- `reportRequired.format` 必须固定为 `ai-collab.worker-report.v1`。
+- `reportRequired.format` 必须固定为 `loopmarshal.worker-report.v1`。
 
 `dispatch_many` 调用示例（tasks 参数中每条为 `workerName::taskJsonString`）：
 
@@ -255,7 +255,7 @@ Host 派发给 Worker的 `payload.content` 必须使用以下 JSON schema。字�
 dispatch_many(
   name="host",
   session="demo",
-  tasks=["worker-a::{\"schema\":\"ai-collab.task.v1\",\"kind\":\"worker_task\",\"taskId\":\"TASK-001\",\"goal\":\"修复消息历史展示\",\"boundary\":{\"scope\":\"只改前端会话控制台\",\"forbidden\":[\"不改后端消息协议\"],\"allowedFiles\":[\"apps/web/src/components/console\"],\"forbiddenFiles\":[]},\"inputs\":{\"context\":\"用户需要在前端看清 Host 派发和 Worker 回报\",\"requirements\":[\"展示 worker 回报内容\"],\"acceptance\":[\"前端能看到回报摘要和原文\"]},\"dependencies\":{\"blockedBy\":[],\"unblocks\":[],\"relatedWorkers\":[]},\"knowledgeRefs\":[\"l1/session-direction\",\"l2/frontend-console\"],\"knowledgeReadPurpose\":\"确认前端控制台目标和消息展示边界\",\"items\":[],\"reportRequired\":{\"mustInclude\":[\"taskResult\",\"knowledgeRead\",\"knowledgeUpdateAssessment\"],\"format\":\"ai-collab.worker-report.v1\"}}"]
+  tasks=["worker-a::{\"schema\":\"loopmarshal.task.v1\",\"kind\":\"worker_task\",\"taskId\":\"TASK-001\",\"goal\":\"修复消息历史展示\",\"boundary\":{\"scope\":\"只改前端会话控制台\",\"forbidden\":[\"不改后端消息协议\"],\"allowedFiles\":[\"apps/web/src/components/console\"],\"forbiddenFiles\":[]},\"inputs\":{\"context\":\"用户需要在前端看清 Host 派发和 Worker 回报\",\"requirements\":[\"展示 worker 回报内容\"],\"acceptance\":[\"前端能看到回报摘要和原文\"]},\"dependencies\":{\"blockedBy\":[],\"unblocks\":[],\"relatedWorkers\":[]},\"knowledgeRefs\":[\"l1/session-direction\",\"l2/frontend-console\"],\"knowledgeReadPurpose\":\"确认前端控制台目标和消息展示边界\",\"items\":[],\"reportRequired\":{\"mustInclude\":[\"taskResult\",\"knowledgeRead\",\"knowledgeUpdateAssessment\"],\"format\":\"loopmarshal.worker-report.v1\"}}"]
 )
 ```
 
@@ -263,7 +263,7 @@ dispatch_many(
 
 Worker 回报必须包含 `knowledgeUpdateAssessment`。Host 收到后必须读取并裁决。Worker 未提供该结构时，Host 必须把本次回报判定为不合格，并要求 Worker 补交结构化回报。
 
-Host 必须从 Worker 回报消息的 `payload.content` 中解析 `ai-collab.worker-report.v1`。如果 `payload.content` 不是合法 JSON，或者 `schema` 不是 `ai-collab.worker-report.v1`，本次回报必须判定为不合格。
+Host 必须从 Worker 回报消息的 `payload.content` 中解析 `loopmarshal.worker-report.v1`。如果 `payload.content` 不是合法 JSON，或者 `schema` 不是 `loopmarshal.worker-report.v1`，本次回报必须判定为不合格。
 
 ### contested 回报处理
 
@@ -319,7 +319,7 @@ Host 裁决必须输出：
 
 ## 10. Skill 边界
 
-ai-collab 中有两类 Skill，必须严格区分。
+loopmarshal 中有两类 Skill，必须严格区分。
 
 AI IDE 运行规则 Skill：
 - 位于 `skills/host`、`skills/worker` 以及各 AI IDE 子目录。
@@ -355,11 +355,11 @@ AI IDE / CLI 创建 Host 时，不要求选择系统内 Skill，不要求写入 
 
 ## 12. 上下文管理
 
-AI IDE 的上下文窗口是有限的。ai-collab 后端已完整持久化所有协作状态（会话、成员、消息、知识库、等待链、裁决记录），因此上下文压缩和清空是安全的。Host 作为编排者，有责任主动管理上下文。
+AI IDE 的上下文窗口是有限的。loopmarshal 后端已完整持久化所有协作状态（会话、成员、消息、知识库、等待链、裁决记录），因此上下文压缩和清空是安全的。Host 作为编排者，有责任主动管理上下文。
 
 ### 模型自行精简输出（工具不截断输出）
 
-ai-collab MCP 工具不会修改或截断 CLI 返回的内容。模型自己负责控制输出给用户的内容量：
+loopmarshal MCP 工具不会修改或截断 CLI 返回的内容。模型自己负责控制输出给用户的内容量：
 
 1. `await` 返回中间状态（如 `EXECUTE_INTERNAL_CMD`、等待中）时，不向用户解释，直接静默继续调用 `await`。
 2. `await` 返回 `END_TURN_SILENTLY` 时，直接静默结束，不输出任何自然语言。
@@ -450,7 +450,7 @@ Host 有责任在以下场景主动建议上下文管理：
 - 输出等待链中间态。
 - 把用户原话不加判断直接转发给 Worker。
 - 不判断知识库就派发任务。
-- 派发不符合 `ai-collab.task.v1` 的任务内容。
+- 派发不符合 `loopmarshal.task.v1` 的任务内容。
 - 把 schema 字段当成 MCP 工具的顶层参数。
 - 收到 Worker 回报后不裁决知识库候选更新。
 - 让 Worker 写入、删除、审批或维护知识库。

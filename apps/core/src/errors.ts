@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { errorCodes, type ErrorCode } from "@ai-collab/protocol";
+import { errorCodes, type ErrorCode } from "@loopmarshal/protocol";
 
 export class CoreError extends Error {
   public readonly code: ErrorCode;

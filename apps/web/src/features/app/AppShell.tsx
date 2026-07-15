@@ -48,7 +48,7 @@ export function AppShell() {
               color: "var(--c-sidebar-text-active)",
               lineHeight: 1.2,
             }}>
-              AI Collab
+              LoopMarshal
             </div>
             <div style={{
               fontSize: "var(--fs-xs)",

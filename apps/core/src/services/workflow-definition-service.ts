@@ -5,8 +5,8 @@ import type {
   WorkflowDefinitionRecord,
   WorkflowEdgeDefinition,
   WorkflowNodeDefinition
-} from "@ai-collab/protocol";
-import type { WorkflowDefinitionRepository } from "@ai-collab/store";
+} from "@loopmarshal/protocol";
+import type { WorkflowDefinitionRepository } from "@loopmarshal/store";
 import { coreErrors } from "../errors.js";
 
 const builtinWorkflows: Array<Omit<WorkflowDefinitionRecord, "createdAt" | "updatedAt">> = [

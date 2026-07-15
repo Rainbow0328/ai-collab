@@ -1,10 +1,10 @@
 {
-  "name": "@ai-collab/vscode-extension",
+  "name": "@loopmarshal/vscode-extension",
   "version": "0.1.0",
   "private": true,
-  "displayName": "AI Collab",
-  "description": "VS Code integration for the local ai-collab collaboration hub.",
-  "publisher": "ai-collab",
+  "displayName": "LoopMarshal",
+  "description": "VS Code integration for the local loopmarshal collaboration hub.",
+  "publisher": "loopmarshal",
   "type": "module",
   "main": "dist/adapters/vscode-extension/src/extension.js",
   "types": "dist/adapters/vscode-extension/src/extension.d.ts",
@@ -22,33 +22,33 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:aiCollab.hostSession",
-    "onCommand:aiCollab.joinSession",
-    "onCommand:aiCollab.showStatus",
-    "onCommand:aiCollab.openInbox",
-    "onCommand:aiCollab.leaveSession"
+    "onCommand:loopMarshal.hostSession",
+    "onCommand:loopMarshal.joinSession",
+    "onCommand:loopMarshal.showStatus",
+    "onCommand:loopMarshal.openInbox",
+    "onCommand:loopMarshal.leaveSession"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "aiCollab.hostSession",
-        "title": "AI Collab: Host Session"
+        "command": "loopMarshal.hostSession",
+        "title": "LoopMarshal: Host Session"
       },
       {
-        "command": "aiCollab.joinSession",
-        "title": "AI Collab: Join Session"
+        "command": "loopMarshal.joinSession",
+        "title": "LoopMarshal: Join Session"
       },
       {
-        "command": "aiCollab.showStatus",
-        "title": "AI Collab: Show Status"
+        "command": "loopMarshal.showStatus",
+        "title": "LoopMarshal: Show Status"
       },
       {
-        "command": "aiCollab.openInbox",
-        "title": "AI Collab: Open Inbox"
+        "command": "loopMarshal.openInbox",
+        "title": "LoopMarshal: Open Inbox"
       },
       {
-        "command": "aiCollab.leaveSession",
-        "title": "AI Collab: Leave Session"
+        "command": "loopMarshal.leaveSession",
+        "title": "LoopMarshal: Leave Session"
       }
     ]
   },
@@ -57,7 +57,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-collab/sdk": "workspace:*"
+    "@loopmarshal/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/vscode": "^1.103.0"

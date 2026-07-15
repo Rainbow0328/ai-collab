@@ -26,7 +26,7 @@
 - Node.js >= 20
 - npm / pnpm
 - Claude Code（用于 IDE Hooks 验证）
-- 一个可运行的 ai-collab core server
+- 一个可运行的 loopmarshal core server
 
 ### 构建项目
 
@@ -78,7 +78,7 @@ node dist/apps/cli/src/index.js dispatch-many host-1 --session test-session --ta
 | 文件 | 类型 | 说明 |
 |------|------|------|
 | `apps/cli/src/mcp-stdio-server.ts` | 新增 | MCP stdio 服务器，JSON-RPC 2.0 over stdio，长等待期间发送 `notifications/progress` |
-| `apps/cli/src/index.ts` | 修改 | 新增 `mcp:serve` CLI 命令 |
+| `apps/cli/src/index.ts` | 修改 | 新增 `mcp serve` CLI 命令 |
 | `apps/core/src/services/collaboration-wait-service.ts` | 修改 | `awaitEvent` 新增 `onProgress` 回调参数 |
 | `.mcp.json` | 新增 | Claude Code MCP 配置 |
 | `docs/mcp-progress-keepalive.md` | 新增 | 方案文档 |
@@ -93,7 +93,7 @@ git checkout research/mcp-progress-keepalive
 npm run build
 
 # 手动发送 initialize 请求测试
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node dist/apps/cli/src/index.js mcp:serve --verbose
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node dist/apps/cli/src/index.js mcp serve --verbose
 ```
 
 **期望结果**：
@@ -101,7 +101,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node dist/ap
 - stderr 输出调试日志（因 `--verbose`）
 
 **验证点**：
-- [ ] 响应中 `serverInfo.name` 为 `"ai-collab-mcp"`
+- [ ] 响应中 `serverInfo.name` 为 `"loopmarshal-mcp"`
 - [ ] 响应中 `protocolVersion` 为 `"2024-11-05"`
 - [ ] `capabilities` 包含 `tools` 字段
 
@@ -115,7 +115,7 @@ node dist/apps/core/src/index.js
 (
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
   echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"toolsetId":"worker"}}'
-) | node dist/apps/cli/src/index.js mcp:serve --verbose
+) | node dist/apps/cli/src/index.js mcp serve --verbose
 ```
 
 **期望结果**：
@@ -135,7 +135,7 @@ node dist/apps/core/src/index.js
 (
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
   echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"heartbeat","arguments":{}}}'
-) | node dist/apps/cli/src/index.js mcp:serve --verbose
+) | node dist/apps/cli/src/index.js mcp serve --verbose
 ```
 
 **期望结果**：
@@ -157,7 +157,7 @@ node dist/apps/core/src/index.js
 (
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
   echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ai_collab_await_event","arguments":{"sessionName":"test-session","windowName":"worker-1","role":"worker","timeoutSeconds":120},"_meta":{"progressToken":"test-token-001"}}}'
-) | node dist/apps/cli/src/index.js mcp:serve --verbose --progress-interval 10
+) | node dist/apps/cli/src/index.js mcp serve --verbose --progress-interval 10
 ```
 
 **期望结果**：
@@ -180,7 +180,7 @@ node dist/apps/core/src/index.js
 ```bash
 # 1. 确保 .mcp.json 已配置（分支已包含）
 cat .mcp.json
-# 应包含 ai-collab MCP server 配置
+# 应包含 loopmarshal MCP server 配置
 
 # 2. 在 Claude Code 中打开本项目
 # 3. 让 AI 调用 ai_collab_await_event 工具
@@ -290,10 +290,10 @@ curl "http://127.0.0.1:42688/api/hooks/collaboration-state?sessionName=test-sess
 
 ```bash
 # 设置环境变量
-export AI_COLLAB_CORE_URL="http://127.0.0.1:42688"
-export AI_COLLAB_SESSION_NAME="test-session"
-export AI_COLLAB_WINDOW_NAME="worker-1"
-export AI_COLLAB_HOOK_DEBUG=1
+export LOOPMARSHAL_CORE_URL="http://127.0.0.1:42688"
+export LOOPMARSHAL_SESSION_NAME="test-session"
+export LOOPMARSHAL_WINDOW_NAME="worker-1"
+export LOOPMARSHAL_HOOK_DEBUG=1
 
 # 模拟 PreToolUse 事件（调用非协作工具，应放行）
 echo '{"tool_name":"Read","tool_input":{"file_path":"test.txt"},"hook_event_name":"PreToolUse"}' | node .claude/hooks/collab-flow-control.mjs
@@ -373,7 +373,7 @@ echo "Exit code: $?"
 
 ```bash
 # 模拟 core server 不可达
-export AI_COLLAB_CORE_URL="http://127.0.0.1:99999"
+export LOOPMARSHAL_CORE_URL="http://127.0.0.1:99999"
 
 # 模拟 Stop 事件
 echo '{"hook_event_name":"Stop"}' | node .claude/hooks/collab-flow-control.mjs
@@ -394,8 +394,8 @@ echo "Exit code: $?"
 cat .claude/settings.json
 
 # 2. 设置环境变量（在 Claude Code 启动前）
-export AI_COLLAB_SESSION_NAME="test-session"
-export AI_COLLAB_WINDOW_NAME="worker-1"
+export LOOPMARSHAL_SESSION_NAME="test-session"
+export LOOPMARSHAL_WINDOW_NAME="worker-1"
 
 # 3. 启动 Claude Code
 claude
@@ -446,7 +446,7 @@ A: MCP stdio server 通过 stdin/stdout 通信，不会主动输出。需要发�
 A: 检查以下几点：
 1. `.claude/settings.json` 是否被 Claude Code 正确加载
 2. Hook 命令路径是否正确（相对项目根目录）
-3. 环境变量 `AI_COLLAB_SESSION_NAME` 和 `AI_COLLAB_WINDOW_NAME` 是否已设置
+3. 环境变量 `LOOPMARSHAL_SESSION_NAME` 和 `LOOPMARSHAL_WINDOW_NAME` 是否已设置
 4. Core server 是否可达（`curl http://127.0.0.1:42688/health`）
 
 ### Q: 进度通知间隔应该设置多少？

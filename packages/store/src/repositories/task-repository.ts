@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import type { Task } from "@ai-collab/protocol";
+import type { Task } from "@loopmarshal/protocol";
 
 type TaskRow = {
   id: string;

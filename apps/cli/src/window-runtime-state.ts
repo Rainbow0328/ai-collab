@@ -12,9 +12,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { createAiCollabClient } from "@ai-collab/sdk";
-import { AiCollabSdkError } from "@ai-collab/sdk";
-import { errorCodes, type CollaborationRunState } from "@ai-collab/protocol";
+import { createLoopMarshalClient } from "@loopmarshal/sdk";
+import { LoopMarshalSdkError } from "@loopmarshal/sdk";
+import { errorCodes, type CollaborationRunState } from "@loopmarshal/protocol";
 
 export type WindowRuntimeState = {
   windowKey: string;
@@ -48,10 +48,10 @@ export type WindowRuntimeState = {
   updatedAt: string;
 };
 
-const client = createAiCollabClient({
+const client = createLoopMarshalClient({
   headers: {
-    "x-ai-collab-client": "cli",
-    "x-ai-collab-process": String(process.pid)
+    "x-loopmarshal-client": "cli",
+    "x-loopmarshal-process": String(process.pid)
   }
 });
 
@@ -168,7 +168,7 @@ export const clearWindowRuntimeState = async (
     await client.clearWindowRuntimeState(sessionName, windowName);
   } catch (error: unknown) {
     if (
-      error instanceof AiCollabSdkError &&
+      error instanceof LoopMarshalSdkError &&
       error.code === errorCodes.sessionNotFound
     ) {
       return;

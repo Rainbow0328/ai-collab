@@ -16,14 +16,14 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
-import { startCoreServer } from "@ai-collab/core";
-import { createAiCollabClient } from "@ai-collab/sdk";
+import { startCoreServer } from "@loopmarshal/core";
+import { createLoopMarshalClient } from "@loopmarshal/sdk";
 
 const smokePort = 42713;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
 const rootDir = process.cwd();
 const cliEntry = resolve(rootDir, "apps/cli/dist/apps/cli/src/index.js");
-const stateDir = resolve(rootDir, ".ai-collab-test", "smoke-cli-stale-identity");
+const stateDir = resolve(rootDir, ".loopmarshal-test", "smoke-cli-stale-identity");
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -82,16 +82,16 @@ const main = async () => {
   const instance = await startCoreServer({
     host: "127.0.0.1",
     port: smokePort,
-    databasePath: ".ai-collab-test/smoke-cli-stale-identity.sqlite"
+    databasePath: ".loopmarshal-test/smoke-cli-stale-identity.sqlite"
   });
 
   try {
     const env = {
-      AI_COLLAB_BASE_URL: smokeBaseUrl,
-      AI_COLLAB_CLI_STATE_DIR: stateDir,
-      AI_COLLAB_ENABLE_AUXILIARY_CLI_COMMANDS: "1"
+      LOOPMARSHAL_BASE_URL: smokeBaseUrl,
+      LOOPMARSHAL_CLI_STATE_DIR: stateDir,
+      LOOPMARSHAL_ENABLE_AUXILIARY_CLI_COMMANDS: "1"
     };
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `cli-stale-${Date.now()}`;
     const hostName = "main-host";
     const hostIdentity = `${sessionName}::${hostName}`;

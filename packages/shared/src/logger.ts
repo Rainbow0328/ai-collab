@@ -112,7 +112,7 @@ export const createLogger = (options?: {
 
   const logger = pino(
     {
-      name: options?.name ?? "ai-collab",
+      name: options?.name ?? "loopmarshal",
       level,
       base: {
         pid: process.pid

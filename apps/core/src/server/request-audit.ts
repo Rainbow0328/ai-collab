@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { appendProjectLogEntry } from "@ai-collab/shared";
+import { appendProjectLogEntry } from "@loopmarshal/shared";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -108,14 +108,14 @@ const summarizeAudit = (
   const body = asRecord(request.body);
   const params = asRecord(request.params);
   const responseBody = parsePayload(payload);
-  const client = asString(request.headers["x-ai-collab-client"]) ?? "unknown";
-  const tool = asString(request.headers["x-ai-collab-tool"]);
-  const toolCallId = asString(request.headers["x-ai-collab-tool-call-id"]);
-  const phase = asString(request.headers["x-ai-collab-phase"]);
-  const processHeader = asString(request.headers["x-ai-collab-process"]) ?? null;
-  const identityHeader = asString(request.headers["x-ai-collab-identity"]);
-  const flowHeader = asString(request.headers["x-ai-collab-flow"]);
-  const roundHeader = asString(request.headers["x-ai-collab-round"]);
+  const client = asString(request.headers["x-loopmarshal-client"]) ?? "unknown";
+  const tool = asString(request.headers["x-loopmarshal-tool"]);
+  const toolCallId = asString(request.headers["x-loopmarshal-tool-call-id"]);
+  const phase = asString(request.headers["x-loopmarshal-phase"]);
+  const processHeader = asString(request.headers["x-loopmarshal-process"]) ?? null;
+  const identityHeader = asString(request.headers["x-loopmarshal-identity"]);
+  const flowHeader = asString(request.headers["x-loopmarshal-flow"]);
+  const roundHeader = asString(request.headers["x-loopmarshal-round"]);
   const remotePort =
     typeof request.ip === "string" &&
     typeof request.socket.remotePort === "number"

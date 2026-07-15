@@ -15,12 +15,12 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
-process.env.AI_COLLAB_LOG_ROTATION = "false";
+process.env.LOOPMARSHAL_LOG_ROTATION = "false";
 
 const smokePort = 42781;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
 const rootDir = process.cwd();
-const stateDir = resolve(rootDir, ".ai-collab-test", "smoke-console-api");
+const stateDir = resolve(rootDir, ".loopmarshal-test", "smoke-console-api");
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -29,13 +29,13 @@ const assert = (condition, message) => {
 };
 
 const main = async () => {
-  await mkdir(resolve(rootDir, ".ai-collab-test"), { recursive: true });
+  await mkdir(resolve(rootDir, ".loopmarshal-test"), { recursive: true });
   await rm(stateDir, { recursive: true, force: true });
   await mkdir(stateDir, { recursive: true });
 
-  process.env.AI_COLLAB_KNOWLEDGE_ROOT = resolve(stateDir, ".knowledge");
-  const { startCoreServer } = await import("@ai-collab/core");
-  const { createAiCollabClient } = await import("@ai-collab/sdk");
+  process.env.LOOPMARSHAL_KNOWLEDGE_ROOT = resolve(stateDir, ".knowledge");
+  const { startCoreServer } = await import("@loopmarshal/core");
+  const { createLoopMarshalClient } = await import("@loopmarshal/sdk");
 
   const instance = await startCoreServer({
     host: "127.0.0.1",
@@ -44,7 +44,7 @@ const main = async () => {
   });
 
   try {
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `console-api-${Date.now()}`;
     const correlationId = "smoke-console-thread-1";
     const reportContent = "Worker completed the console aggregation smoke task.";

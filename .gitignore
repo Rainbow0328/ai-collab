@@ -16,6 +16,8 @@ coverage/
 *.db-wal
 *.sqlite-shm
 *.sqlite-wal
+.loopmarshal/
+.loopmarshal-test
 .ai-collab/
 .ai-collab-test
 .idea
@@ -56,7 +58,7 @@ release/
 package-lock.json
 
 # Internal docs (not for public repo)
-AI-COLLAB-需求与修复文档.md
+LOOPMARSHAL-需求与修复文档.md
 post-技术社区.md
 
 # OS generated

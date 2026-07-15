@@ -14,7 +14,7 @@
  */
 import type { DatabaseSync } from "node:sqlite";
 
-import type { IdentityLease } from "@ai-collab/protocol";
+import type { IdentityLease } from "@loopmarshal/protocol";
 
 type IdentityLeaseRow = {
   identityKey: string;

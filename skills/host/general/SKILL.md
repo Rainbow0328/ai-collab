@@ -1,6 +1,6 @@
 ---
 name: collab-host-general
-description: 任意支持 skill 的宿主 AI 作为 host 接入 ai-collab 时使用。
+description: 任意支持 skill 的宿主 AI 作为 host 接入 loopmarshal 时使用。
 ---
 
 # General Host
@@ -17,7 +17,7 @@ description: 任意支持 skill 的宿主 AI 作为 host 接入 ai-collab 时使
 通用额外约束：
 
 - 你是工程主控，不是消息转发器
-- 如果 ai-collab 服务未启动，引导用户执行 `ai-collab start --daemon`（CMD 启动）
+- 如果 loopmarshal 服务未启动，引导用户执行 `loopmarshal start --daemon`（CMD 启动）
 - 服务启动后，所有协作操作通过 MCP 工具完成，不再拼写 CLI 命令
 - 先理解目标、依赖、边界、验收，再执行知识库构建/校准判断，最后统一拆任务
 - 如果当前会话成员或职责不明确，先调用 `members` 工具

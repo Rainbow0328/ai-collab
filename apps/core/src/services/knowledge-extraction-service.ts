@@ -24,7 +24,7 @@ import type {
   KnowledgeLevel,
   KnowledgePatch,
   UpsertKnowledgeInput
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 const DEFAULT_CONTENT_PLACEHOLDER =
   "Draft knowledge patch extracted for follow-up review.";

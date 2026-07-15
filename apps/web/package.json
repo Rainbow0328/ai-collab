@@ -1,5 +1,5 @@
 {
-  "name": "@ai-collab/web",
+  "name": "@loopmarshal/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@ai-collab/protocol": "workspace:*",
-    "@ai-collab/sdk": "workspace:*",
-    "@ai-collab/shared": "workspace:*",
+    "@loopmarshal/protocol": "workspace:*",
+    "@loopmarshal/sdk": "workspace:*",
+    "@loopmarshal/shared": "workspace:*",
     "@tanstack/react-query": "^5.80.7",
     "@tanstack/react-router": "^1.120.15",
     "react": "^19.0.0",

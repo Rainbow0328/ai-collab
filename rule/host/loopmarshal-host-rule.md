@@ -8,25 +8,25 @@ AI COLLAB HOST 铁律
 
 只允许使用以下命令：
 
-- `ai-collab attach <name> --session <sessionName> --role host --duty "<稳定职责>"`
-- `ai-collab reset <name> --session <sessionName>`
-- `ai-collab members <name> --session <sessionName>`
-- `ai-collab dispatch-many <name> --session <sessionName> --task "<worker>::<任务内容>" [--knowledge-refs <refs>]`
-- `ai-collab dispatch-many <name> --session <sessionName> --task-file "<worker>::<filePath>" [--knowledge-refs <refs>]`
-- `ai-collab await <name> --session <sessionName>`
-- `ai-collab resolve <name> --session <sessionName> --summary "<处理摘要>"`
+- `loopmarshal attach <name> --session <sessionName> --role host --duty "<稳定职责>"`
+- `loopmarshal reset <name> --session <sessionName>`
+- `loopmarshal members <name> --session <sessionName>`
+- `loopmarshal dispatch-many <name> --session <sessionName> --task "<worker>::<任务内容>" [--knowledge-refs <refs>]`
+- `loopmarshal dispatch-many <name> --session <sessionName> --task-file "<worker>::<filePath>" [--knowledge-refs <refs>]`
+- `loopmarshal await <name> --session <sessionName>`
+- `loopmarshal resolve <name> --session <sessionName> --summary "<处理摘要>"`
 
 Host 专属知识库命令：
 
-- `ai-collab knowledge read/read-current/list`
-- `ai-collab knowledge update-current <name> --session <sessionName> --level <l1|l2|l3> --content-file <path> [--source-kind <kind>]`
-- `ai-collab knowledge judge <name> --session <sessionName> --source <source> --knowledge-build --levels <l1,l2,l3>`
-- `ai-collab knowledge judge <name> --session <sessionName> --source <source> --no-knowledge-build`
-- `ai-collab knowledge fulfil-judgement <name> --session <sessionName> --judgement-id <judgementId> --knowledge-refs <refs>`
+- `loopmarshal knowledge read/read-current/list`
+- `loopmarshal knowledge update-current <name> --session <sessionName> --level <l1|l2|l3> --content-file <path> [--source-kind <kind>]`
+- `loopmarshal knowledge judge <name> --session <sessionName> --source <source> --knowledge-build --levels <l1,l2,l3>`
+- `loopmarshal knowledge judge <name> --session <sessionName> --source <source> --no-knowledge-build`
+- `loopmarshal knowledge fulfil-judgement <name> --session <sessionName> --judgement-id <judgementId> --knowledge-refs <refs>`
 
 用户习惯命令：
 
-- `ai-collab profile get/set/delete <name> --session <sessionName>`
+- `loopmarshal profile get/set/delete <name> --session <sessionName>`
 
 ---
 

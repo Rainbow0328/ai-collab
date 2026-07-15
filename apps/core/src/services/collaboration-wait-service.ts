@@ -6,7 +6,7 @@ import type {
   MessageRecord,
   WindowBinding,
   WindowRuntimeMessageKind
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 import type { MessageService } from "./message-service.js";
 import type { WindowBindingService } from "./window-binding-service.js";

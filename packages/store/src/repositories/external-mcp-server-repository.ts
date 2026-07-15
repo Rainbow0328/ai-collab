@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import type { McpServerConfig } from "@ai-collab/protocol";
+import type { McpServerConfig } from "@loopmarshal/protocol";
 
 type McpServerRow = {
   id: string;

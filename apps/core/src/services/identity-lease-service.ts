@@ -16,8 +16,8 @@ import type {
   AcquireIdentityLeaseInput,
   IdentityLease,
   ReleaseIdentityLeaseInput
-} from "@ai-collab/protocol";
-import { IdentityLeaseRepository } from "@ai-collab/store";
+} from "@loopmarshal/protocol";
+import { IdentityLeaseRepository } from "@loopmarshal/store";
 
 import { coreErrors } from "../errors.js";
 

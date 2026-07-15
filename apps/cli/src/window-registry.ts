@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type { AgentPlatform, ConnectionMode } from "@ai-collab/protocol";
+import type { AgentPlatform, ConnectionMode } from "@loopmarshal/protocol";
 
 import type { WindowProfile } from "./window-profile.js";
 
@@ -55,7 +55,7 @@ export const resolveWindowRegistryEntry = (
   if (profile) {
     if (profile.sessionName !== sessionName) {
       throw new Error(
-        `name="${windowName}" is bound to session="${profile.sessionName}" but requested session="${sessionName}". Run ai-collab reset ${windowName} --session ${sessionName} first, then re-attach.`
+        `name="${windowName}" is bound to session="${profile.sessionName}" but requested session="${sessionName}". Run loopmarshal reset ${windowName} --session ${sessionName} first, then re-attach.`
       );
     }
 
@@ -77,7 +77,7 @@ export const resolveWindowRegistryEntry = (
   const role = expectedRole ?? inferLegacyRole(windowName);
   if (!role) {
     throw new Error(
-      `name="${windowName}" has no local binding and role cannot be inferred. Use ai-collab attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<description>" instead.`
+      `name="${windowName}" has no local binding and role cannot be inferred. Use loopmarshal attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<description>" instead.`
     );
   }
 

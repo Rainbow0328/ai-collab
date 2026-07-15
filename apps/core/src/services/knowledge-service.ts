@@ -41,7 +41,7 @@ import type {
   UpsertKnowledgePatchReviewRecordInput,
   UpsertKnowledgePersistenceRecordInput,
   UpsertKnowledgeInput
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 import { coreErrors } from "../errors.js";
 import { KnowledgeFileStore } from "./knowledge-file-store.js";

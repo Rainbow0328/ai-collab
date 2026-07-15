@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * AI Collab 开发环境启动脚本
+ * LoopMarshal 开发环境启动脚本
  * 同时启动前端和后端
  */
 
@@ -30,7 +30,7 @@ const log = {
 
 console.log('');
 console.log(`${colors.blue}╔═══════════════════════════════════════════════════════════╗${colors.reset}`);
-console.log(`${colors.blue}║${colors.reset}  ${colors.cyan}🚀 AI Collab - 开发环境启动${colors.reset}                              ${colors.blue}║${colors.reset}`);
+console.log(`${colors.blue}║${colors.reset}  ${colors.cyan}🚀 LoopMarshal - 开发环境启动${colors.reset}                              ${colors.blue}║${colors.reset}`);
 console.log`${colors.blue}╚═══════════════════════════════════════════════════════════╝${colors.reset}`;
 console.log('');
 
@@ -92,7 +92,7 @@ setTimeout(() => {
 
   console.log('');
   console.log(`${colors.green}╔═══════════════════════════════════════════════════════════╗${colors.reset}`);
-  console.log(`${colors.green}║${colors.reset}  ${colors.cyan}✅ AI Collab 启动成功！${colors.reset}                                  ${colors.green}║${colors.reset}`);
+  console.log(`${colors.green}║${colors.reset}  ${colors.cyan}✅ LoopMarshal 启动成功！${colors.reset}                                  ${colors.green}║${colors.reset}`);
   console.log(`${colors.green}╠═══════════════════════════════════════════════════════════╣${colors.reset}`);
   console.log(`${colors.green}║${colors.reset}  ${colors.blue}📱 前端地址:${colors.reset} http://localhost:5173                      ${colors.green}║${colors.reset}`);
   console.log(`${colors.green}║${colors.reset}  ${colors.blue}🔌 后端地址:${colors.reset} http://127.0.0.1:42688                     ${colors.green}║${colors.reset}`);

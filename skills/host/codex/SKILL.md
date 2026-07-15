@@ -1,6 +1,6 @@
 ---
 name: collab-host-codex
-description: Codex 作为 host 接入 ai-collab 时使用。
+description: Codex 作为 host 接入 loopmarshal 时使用。
 ---
 
 # Codex Host
@@ -16,7 +16,7 @@ description: Codex 作为 host 接入 ai-collab 时使用。
 
 Codex 额外约束：
 
-- 如果 ai-collab 服务未启动，引导用户执行 `ai-collab start --daemon`（CMD 启动）
+- 如果 loopmarshal 服务未启动，引导用户执行 `loopmarshal start --daemon`（CMD 启动）
 - 服务启动后，所有协作操作通过 MCP 工具完成，不拼写 CLI 命令
 - 先做工程拆解，再统一派发
 - 能并行时一次性派完当前就绪任务

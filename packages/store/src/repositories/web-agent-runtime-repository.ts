@@ -1,5 +1,5 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
-import type { WebAgentRuntime } from "@ai-collab/protocol";
+import type { WebAgentRuntime } from "@loopmarshal/protocol";
 
 type WebAgentRuntimeRow = {
   id: string;

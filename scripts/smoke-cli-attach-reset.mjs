@@ -15,13 +15,13 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { startCoreServer } from "@ai-collab/core";
+import { startCoreServer } from "@loopmarshal/core";
 import { createSmokeClient } from "./helpers/create-smoke-client.mjs";
 
 const smokePort = 42726;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
 const rootDir = process.cwd();
-const stateDir = resolve(rootDir, ".ai-collab-test", "smoke-cli-attach-reset");
+const stateDir = resolve(rootDir, ".loopmarshal-test", "smoke-cli-attach-reset");
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -30,13 +30,13 @@ const assert = (condition, message) => {
 };
 
 const main = async () => {
-  await mkdir(resolve(rootDir, ".ai-collab-test"), { recursive: true });
+  await mkdir(resolve(rootDir, ".loopmarshal-test"), { recursive: true });
   await rm(stateDir, { recursive: true, force: true });
 
   const instance = await startCoreServer({
     host: "127.0.0.1",
     port: smokePort,
-    databasePath: ".ai-collab-test/smoke-cli-attach-reset.sqlite"
+    databasePath: ".loopmarshal-test/smoke-cli-attach-reset.sqlite"
   });
 
   try {

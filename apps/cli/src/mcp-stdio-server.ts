@@ -1,7 +1,7 @@
 /*
- * ai-collab MCP stdio server
+ * loopmarshal MCP stdio server
  *
- * Bridges ai-collab CLI commands into MCP tools over JSON-RPC stdio.
+ * Bridges loopmarshal CLI commands into MCP tools over JSON-RPC stdio.
  * For long-running `await` calls, sends progress notifications every 30s
  * to prevent IDE MCP tool timeouts.
  */
@@ -192,7 +192,7 @@ const isExecuteInternalCmd = (
  * `[A-Za-z0-9_./:=@-]`) or wraps it in `JSON.stringify` (double quotes with
  * escape sequences). This function reverses that encoding.
  *
- * The first token (`ai-collab`) is stripped — only the args array is returned.
+ * The first token (`loopmarshal`) is stripped — only the args array is returned.
  */
 const parseCmdString = (cmd: string): string[] => {
   const tokens: string[] = [];
@@ -234,8 +234,8 @@ const parseCmdString = (cmd: string): string[] => {
     }
   }
 
-  // Strip the leading "ai-collab" binary name
-  if (tokens.length > 0 && tokens[0] === "ai-collab") {
+  // Strip the leading "loopmarshal" binary name
+  if (tokens.length > 0 && tokens[0] === "loopmarshal") {
     return tokens.slice(1);
   }
   return tokens;
@@ -281,14 +281,14 @@ const HOST_ONLY_TOOLS = new Set(["dispatch_many", "resolve", "knowledge_upsert"]
  *
  * Priority:
  * 1. Runtime role set by `attach` call (dynamic — covers role changes across sessions)
- * 2. AI_COLLAB_ROLE env var (static — set by mcp-setup for pre-connection isolation)
+ * 2. LOOPMARSHAL_ROLE env var (static — set by mcp-setup for pre-connection isolation)
  * 3. undefined (no filtering — all tools exposed)
  */
 let runtimeRole: "host" | "worker" | undefined;
 
 const getEffectiveRole = (): "host" | "worker" | undefined => {
   if (runtimeRole) return runtimeRole;
-  const envRole = process.env.AI_COLLAB_ROLE;
+  const envRole = process.env.LOOPMARSHAL_ROLE;
   if (envRole === "host" || envRole === "worker") return envRole;
   return undefined;
 };
@@ -309,7 +309,7 @@ const tools: ToolDef[] = [
   {
     name: "attach",
     description:
-      "Attach the current AI IDE as a member to an ai-collab session. Must be called before any other tool.",
+      "Attach the current AI IDE as a member to an loopmarshal session. Must be called before any other tool.",
     inputSchema: {
       type: "object",
       properties: {
@@ -381,13 +381,13 @@ const tools: ToolDef[] = [
   {
     name: "submit",
     description:
-      "Worker only. Submit task result. Content must be a JSON string matching ai-collab.worker-report.v1 schema. Set result to 'contested' when the task boundary or goal conflicts with knowledge base or user intent, triggering Host re-planning.",
+      "Worker only. Submit task result. Content must be a JSON string matching loopmarshal.worker-report.v1 schema. Set result to 'contested' when the task boundary or goal conflicts with knowledge base or user intent, triggering Host re-planning.",
     inputSchema: {
       type: "object",
       properties: {
         name: str("Worker member name"),
         session: str("Session name"),
-        content: str("Worker report JSON string (ai-collab.worker-report.v1)"),
+        content: str("Worker report JSON string (loopmarshal.worker-report.v1)"),
         result: str("Payload result marker: completed, failed, or contested")
       },
       required: ["name", "session", "content"]
@@ -676,7 +676,7 @@ const handleToolCall = async (
         if (result.exitCode !== 0) {
           const errorOutput = result.stderr.trim() || result.stdout.trim();
           throw new Error(
-            `ai-collab ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`
+            `loopmarshal ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`
           );
         }
 
@@ -694,7 +694,7 @@ const handleToolCall = async (
       }
 
       throw new Error(
-        `ai-collab await exceeded maximum continuation iterations (${MAX_ITERATIONS})`
+        `loopmarshal await exceeded maximum continuation iterations (${MAX_ITERATIONS})`
       );
     } finally {
       if (progressTimer) clearInterval(progressTimer);
@@ -709,7 +709,7 @@ const handleToolCall = async (
 
   if (result.exitCode !== 0) {
     const errorOutput = result.stderr.trim() || result.stdout.trim();
-    throw new Error(`ai-collab ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`);
+    throw new Error(`loopmarshal ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`);
   }
 
   return parseCliOutput(result.stdout);
@@ -732,7 +732,7 @@ const handleMessage = async (message: JsonRpcRequest): Promise<void> => {
             logging: {}
           },
           serverInfo: {
-            name: "ai-collab",
+            name: "loopmarshal",
             version: "0.1.0"
           }
         });
@@ -850,7 +850,7 @@ const registerWithCore = async (): Promise<boolean> => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         pid: process.pid,
-        ideLabel: process.env.AI_COLLAB_IDE_LABEL ?? null
+        ideLabel: process.env.LOOPMARSHAL_IDE_LABEL ?? null
       }),
       signal: controller.signal
     });
@@ -899,7 +899,7 @@ const startHeartbeat = (): void => {
     if (!ok && coreAlive) {
       coreAlive = false;
       process.stderr.write(
-        "ai-collab core service is no longer reachable. Shutting down MCP server.\n"
+        "loopmarshal core service is no longer reachable. Shutting down MCP server.\n"
       );
       void gracefulShutdown();
     }
@@ -923,7 +923,7 @@ const main = async (): Promise<void> => {
   // Use raw mode to avoid mangling stdin
   if (process.stdin.isTTY) {
     process.stderr.write(
-      "ai-collab MCP server must be launched by an MCP client (stdio mode).\n"
+      "loopmarshal MCP server must be launched by an MCP client (stdio mode).\n"
     );
     process.exit(1);
   }
@@ -932,7 +932,7 @@ const main = async (): Promise<void> => {
   const coreHealthy = await checkCoreHealth();
   if (!coreHealthy) {
     process.stderr.write(
-      "ai-collab core service is not running. Start it with `ai-collab start --daemon` first.\n"
+      "loopmarshal core service is not running. Start it with `loopmarshal start --daemon` first.\n"
     );
     process.exit(1);
   }
@@ -941,7 +941,7 @@ const main = async (): Promise<void> => {
   const registered = await registerWithCore();
   if (!registered) {
     process.stderr.write(
-      "Failed to register with ai-collab core service. Shutting down.\n"
+      "Failed to register with loopmarshal core service. Shutting down.\n"
     );
     process.exit(1);
   }
@@ -990,7 +990,7 @@ const main = async (): Promise<void> => {
     void gracefulShutdown();
   });
 
-  process.stderr.write("ai-collab MCP stdio server ready\n");
+  process.stderr.write("loopmarshal MCP stdio server ready\n");
 };
 
 main();

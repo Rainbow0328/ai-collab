@@ -21,13 +21,13 @@ import type {
   MessageType,
   SendMessageInput,
   WsInboxMessageNotification
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import {
   AgentRepository,
   IdentityLeaseRepository,
   MessageRepository,
   SessionRepository
-} from "@ai-collab/store";
+} from "@loopmarshal/store";
 
 import { coreErrors } from "../errors.js";
 

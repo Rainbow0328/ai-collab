@@ -16,8 +16,8 @@ import type {
   UpdateWindowBindingDefaultsInput,
   UpdateWindowRuntimeStateInput,
   WindowBinding
-} from "@ai-collab/protocol";
-import { AgentRepository } from "@ai-collab/store";
+} from "@loopmarshal/protocol";
+import { AgentRepository } from "@loopmarshal/store";
 
 import { coreErrors } from "../errors.js";
 

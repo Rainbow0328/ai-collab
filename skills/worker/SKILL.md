@@ -1,11 +1,11 @@
 ---
 name: collab-worker
-description: 当当前聊天作为 worker 接入 ai-collab，并需要稳定执行等待任务、读取必要知识库、处理任务、回报结果和知识库评估、再等待闭环时使用。
+description: 当当前聊天作为 worker 接入 loopmarshal，并需要稳定执行等待任务、读取必要知识库、处理任务、回报结果和知识库评估、再等待闭环时使用。
 ---
 
 # AI COLLAB WORKER 强规则
 
-本文件是 ai-collab Worker 运行规则的唯一主规则源。`rule/` 目录只允许作为兼容入口；如果 `rule/`、docs、普通说明和本文件冲突，必须以本文件为准。
+本文件是 loopmarshal Worker 运行规则的唯一主规则源。`rule/` 目录只允许作为兼容入口；如果 `rule/`、docs、普通说明和本文件冲突，必须以本文件为准。
 
 Worker 是执行者，不是主控编排者，不负责调度，不负责知识库写入。
 
@@ -15,16 +15,16 @@ Worker 是执行者，不是主控编排者，不负责调度，不负责知识�
 
 ### 阶段一：CMD 启动（一次性）
 
-ai-collab 核心服务必须先通过 CMD 命令启动。如果尚未启动，引导用户执行：
+loopmarshal 核心服务必须先通过 CMD 命令启动。如果尚未启动，引导用户执行：
 
 ```bash
-ai-collab start --daemon
+loopmarshal start --daemon
 ```
 
 如果 IDE 尚未配置 MCP 集成，引导用户执行：
 
 ```bash
-ai-collab mcp:setup
+loopmarshal mcp setup
 ```
 
 然后用 MCP 工具检查服务状态确认已启动。
@@ -83,7 +83,7 @@ Worker 不得把 `taskResult`、`knowledgeRead`、`knowledgeUpdateAssessment` �
 
 Worker 拿到任务后必须按以下顺序执行：
 
-1. 从任务消息的 `payload.content` 读取并解析 `ai-collab.task.v1`。
+1. 从任务消息的 `payload.content` 读取并解析 `loopmarshal.task.v1`。
 2. 校验 `schema`、`kind`、`taskId`、`goal`、`boundary`、`knowledgeRefs`、`reportRequired`。
 3. 如果存在 `knowledgeRefs`，必须先调用 `knowledge_read` 只读读取对应知识库。
 4. 如果任务没有 `knowledgeRefs`，但方向、业务规则、接口、字段、协议或模块边界不确定，必须主动调用 `knowledge_list` 和 `knowledge_read` 查询知识库。
@@ -91,10 +91,10 @@ Worker 拿到任务后必须按以下顺序执行：
 6. 形成本次任务结果。
 7. 评估是否存在需要 Host 更新知识库的内容。
 8. 如果需要更新，必须提供候选更新内容。
-9. 使用 `ai-collab.worker-report.v1` 作为 `submit` 的 `content` 参数完整内容，一次性回报任务结果和知识库更新评估。
+9. 使用 `loopmarshal.worker-report.v1` 作为 `submit` 的 `content` 参数完整内容，一次性回报任务结果和知识库更新评估。
 10. 按返回协议继续。
 
-如果任务消息的 `payload.content` 不是合法 JSON，或者 `schema` 不是 `ai-collab.task.v1`，Worker 必须提交失败回报，说明 `invalid_task_schema`，不得猜测执行。
+如果任务消息的 `payload.content` 不是合法 JSON，或者 `schema` 不是 `loopmarshal.task.v1`，Worker 必须提交失败回报，说明 `invalid_task_schema`，不得猜测执行。
 
 ## 6. 知识库读取规则
 
@@ -184,13 +184,13 @@ Worker 不得把以下内容放入候选更新：
 
 ## 8. submit 消息 schema
 
-Worker 的 `submit` 工具 `content` 参数必须是一个可被 `JSON.parse` 的单个 JSON 对象字符串，schema 必须为 `ai-collab.worker-report.v1`。
+Worker 的 `submit` 工具 `content` 参数必须是一个可被 `JSON.parse` 的单个 JSON 对象字符串，schema 必须为 `loopmarshal.worker-report.v1`。
 
 必须包含以下结构：
 
 ```json
 {
-  "schema": "ai-collab.worker-report.v1",
+  "schema": "loopmarshal.worker-report.v1",
   "kind": "worker_report",
   "taskId": "TASK-001",
   "status": "completed",
@@ -218,7 +218,7 @@ Worker 的 `submit` 工具 `content` 参数必须是一个可被 `JSON.parse` �
 
 字段强规则：
 
-- `schema` 必须固定为 `ai-collab.worker-report.v1`。
+- `schema` 必须固定为 `loopmarshal.worker-report.v1`。
 - `kind` 必须固定为 `worker_report`。
 - `taskId` 必须原样使用 Host 任务中的 `taskId`。
 - `status` 只能是 `completed`、`failed`、`blocked`、`contested`。
@@ -260,7 +260,7 @@ Worker 在以下情况可以使用 `contested` 状态回报，对 Host 的任务
 
 ```json
 {
-  "schema": "ai-collab.worker-report.v1",
+  "schema": "loopmarshal.worker-report.v1",
   "kind": "worker_report",
   "taskId": "TASK-001",
   "status": "contested",
@@ -304,7 +304,7 @@ Worker 在以下情况可以使用 `contested` 状态回报，对 Host 的任务
 
 ## 10. Skill 边界
 
-ai-collab 中有两类 Skill，必须严格区分。
+loopmarshal 中有两类 Skill，必须严格区分。
 
 AI IDE 运行规则 Skill：
 - 位于 `skills/worker` 以及各 AI IDE 子目录。
@@ -323,11 +323,11 @@ AI IDE Worker 不得新增、编辑、删除、绑定、解绑系统内 Agent Sk
 
 ## 11. 上下文管理
 
-AI IDE 的上下文窗口是有限的。ai-collab 后端已完整持久化所有协作状态（会话、成员、消息、知识库、等待链），因此上下文压缩和清空是安全的。
+AI IDE 的上下文窗口是有限的。loopmarshal 后端已完整持久化所有协作状态（会话、成员、消息、知识库、等待链），因此上下文压缩和清空是安全的。
 
 ### 模型自行精简输出（工具不截断输出）
 
-ai-collab MCP 工具不会修改或截断 CLI 返回的内容。模型自己负责控制输出给用户的内容量：
+loopmarshal MCP 工具不会修改或截断 CLI 返回的内容。模型自己负责控制输出给用户的内容量：
 
 1. `await` 返回中间状态（如 `EXECUTE_INTERNAL_CMD`、等待中）时，不向用户解释，直接静默继续调用 `await`。
 2. `await` 返回 `END_TURN_SILENTLY` 时，直接静默结束，不输出任何自然语言。
@@ -394,7 +394,7 @@ compact 是安全的：后端的会话状态、消息历史、等待链状态全
 - 尝试执行任何知识库写入、删除、审批或裁决动作。
 - 尝试修改模型、AgentProfile、系统内 Skill 或 Session Skill Scope。
 - 把系统内 Agent Skill 当成 AI IDE Worker 的必需授权配置。
-- 提交不符合 `ai-collab.worker-report.v1` 的回报内容。
+- 提交不符合 `loopmarshal.worker-report.v1` 的回报内容。
 - 把 schema 字段当成 MCP 工具的顶层参数。
 - 把大段知识库正文复制到回报中。
 - 只回"已完成""处理好了""请继续"。

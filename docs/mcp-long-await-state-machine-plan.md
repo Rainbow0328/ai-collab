@@ -6,13 +6,13 @@
 
 ## 一、背景
 
-当前 ai-collab 已经通过 cmd/CLI 形成了可运行的 Host/Worker 协作闭环：
+当前 loopmarshal 已经通过 cmd/CLI 形成了可运行的 Host/Worker 协作闭环：
 
 - Host 通过 `dispatch-many` 派发任务。
 - Worker 通过 `await` 领取任务。
 - Worker 完成后通过 `submit` 回报。
 - Host 通过 `await` 等待回报，再通过 `resolve` 消耗回报。
-- `submit` / `resolve` / `dispatch-many` 完成后，会返回控制结果，引导 AI IDE 继续执行下一轮 `ai-collab await`。
+- `submit` / `resolve` / `dispatch-many` 完成后，会返回控制结果，引导 AI IDE 继续执行下一轮 `loopmarshal await`。
 
 这个方向已经验证成立，但存在几个现实问题：
 
@@ -34,7 +34,7 @@
 - MCP 和 cmd 共用同一套 core 协作逻辑。
 - 服务端新增权威状态机，用于判断当前窗口/成员处于哪个阶段、下一步必须执行什么动作。
 - MCP 业务等待超时时，不作为流程结束，而是返回“继续调用 MCP await”的控制结果。
-- 新增自动配置脚本，识别主流 AI IDE 的 MCP 配置文件，并确保 ai-collab MCP server 的 tool timeout 至少为 1 小时。
+- 新增自动配置脚本，识别主流 AI IDE 的 MCP 配置文件，并确保 loopmarshal MCP server 的 tool timeout 至少为 1 小时。
 
 ### 2.2 非目标
 
@@ -52,7 +52,7 @@
 ```text
 AI IDE
   -> cmd / shell tool
-  -> ai-collab CLI
+  -> loopmarshal CLI
   -> core REST API
   -> message queue / runtime state / lease
 ```
@@ -63,7 +63,7 @@ AI IDE
 wait_timeout
   -> wait_timeout_continue
   -> EXECUTE_INTERNAL_CMD
-  -> ai-collab await ...
+  -> loopmarshal await ...
 ```
 
 这个机制能运行，但本质上还是“返回值驱动 AI IDE 继续执行”，属于软流程。
@@ -117,7 +117,7 @@ type McpWaitPolicy = {
 说明：
 
 - 客户端 MCP tool timeout 建议配置为 3600 秒。
-- ai-collab 业务等待建议默认 3300 秒或 3500 秒，不直接等满客户端超时。
+- loopmarshal 业务等待建议默认 3300 秒或 3500 秒，不直接等满客户端超时。
 - 业务等待超时后，MCP tool 主动返回 `wait_timeout_continue`，要求继续调用下一轮 MCP await。
 - 等待期间不向模型输出空转日志。
 - 只有任务、回报、会话完成、用户确认需求、错误等有意义事件才返回可处理结果。
@@ -521,7 +521,7 @@ cmd adapter -> 当前 control/debug JSON
 
 1. 识别当前机器上安装/使用的 AI IDE。
 2. 查找对应 MCP 配置文件。
-3. 检查 ai-collab MCP server 是否存在。
+3. 检查 loopmarshal MCP server 是否存在。
 4. 检查 MCP tool timeout 是否为 1 小时。
 5. 不存在则新增；存在但低于 1 小时则更新。
 6. 输出变更摘要和备份路径。
@@ -529,7 +529,7 @@ cmd adapter -> 当前 control/debug JSON
 建议命令：
 
 ```text
-ai-collab mcp:configure-timeout --target auto --timeout 3600
+loopmarshal mcp configure-timeout --target auto --timeout 3600
 ```
 
 或脚本：
@@ -568,7 +568,7 @@ Cursor 暂不作为长 MCP timeout 主路径；如果检测到 Cursor，只输�
 ### 8.4 写入原则
 
 - 写入前创建备份。
-- 只修改 ai-collab MCP server 对应配置。
+- 只修改 loopmarshal MCP server 对应配置。
 - 如果已有 timeout 且大于等于目标值，不修改。
 - 如果已有 timeout 小于目标值，更新到目标值。
 - 如果 server 不存在，根据目标客户端写入推荐配置。
@@ -581,9 +581,9 @@ Claude Code：
 ```json
 {
   "mcpServers": {
-    "ai-collab": {
+    "loopmarshal": {
       "command": "node",
-      "args": ["path/to/ai-collab-mcp.js"],
+      "args": ["path/to/loopmarshal-mcp.js"],
       "timeout": 3600000
     }
   }
@@ -595,7 +595,7 @@ Codex：
 ```toml
 [mcp_servers.ai_collab]
 command = "node"
-args = ["path/to/ai-collab-mcp.js"]
+args = ["path/to/loopmarshal-mcp.js"]
 startup_timeout_sec = 60
 tool_timeout_sec = 3600
 ```
@@ -637,7 +637,7 @@ cmd 继续使用当前控制格式：
 ```json
 {
   "op": "EXECUTE_INTERNAL_CMD",
-  "cmd": "ai-collab await worker-1 --session demo"
+  "cmd": "loopmarshal await worker-1 --session demo"
 }
 ```
 
@@ -746,7 +746,7 @@ Only produce a user-visible summary when userVisibleResponseAllowed=true.
 | MCP 和 cmd 逻辑分叉 | 后续维护成本升高 | 抽 shared wait engine，adapter 只做格式转换 |
 | 长等待期间无 heartbeat | 服务端误判 stale | MCP wait 内部定期刷新 heartbeat/lease |
 | 远程 MCP idle timeout | 长时间无 progress 被断开 | 支持 progress notification 或配置 idle timeout；stdio 优先 |
-| 自动配置误改用户文件 | 用户配置损坏 | 修改前备份，只修改 ai-collab server 节点 |
+| 自动配置误改用户文件 | 用户配置损坏 | 修改前备份，只修改 loopmarshal server 节点 |
 
 ## 十三、当前结论
 

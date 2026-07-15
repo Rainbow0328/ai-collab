@@ -1,4 +1,4 @@
-import { loadConfig, type CoreConfig } from "@ai-collab/shared";
+import { loadConfig, type CoreConfig } from "@loopmarshal/shared";
 
 export { type CoreConfig };
 

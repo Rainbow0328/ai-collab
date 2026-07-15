@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const releaseRoot = join(repoRoot, "release", "ai-collab");
+const releaseRoot = join(repoRoot, "release", "loopmarshal");
 const webDistPath = join(repoRoot, "apps", "web", "dist");
 
 const rootPackage = {
@@ -28,34 +28,34 @@ const rootPackage = {
 
 const bundledPackages = [
   {
-    name: "@ai-collab/core",
+    name: "@loopmarshal/core",
     packageJsonPath: join(repoRoot, "apps", "core", "package.json"),
     distPath: join(repoRoot, "apps", "core", "dist")
   },
   {
-    name: "@ai-collab/protocol",
+    name: "@loopmarshal/protocol",
     packageJsonPath: join(repoRoot, "packages", "protocol", "package.json"),
     distPath: join(repoRoot, "packages", "protocol", "dist")
   },
   {
-    name: "@ai-collab/shared",
+    name: "@loopmarshal/shared",
     packageJsonPath: join(repoRoot, "packages", "shared", "package.json"),
     distPath: join(repoRoot, "packages", "shared", "dist")
   },
   {
-    name: "@ai-collab/sdk",
+    name: "@loopmarshal/sdk",
     packageJsonPath: join(repoRoot, "packages", "sdk", "package.json"),
     distPath: join(repoRoot, "packages", "sdk", "dist")
   },
   {
-    name: "@ai-collab/store",
+    name: "@loopmarshal/store",
     packageJsonPath: join(repoRoot, "packages", "store", "package.json"),
     distPath: join(repoRoot, "packages", "store", "dist")
   }
 ];
 
 const internalPackageNames = new Set([
-  "ai-collab",
+  "loopmarshal",
   ...bundledPackages.map((item) => item.name)
 ]);
 
@@ -175,7 +175,7 @@ const main = async () => {
   if (existsSync(join(webDistPath, "index.html"))) {
     await cp(
       webDistPath,
-      join(releaseRoot, "node_modules", "@ai-collab", "core", "web"),
+      join(releaseRoot, "node_modules", "@loopmarshal", "core", "web"),
       { recursive: true }
     );
   }
@@ -189,7 +189,7 @@ const main = async () => {
       {
         releaseRoot,
         bundledExternalDependencies: externalDependencies,
-        nextCommand: "npm pack ./release/ai-collab --json --cache .npm-cache"
+        nextCommand: "npm pack ./release/loopmarshal --json --cache .npm-cache"
       },
       null,
       2

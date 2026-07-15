@@ -8,6 +8,21 @@ importers:
 
   .:
     devDependencies:
+      '@loopmarshal/core':
+        specifier: workspace:*
+        version: link:apps/core
+      '@loopmarshal/protocol':
+        specifier: workspace:*
+        version: link:packages/protocol
+      '@loopmarshal/sdk':
+        specifier: workspace:*
+        version: link:packages/sdk
+      '@loopmarshal/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      '@loopmarshal/store':
+        specifier: workspace:*
+        version: link:packages/store
       '@types/node':
         specifier: ^24.3.0
         version: 24.12.2
@@ -17,7 +32,7 @@ importers:
 
   adapters/vscode-extension:
     dependencies:
-      '@ai-collab/sdk':
+      '@loopmarshal/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
     devDependencies:
@@ -27,16 +42,16 @@ importers:
 
   apps/cli:
     dependencies:
-      '@ai-collab/core':
+      '@loopmarshal/core':
         specifier: workspace:*
         version: link:../core
-      '@ai-collab/protocol':
+      '@loopmarshal/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@ai-collab/sdk':
+      '@loopmarshal/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@ai-collab/shared':
+      '@loopmarshal/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       commander:
@@ -45,18 +60,18 @@ importers:
 
   apps/core:
     dependencies:
-      '@ai-collab/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@ai-collab/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
-      '@ai-collab/store':
-        specifier: workspace:*
-        version: link:../../packages/store
       '@fastify/websocket':
         specifier: ^11.0.2
         version: 11.2.0
+      '@loopmarshal/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@loopmarshal/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@loopmarshal/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
@@ -73,13 +88,13 @@ importers:
 
   apps/web:
     dependencies:
-      '@ai-collab/protocol':
+      '@loopmarshal/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@ai-collab/sdk':
+      '@loopmarshal/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@ai-collab/shared':
+      '@loopmarshal/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@tanstack/react-query':
@@ -125,7 +140,7 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@ai-collab/protocol':
+      '@loopmarshal/protocol':
         specifier: workspace:*
         version: link:../protocol
 
@@ -133,7 +148,7 @@ importers:
 
   packages/store:
     dependencies:
-      '@ai-collab/protocol':
+      '@loopmarshal/protocol':
         specifier: workspace:*
         version: link:../protocol
 

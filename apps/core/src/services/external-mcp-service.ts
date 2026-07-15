@@ -5,9 +5,9 @@
  * 配置持久化到 SQLite 数据库，重启后自动恢复。
  */
 import { randomUUID } from "node:crypto";
-import type { McpServerConfig, CreateMcpServerInput, UpdateMcpServerInput } from "@ai-collab/protocol";
-import type { ExternalMcpServerRepository } from "@ai-collab/store";
-import { getLogger } from "@ai-collab/shared";
+import type { McpServerConfig, CreateMcpServerInput, UpdateMcpServerInput } from "@loopmarshal/protocol";
+import type { ExternalMcpServerRepository } from "@loopmarshal/store";
+import { getLogger } from "@loopmarshal/shared";
 
 const logger = getLogger();
 

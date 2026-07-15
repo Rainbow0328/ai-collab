@@ -1,11 +1,11 @@
 {
-  "name": "ai-collab",
+  "name": "loopmarshal",
   "version": "0.1.0",
   "private": false,
   "description": "Local AI collaboration hub CLI with unified member-session execution commands.",
   "type": "module",
   "bin": {
-    "ai-collab": "dist/apps/cli/src/index.js"
+    "loopmarshal": "dist/apps/cli/src/index.js"
   },
   "main": "dist/apps/cli/src/index.js",
   "types": "dist/apps/cli/src/index.d.ts",
@@ -13,21 +13,21 @@
     "dist/**/*"
   ],
   "bundledDependencies": [
-    "@ai-collab/core",
-    "@ai-collab/protocol",
-    "@ai-collab/shared",
-    "@ai-collab/sdk",
-    "@ai-collab/store"
+    "@loopmarshal/core",
+    "@loopmarshal/protocol",
+    "@loopmarshal/shared",
+    "@loopmarshal/sdk",
+    "@loopmarshal/store"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-collab/core": "workspace:*",
-    "@ai-collab/protocol": "workspace:*",
-    "@ai-collab/shared": "workspace:*",
-    "@ai-collab/sdk": "workspace:*",
+    "@loopmarshal/core": "workspace:*",
+    "@loopmarshal/protocol": "workspace:*",
+    "@loopmarshal/shared": "workspace:*",
+    "@loopmarshal/sdk": "workspace:*",
     "commander": "^13.1.0"
   }
 }

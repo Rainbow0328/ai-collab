@@ -11,7 +11,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = 'ai-collab-theme';
+const STORAGE_KEY = 'loopmarshal-theme';
 
 function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'dark';

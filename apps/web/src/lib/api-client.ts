@@ -11,14 +11,14 @@ import type {
   UpsertProgressInput,
   ListProgressFilter,
   AttachSessionInput,
-} from "@ai-collab/protocol";
-import { createAiCollabClient, AiCollabClient } from "@ai-collab/sdk";
+} from "@loopmarshal/protocol";
+import { createLoopMarshalClient, LoopMarshalClient } from "@loopmarshal/sdk";
 
-let clientInstance: AiCollabClient | null = null;
+let clientInstance: LoopMarshalClient | null = null;
 
-export const getApiClient = (baseUrl?: string): AiCollabClient => {
+export const getApiClient = (baseUrl?: string): LoopMarshalClient => {
   if (!clientInstance) {
-    clientInstance = createAiCollabClient({
+    clientInstance = createLoopMarshalClient({
       baseUrl: baseUrl ?? (typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:42688"),
     });
   }

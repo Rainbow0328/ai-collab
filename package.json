@@ -1,5 +1,5 @@
 {
-  "name": "ai-collab",
+  "name": "loopmarshal",
   "version": "0.1.0",
   "private": true,
   "description": "Local AI collaboration hub with TypeScript core and unified CLI collaboration flow.",
@@ -9,19 +9,24 @@
     "packages/*"
   ],
   "devDependencies": {
+    "@loopmarshal/core": "workspace:*",
+    "@loopmarshal/protocol": "workspace:*",
+    "@loopmarshal/sdk": "workspace:*",
+    "@loopmarshal/shared": "workspace:*",
+    "@loopmarshal/store": "workspace:*",
     "@types/node": "^24.3.0",
     "typescript": "^5.9.2"
   },
   "scripts": {
-    "start": "node ai-collab-start.js",
+    "start": "node loopmarshal-start.js",
     "start:web": "cd apps/web && pnpm dev",
     "start:core": "cd apps/core && node dist/apps/core/src/index.js",
     "dev:core": "cd apps/core && pnpm build && node dist/apps/core/src/index.js",
     "build": "npm run build --workspaces --if-present",
     "clean": "node -e \"const{rmSync}=require('fs');for(const p of['apps/cli/dist','apps/core/dist','packages/protocol/dist','packages/shared/dist','packages/sdk/dist','packages/store/dist']){try{rmSync(p,{recursive:true,force:true})}catch{}}\"",
     "link:cli": "npm run build && npm link --workspace apps/cli",
-    "pack:user": "npm run clean && npm run build && node scripts/pack-user-package.mjs && npm pack ./release/ai-collab --json --cache .npm-cache --pack-destination ./release/ai-collab",
-    "unlink:cli": "npm unlink -g ai-collab",
+    "pack:user": "npm run clean && npm run build && node scripts/pack-user-package.mjs && npm pack ./release/loopmarshal --json --cache .npm-cache --pack-destination ./release/loopmarshal",
+    "unlink:cli": "npm unlink -g loopmarshal",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "smoke:named": "npm run build && node scripts/smoke-named.mjs",

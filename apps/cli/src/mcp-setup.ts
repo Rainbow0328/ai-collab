@@ -1,8 +1,8 @@
 /*
- * ai-collab mcp:setup — one-click MCP server configuration for AI IDEs.
+ * loopmarshal mcp setup — one-click MCP server configuration for AI IDEs.
  *
  * Writes .mcp.json (Claude), .codex/config.toml (Codex), or .cursor/mcp.json (Cursor)
- * with the ai-collab stdio MCP server entry. Also configures appropriate timeouts.
+ * with the loopmarshal stdio MCP server entry. Also configures appropriate timeouts.
  */
 
 import { existsSync } from "node:fs";
@@ -38,12 +38,12 @@ export type McpSetupResult = {
 // ---------------------------------------------------------------------------
 
 const getMcpServerCommand = (): { command: string; args: string[] } => {
-  // In published package: `npx ai-collab mcp:serve`
-  // In dev: `node dist/apps/cli/src/index.js mcp:serve`
-  // We always use the `ai-collab` binary since it's the package bin.
+  // In published package: `npx loopmarshal mcp serve`
+  // In dev: `node dist/apps/cli/src/index.js mcp serve`
+  // We always use the `loopmarshal` binary since it's the package bin.
   return {
     command: "npx",
-    args: ["ai-collab", "mcp:serve"]
+    args: ["loopmarshal", "mcp", "serve"]
   };
 };
 
@@ -136,14 +136,14 @@ const updateClaudeJson = async (
   }
 
   const servers = data.mcpServers as Record<string, unknown>;
-  const serverName = "ai-collab";
+  const serverName = "loopmarshal";
   const desiredServer: Record<string, unknown> = {
     command,
     args,
     timeout: timeoutMs
   };
   if (role) {
-    desiredServer.env = { AI_COLLAB_ROLE: role };
+    desiredServer.env = { LOOPMARSHAL_ROLE: role };
   }
 
   const existing = servers[serverName];
@@ -157,7 +157,7 @@ const updateClaudeJson = async (
       path: candidate.path,
       action: "skipped",
       changed: false,
-      message: `ai-collab MCP server already configured with timeout ${timeoutMs}ms.`
+      message: `loopmarshal MCP server already configured with timeout ${timeoutMs}ms.`
     };
   }
 
@@ -174,7 +174,7 @@ const updateClaudeJson = async (
     path: candidate.path,
     action: exists ? "updated" : "created",
     changed: true,
-    message: `Configured ai-collab MCP server with timeout ${timeoutMs}ms.`
+    message: `Configured loopmarshal MCP server with timeout ${timeoutMs}ms.`
   };
 };
 
@@ -192,13 +192,13 @@ const updateCodexToml = async (
   const exists = existsSync(candidate.path);
   const content = exists ? await readFile(candidate.path, "utf8") : "";
 
-  const header = "[mcp_servers.ai-collab]";
+  const header = "[mcp_servers.loopmarshal]";
   const commandLine = `command = "${command}"`;
   const argsLine = `args = ["${args.join('", "')}"]`;
   const timeoutLine = `tool_timeout_sec = ${timeoutSeconds}`;
   const lines = [header, commandLine, argsLine, timeoutLine];
   if (role) {
-    lines.push(`[mcp_servers.ai-collab.env]`, `AI_COLLAB_ROLE = "${role}"`);
+    lines.push(`[mcp_servers.loopmarshal.env]`, `LOOPMARSHAL_ROLE = "${role}"`);
   }
   const desiredBlock = lines.join("\n");
 
@@ -220,7 +220,7 @@ const updateCodexToml = async (
         path: candidate.path,
         action: "skipped",
         changed: false,
-        message: `ai-collab MCP server already configured with timeout ${timeoutSeconds}s.`
+        message: `loopmarshal MCP server already configured with timeout ${timeoutSeconds}s.`
       };
     }
 
@@ -237,7 +237,7 @@ const updateCodexToml = async (
       path: candidate.path,
       action: "updated",
       changed: true,
-      message: `Updated ai-collab MCP server config with timeout ${timeoutSeconds}s.`
+      message: `Updated loopmarshal MCP server config with timeout ${timeoutSeconds}s.`
     };
   }
 
@@ -256,7 +256,7 @@ const updateCodexToml = async (
     path: candidate.path,
     action: exists ? "updated" : "created",
     changed: true,
-    message: `Configured ai-collab MCP server with timeout ${timeoutSeconds}s.`
+    message: `Configured loopmarshal MCP server with timeout ${timeoutSeconds}s.`
   };
 };
 
@@ -282,13 +282,13 @@ const updateCursorJson = async (
   }
 
   const servers = data.mcpServers as Record<string, unknown>;
-  const serverName = "ai-collab";
+  const serverName = "loopmarshal";
   const desiredServer: Record<string, unknown> = {
     command,
     args
   };
   if (role) {
-    desiredServer.env = { AI_COLLAB_ROLE: role };
+    desiredServer.env = { LOOPMARSHAL_ROLE: role };
   }
 
   const existing = servers[serverName];
@@ -302,7 +302,7 @@ const updateCursorJson = async (
       path: candidate.path,
       action: "skipped",
       changed: false,
-      message: `ai-collab MCP server already configured.`
+      message: `loopmarshal MCP server already configured.`
     };
   }
 
@@ -319,7 +319,7 @@ const updateCursorJson = async (
     path: candidate.path,
     action: exists ? "updated" : "created",
     changed: true,
-    message: `Configured ai-collab MCP server (note: Cursor does not support explicit timeout config).`
+    message: `Configured loopmarshal MCP server (note: Cursor does not support explicit timeout config).`
   };
 };
 

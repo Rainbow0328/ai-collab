@@ -20,7 +20,7 @@ export const createIsoTimestamp = (): string => {
 };
 
 export const resolveUserTimeZone = (): string => {
-  return process.env.AI_COLLAB_TIMEZONE?.trim() ||
+  return process.env.LOOPMARSHAL_TIMEZONE?.trim() ||
     Intl.DateTimeFormat().resolvedOptions().timeZone ||
     "UTC";
 };
@@ -117,19 +117,19 @@ export const createLogTimestampFragment = (
   return `,"time":"${localTimestamp}","timeUtc":"${utcTimestamp}","timezone":"${timeZone}"`;
 };
 
-export const getAiCollabHomePath = (
+export const getLoopMarshalHomePath = (
   projectRoot = process.cwd()
 ): string => {
-  const configuredHome = process.env.AI_COLLAB_HOME?.trim();
+  const configuredHome = process.env.LOOPMARSHAL_HOME?.trim();
   if (configuredHome) {
     return configuredHome;
   }
 
-  return join(projectRoot, ".ai-collab");
+  return join(projectRoot, ".loopmarshal");
 };
 
-export const getAiCollabLogDir = (projectRoot = process.cwd()): string => {
-  const configuredLogDir = process.env.AI_COLLAB_LOG_DIR?.trim();
+export const getLoopMarshalLogDir = (projectRoot = process.cwd()): string => {
+  const configuredLogDir = process.env.LOOPMARSHAL_LOG_DIR?.trim();
   if (configuredLogDir) {
     return configuredLogDir;
   }
@@ -138,7 +138,7 @@ export const getAiCollabLogDir = (projectRoot = process.cwd()): string => {
 };
 
 export const getProjectLogPath = (projectRoot = process.cwd()): string => {
-  return join(getAiCollabLogDir(projectRoot), "log.txt");
+  return join(getLoopMarshalLogDir(projectRoot), "log.txt");
 };
 
 export const appendProjectLogEntry = (

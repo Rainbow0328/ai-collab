@@ -16,9 +16,9 @@ import type {
   AgentPlatform,
   AgentRole,
   ConnectionMode
-} from "@ai-collab/protocol";
-import { AiCollabSdkError, createAiCollabClient } from "@ai-collab/sdk";
-import { errorCodes } from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
+import { LoopMarshalSdkError, createLoopMarshalClient } from "@loopmarshal/sdk";
+import { errorCodes } from "@loopmarshal/protocol";
 
 import type { CliIdentityContext } from "./context.js";
 
@@ -43,10 +43,10 @@ export type WindowProfile = {
   updatedAt: string;
 };
 
-const client = createAiCollabClient({
+const client = createLoopMarshalClient({
   headers: {
-    "x-ai-collab-client": "cli",
-    "x-ai-collab-process": String(process.pid)
+    "x-loopmarshal-client": "cli",
+    "x-loopmarshal-process": String(process.pid)
   }
 });
 
@@ -101,7 +101,7 @@ export const readWindowProfile = async (
     return mapBindingToProfile(binding);
   } catch (error: unknown) {
     if (
-      error instanceof AiCollabSdkError &&
+      error instanceof LoopMarshalSdkError &&
       error.code === errorCodes.sessionNotFound
     ) {
       return undefined;
@@ -228,7 +228,7 @@ export const requireWindowProfile = async (
   const profile = await readWindowProfile(projectRoot, sessionName, windowName);
   if (!profile) {
     throw new Error(
-      `当前未找到 session="${sessionName}" 下 name="${windowName}" 的成员绑定。请先执行 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。当前绑定来源为 "${bindingStoreDescriptor}"。`
+      `当前未找到 session="${sessionName}" 下 name="${windowName}" 的成员绑定。请先执行 loopmarshal attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。当前绑定来源为 "${bindingStoreDescriptor}"。`
     );
   }
 

@@ -1,6 +1,6 @@
-import { createAiCollabClient, AiCollabWebSocketClient } from "@ai-collab/sdk";
-import type { MessageRecord } from "@ai-collab/protocol";
-import { getLogger } from "@ai-collab/shared";
+import { createLoopMarshalClient, LoopMarshalWebSocketClient } from "@loopmarshal/sdk";
+import type { MessageRecord } from "@loopmarshal/protocol";
+import { getLogger } from "@loopmarshal/shared";
 
 const logger = getLogger();
 
@@ -10,7 +10,7 @@ export async function waitForNextInboxMessage(
   sessionId: string,
   timeoutMs = 30000
 ): Promise<MessageRecord | null> {
-  let wsClient: AiCollabWebSocketClient | null = null;
+  let wsClient: LoopMarshalWebSocketClient | null = null;
 
   // 优雅退出处理
   const cleanup = async () => {
@@ -21,7 +21,7 @@ export async function waitForNextInboxMessage(
     // 退出前最后查一次 inbox
     logger.info("Shutdown: checking inbox one last time");
     try {
-      const client = createAiCollabClient();
+      const client = createLoopMarshalClient();
       const inbox = await client.getInbox(agentId);
       if (inbox.length > 0) {
         logger.info({ count: inbox.length }, "Shutdown: found messages in inbox");
@@ -44,14 +44,14 @@ export async function waitForNextInboxMessage(
 
   try {
     // 第一步：先查一遍（最佳实践！）
-    const client = createAiCollabClient();
+    const client = createLoopMarshalClient();
     const initialInbox = await client.getInbox(agentId);
     if (initialInbox.length > 0) {
       return initialInbox[0] ?? null;
     }
 
     // 第二步：尝试 WebSocket 等待
-    wsClient = new AiCollabWebSocketClient({
+    wsClient = new LoopMarshalWebSocketClient({
       baseUrl,
       agentId,
       sessionId

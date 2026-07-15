@@ -12,8 +12,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { startCoreServer } from "@ai-collab/core";
-import { createAiCollabClient } from "@ai-collab/sdk";
+import { startCoreServer } from "@loopmarshal/core";
+import { createLoopMarshalClient } from "@loopmarshal/sdk";
 
 const smokePort = 42701;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
@@ -28,11 +28,11 @@ const main = async () => {
   const instance = await startCoreServer({
     host: "127.0.0.1",
     port: smokePort,
-    databasePath: ".ai-collab-test/smoke-inbox-filters.sqlite"
+    databasePath: ".loopmarshal-test/smoke-inbox-filters.sqlite"
   });
 
   try {
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `inbox-filters-${Date.now()}`;
 
     const host = await client.hostSessionByName(sessionName, {

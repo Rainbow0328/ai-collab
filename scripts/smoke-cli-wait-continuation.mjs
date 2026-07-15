@@ -16,14 +16,14 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
-import { startCoreServer } from "@ai-collab/core";
-import { createAiCollabClient } from "@ai-collab/sdk";
+import { startCoreServer } from "@loopmarshal/core";
+import { createLoopMarshalClient } from "@loopmarshal/sdk";
 
 const smokePort = 42728;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
 const rootDir = process.cwd();
 const cliEntry = resolve(rootDir, "apps/cli/dist/apps/cli/src/index.js");
-const stateDir = resolve(rootDir, ".ai-collab-test", "smoke-cli-wait-continuation");
+const stateDir = resolve(rootDir, ".loopmarshal-test", "smoke-cli-wait-continuation");
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -78,28 +78,28 @@ const runCliJson = async ({ args, env, delayedActions = [] }) => {
 
 const internalCommandToArgs = (cmd) => {
   assert(
-    typeof cmd === "string" && cmd.startsWith("ai-collab "),
-    "cmd should be a runnable ai-collab command string"
+    typeof cmd === "string" && cmd.startsWith("loopmarshal "),
+    "cmd should be a runnable loopmarshal command string"
   );
-  return cmd.slice("ai-collab ".length).trim().split(/\s+/);
+  return cmd.slice("loopmarshal ".length).trim().split(/\s+/);
 };
 
 const main = async () => {
-  await mkdir(resolve(rootDir, ".ai-collab-test"), { recursive: true });
+  await mkdir(resolve(rootDir, ".loopmarshal-test"), { recursive: true });
   await rm(stateDir, { recursive: true, force: true });
 
   const instance = await startCoreServer({
     host: "127.0.0.1",
     port: smokePort,
-    databasePath: ".ai-collab-test/smoke-cli-wait-continuation.sqlite"
+    databasePath: ".loopmarshal-test/smoke-cli-wait-continuation.sqlite"
   });
 
   try {
     const env = {
-      AI_COLLAB_BASE_URL: smokeBaseUrl,
-      AI_COLLAB_CLI_STATE_DIR: stateDir
+      LOOPMARSHAL_BASE_URL: smokeBaseUrl,
+      LOOPMARSHAL_CLI_STATE_DIR: stateDir
     };
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `member-wait-cont-${Date.now()}`;
     const hostName = "main-host";
     const workerName = "frontend-worker";
@@ -219,7 +219,7 @@ const main = async () => {
     );
     assert(
       hostDispatch.cmd ===
-        `ai-collab await ${hostName} --session ${sessionName}`,
+        `loopmarshal await ${hostName} --session ${sessionName}`,
       "dispatch-many should return a fully assembled host await command"
     );
 

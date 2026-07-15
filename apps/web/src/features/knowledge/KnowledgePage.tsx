@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { KnowledgeLevel } from "@ai-collab/protocol";
+import type { KnowledgeLevel } from "@loopmarshal/protocol";
 import { api } from "@/lib/api-client";
 import { renderMarkdown } from "@/lib/markdown";
 import { PageHeader, PageContainer } from "@/components/PageHeader";

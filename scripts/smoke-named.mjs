@@ -12,14 +12,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { createAiCollabClient } from "@ai-collab/sdk";
-import { startCoreServer } from "@ai-collab/core";
+import { createLoopMarshalClient } from "@loopmarshal/sdk";
+import { startCoreServer } from "@loopmarshal/core";
 
 const main = async () => {
   const instance = await startCoreServer();
 
   try {
-    const client = createAiCollabClient();
+    const client = createLoopMarshalClient();
     const sessionName = `named-${Date.now()}`;
 
     const host = await client.hostSessionByName(sessionName, {

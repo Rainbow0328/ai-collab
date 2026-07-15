@@ -9,8 +9,8 @@ import type {
   McpToolParameterSchema,
   McpToolsetId,
   MessageType
-} from "@ai-collab/protocol";
-import type { WebAgentRuntimeRepository } from "@ai-collab/store";
+} from "@loopmarshal/protocol";
+import type { WebAgentRuntimeRepository } from "@loopmarshal/store";
 
 import type { ServerServices } from "../server/create-server.js";
 

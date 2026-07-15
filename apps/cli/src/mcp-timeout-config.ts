@@ -31,7 +31,7 @@ type Candidate = {
   kind: "claude-json" | "codex-toml" | "cursor-json" | "trae-env";
 };
 
-const SERVER_NAMES = ["ai-collab", "ai_collab", "aiCollab"];
+const SERVER_NAMES = ["loopmarshal"];
 
 export const configureMcpTimeouts = async (
   options: McpTimeoutConfigureOptions
@@ -136,7 +136,7 @@ const updateClaudeJson = async (
       path: filePath,
       action: exists ? "skipped" : "created",
       changed: false,
-      message: "No ai-collab MCP server entry found; timeout was not injected into an unknown server."
+      message: "No loopmarshal MCP server entry found; timeout was not injected into an unknown server."
     };
   }
 
@@ -164,7 +164,7 @@ const updateClaudeJson = async (
     path: filePath,
     action: exists ? "updated" : "created",
     changed: true,
-    message: `Set ai-collab MCP timeout to ${timeoutMs}ms.`
+    message: `Set loopmarshal MCP timeout to ${timeoutMs}ms.`
   };
 };
 
@@ -197,7 +197,7 @@ const updateCodexToml = async (
     path: filePath,
     action: exists ? "updated" : "created",
     changed: true,
-    message: `Set [mcp_servers.ai-collab].tool_timeout_sec to ${timeoutSeconds}.`
+    message: `Set [mcp_servers.loopmarshal].tool_timeout_sec to ${timeoutSeconds}.`
   };
 };
 
@@ -263,7 +263,7 @@ const findServerName = (servers: Record<string, unknown>): string | null => {
 };
 
 const setCodexServerTimeout = (content: string, timeoutSeconds: number): string => {
-  const header = "[mcp_servers.ai-collab]";
+  const header = "[mcp_servers.loopmarshal]";
   if (!content.trim()) {
     return `${header}\ntool_timeout_sec = ${timeoutSeconds}\n`;
   }

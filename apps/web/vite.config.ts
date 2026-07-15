@@ -11,9 +11,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@ai-collab/protocol': path.resolve(__dirname, '../../packages/protocol/src'),
-      '@ai-collab/sdk': path.resolve(__dirname, '../../packages/sdk/src'),
-      '@ai-collab/shared': path.resolve(__dirname, '../../packages/shared/src'),
+      '@loopmarshal/protocol': path.resolve(__dirname, '../../packages/protocol/src'),
+      '@loopmarshal/sdk': path.resolve(__dirname, '../../packages/sdk/src'),
+      '@loopmarshal/shared': path.resolve(__dirname, '../../packages/shared/src'),
     },
   },
   build: {
@@ -22,7 +22,7 @@ export default defineConfig({
         manualChunks: {
           'vendor-router': ['@tanstack/react-router'],
           'vendor-query': ['@tanstack/react-query'],
-          'vendor-sdk': ['@ai-collab/sdk', '@ai-collab/protocol'],
+          'vendor-sdk': ['@loopmarshal/sdk', '@loopmarshal/protocol'],
         },
       },
     },

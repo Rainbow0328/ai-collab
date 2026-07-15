@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import websocket from "@fastify/websocket";
-import { createLogTimestampFragment, resolveUserTimeZone, getLogger } from "@ai-collab/shared";
+import { createLogTimestampFragment, resolveUserTimeZone, getLogger } from "@loopmarshal/shared";
 import {
   acquireIdentityLeaseInputSchema,
   attachSessionInputSchema,
@@ -49,7 +49,7 @@ import {
   updateWindowBindingDefaultsInputSchema,
   updateWindowRuntimeStateInputSchema,
   upsertProgressInputSchema
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import type {
   CreateMcpServerInput,
   CreateWebAgentRuntimeInput,
@@ -58,7 +58,7 @@ import type {
   UpdateMcpServerInput,
   UpdateWebAgentRuntimeInput,
   UpdateWorkflowDefinitionInput
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 
 import type { CoreConfig } from "../config.js";
 import { CoreError } from "../errors.js";
@@ -86,7 +86,7 @@ import type {
   StdioMcpRegistryService,
   WorkflowDefinitionService
 } from "../services/index.js";
-import type { ModelConfigRepository } from "@ai-collab/store";
+import type { ModelConfigRepository } from "@loopmarshal/store";
 import { createLlmRequest } from "../services/llm-provider-client.js";
 
 export type ServerServices = {
@@ -165,7 +165,7 @@ export const createServer = async (
   server.get("/health", async () => {
     return successResponse({
       status: "ok",
-      service: "ai-collab-core",
+      service: "loopmarshal-core",
       host: config.host,
       port: config.port
     });
@@ -376,9 +376,9 @@ export const createServer = async (
 
   server.post("/api/knowledge/patches/:patchId/adjudicate", async (request) => {
     const params = request.params as { patchId: string };
-    const body: Partial<Omit<import("@ai-collab/protocol").AdjudicateKnowledgePatchInput, "patchId">> =
+    const body: Partial<Omit<import("@loopmarshal/protocol").AdjudicateKnowledgePatchInput, "patchId">> =
       typeof request.body === "object" && request.body !== null
-        ? (request.body as Partial<Omit<import("@ai-collab/protocol").AdjudicateKnowledgePatchInput, "patchId">>)
+        ? (request.body as Partial<Omit<import("@loopmarshal/protocol").AdjudicateKnowledgePatchInput, "patchId">>)
         : {};
     if (!body.decision) {
       throw new CoreError("INVALID_INPUT", "Adjudication decision is required.");
@@ -1239,7 +1239,7 @@ const webMimeTypes: Record<string, string> = {
 const findWebDistPath = (): string | null => {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
-    process.env.AI_COLLAB_WEB_DIST_PATH,
+    process.env.LOOPMARSHAL_WEB_DIST_PATH,
     resolve(process.cwd(), "..", "web", "dist"),
     resolve(process.cwd(), "..", "..", "apps", "web", "dist"),
     resolve(process.cwd(), "apps", "web", "dist"),
@@ -1288,7 +1288,7 @@ const registerWebFrontend = (server: Awaited<ReturnType<typeof Fastify>>) => {
       void reply
         .status(404)
         .type("text/plain; charset=utf-8")
-        .send("ai-collab web assets were not found. Run npm run build or set AI_COLLAB_WEB_DIST_PATH.");
+        .send("loopmarshal web assets were not found. Run npm run build or set LOOPMARSHAL_WEB_DIST_PATH.");
       return;
     }
 

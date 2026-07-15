@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# AI Collab 启动脚本
+# LoopMarshal 启动脚本
 # 同时启动前端和后端
 
 set -e
 
-echo "🚀 启动 AI Collab..."
+echo "🚀 启动 LoopMarshal..."
 echo ""
 
 # 颜色定义
@@ -50,7 +50,7 @@ FRONTEND_PID=$!
 cd ../..
 
 echo ""
-echo -e "${GREEN}✅ AI Collab 启动成功！${NC}"
+echo -e "${GREEN}✅ LoopMarshal 启动成功！${NC}"
 echo ""
 echo -e "${BLUE}📱 前端地址:${NC} http://localhost:5173"
 echo -e "${BLUE}🔌 后端地址:${NC} http://127.0.0.1:42688"

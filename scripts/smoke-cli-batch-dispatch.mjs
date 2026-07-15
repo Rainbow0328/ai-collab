@@ -16,14 +16,14 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
-import { startCoreServer } from "@ai-collab/core";
-import { createAiCollabClient } from "@ai-collab/sdk";
+import { startCoreServer } from "@loopmarshal/core";
+import { createLoopMarshalClient } from "@loopmarshal/sdk";
 
 const smokePort = 42731;
 const smokeBaseUrl = `http://127.0.0.1:${smokePort}`;
 const rootDir = process.cwd();
 const cliEntry = resolve(rootDir, "apps/cli/dist/apps/cli/src/index.js");
-const stateDir = resolve(rootDir, ".ai-collab-test", "smoke-cli-batch-dispatch");
+const stateDir = resolve(rootDir, ".loopmarshal-test", "smoke-cli-batch-dispatch");
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -67,21 +67,21 @@ const runCliJson = async ({ args, env }) => {
 };
 
 const main = async () => {
-  await mkdir(resolve(rootDir, ".ai-collab-test"), { recursive: true });
+  await mkdir(resolve(rootDir, ".loopmarshal-test"), { recursive: true });
   await rm(stateDir, { recursive: true, force: true });
 
   const instance = await startCoreServer({
     host: "127.0.0.1",
     port: smokePort,
-    databasePath: ".ai-collab-test/smoke-cli-batch-dispatch.sqlite"
+    databasePath: ".loopmarshal-test/smoke-cli-batch-dispatch.sqlite"
   });
 
   try {
     const env = {
-      AI_COLLAB_BASE_URL: smokeBaseUrl,
-      AI_COLLAB_CLI_STATE_DIR: stateDir
+      LOOPMARSHAL_BASE_URL: smokeBaseUrl,
+      LOOPMARSHAL_CLI_STATE_DIR: stateDir
     };
-    const client = createAiCollabClient({ baseUrl: smokeBaseUrl });
+    const client = createLoopMarshalClient({ baseUrl: smokeBaseUrl });
     const sessionName = `member-batch-dispatch-${Date.now()}`;
     const hostName = "main-host";
     const workerFront = "frontend-worker";
@@ -155,7 +155,7 @@ const main = async () => {
     assert(
       typeof dispatchMany.cmd === "string" &&
         dispatchMany.cmd ===
-          `ai-collab await ${hostName} --session ${sessionName}`,
+          `loopmarshal await ${hostName} --session ${sessionName}`,
       "dispatch-many should return a fully assembled host await command"
     );
 

@@ -12,14 +12,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { createAiCollabClient } from "@ai-collab/sdk";
+import { createLoopMarshalClient } from "@loopmarshal/sdk";
 
 export const createSmokeClient = (baseUrl, label) => {
-  return createAiCollabClient({
+  return createLoopMarshalClient({
     baseUrl,
     headers: {
-      "x-ai-collab-client": label,
-      "x-ai-collab-process": String(process.pid)
+      "x-loopmarshal-client": label,
+      "x-loopmarshal-process": String(process.pid)
     }
   });
 };

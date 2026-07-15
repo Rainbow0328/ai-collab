@@ -27,7 +27,7 @@ import type {
   Session,
   SessionJoinResult,
   SessionSummary
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import {
   AgentRepository,
   IdentityLeaseRepository,
@@ -36,7 +36,7 @@ import {
   SessionRepository,
   TaskEventRepository,
   TaskRepository
-} from "@ai-collab/store";
+} from "@loopmarshal/store";
 
 import { coreErrors } from "../errors.js";
 
@@ -112,8 +112,8 @@ export class SessionService {
       agentId: h.id,
       agentName: h.agentName,
       displayName: h.displayName,
-      role: h.role as import("@ai-collab/protocol").AgentRole,
-      status: h.status as import("@ai-collab/protocol").AgentStatus,
+      role: h.role as import("@loopmarshal/protocol").AgentRole,
+      status: h.status as import("@loopmarshal/protocol").AgentStatus,
       lastHeartbeatAt: h.lastHeartbeatAt,
       online: h.status !== "offline" && now - new Date(h.lastHeartbeatAt).getTime() < 300000
     }));

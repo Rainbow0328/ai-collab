@@ -1,4 +1,4 @@
-# ai-collab
+# loopmarshal
 
 > 让多个 AI 在同一个项目里稳定协作的运行
 
@@ -15,7 +15,7 @@
 - 上下文同步全靠你人肉维护
 - 没有统一的会话状态管理
 
-`ai-collab` 解决的就是这个问题：让一个 AI 当 Host 统筹，其他 AI 当 Worker 各司其职，形成稳定的协作闭环。
+`loopmarshal` 解决的就是这个问题：让一个 AI 当 Host 统筹，其他 AI 当 Worker 各司其职，形成稳定的协作闭环。
 
 #### 使用场景
 
@@ -78,12 +78,12 @@ pnpm run build
 pnpm run link:cli
 ```
 
-这样会把本地构建好的 `ai-collab` CLI 安装到当前环境里，后续就可以直接使用 `ai-collab` 命令。
+这样会把本地构建好的 `loopmarshal` CLI 安装到当前环境里，后续就可以直接使用 `loopmarshal` 命令。
 
 ### 启动本地运行
 
 ```cmd
-ai-collab start
+loopmarshal start
 ```
 
 启动后会同时运行后端服务（Fastify, port 42688）和前端管理后台（Vite, port 5173）。用 `--no-web` 可跳过前端，`--daemon` 可后台运行。
@@ -182,47 +182,47 @@ Skill 是软约束，AI 可能会"忘记"或者"灵活处理"。
 ### 服务管理
 
 ```bash
-ai-collab start [--no-web] [--daemon]   # 启动服务（含前端）
-ai-collab stop                           # 停止服务
-ai-collab status                         # 查看状态
-ai-collab doctor                         # 诊断检查
-ai-collab logs                           # 查看日志
+loopmarshal start [--no-web] [--daemon]   # 启动服务（含前端）
+loopmarshal stop                           # 停止服务
+loopmarshal status                         # 查看状态
+loopmarshal doctor                         # 诊断检查
+loopmarshal logs                           # 查看日志
 ```
 
 ### 会话与 Agent
 
 ```bash
-ai-collab attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<职责>"
-ai-collab reset <name> --session <session>
-ai-collab members --session <session>
+loopmarshal attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<职责>"
+loopmarshal reset <name> --session <session>
+loopmarshal members --session <session>
 ```
 
 ### 任务派发与执行
 
 ```bash
-ai-collab dispatch-many --session <session> --tasks '[...]'
-ai-collab await <name> --session <session>
-ai-collab submit <name> --session <session> --content "<结果>"
-ai-collab resolve --session <session> --message-id <id> --action <approve|reject|revise>
+loopmarshal dispatch-many --session <session> --tasks '[...]'
+loopmarshal await <name> --session <session>
+loopmarshal submit <name> --session <session> --content "<结果>"
+loopmarshal resolve --session <session> --message-id <id> --action <approve|reject|revise>
 ```
 
 ### 知识库
 
 ```bash
-ai-collab knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
-ai-collab knowledge list --session <session>
-ai-collab knowledge judge --session <session> --message-id <id>
-ai-collab knowledge fulfil-judgement --session <session> --judgement-id <id>
-ai-collab knowledge read-current --session <session>
-ai-collab knowledge update-current --session <session>
+loopmarshal knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
+loopmarshal knowledge list --session <session>
+loopmarshal knowledge judge --session <session> --message-id <id>
+loopmarshal knowledge fulfil-judgement --session <session> --judgement-id <id>
+loopmarshal knowledge read-current --session <session>
+loopmarshal knowledge update-current --session <session>
 ```
 
 ### 用户习惯
 
 ```bash
-ai-collab profile get <name> --session <session> [key]
-ai-collab profile set <name> --session <session> <key> <value>
-ai-collab profile delete <name> --session <session> <key>
+loopmarshal profile get <name> --session <session> [key]
+loopmarshal profile set <name> --session <session> <key> <value>
+loopmarshal profile delete <name> --session <session> <key>
 ```
 
 ---
@@ -233,26 +233,26 @@ ai-collab profile delete <name> --session <session> <key>
 
 | 内容 | 默认位置 |
 |------|---------|
-| 项目配置 | `.ai-collab/config.json` |
-| 会话/消息/任务数据库 | `.ai-collab/ai-collab.sqlite` |
+| 项目配置 | `.loopmarshal/config.json` |
+| 会话/消息/任务数据库 | `.loopmarshal/loopmarshal.sqlite` |
 | 运行日志 | `log/log.txt` |
-| CLI 本地状态（Windows） | `%LOCALAPPDATA%\ai-collab` |
+| CLI 本地状态（Windows） | `%LOCALAPPDATA%\loopmarshal` |
 
 ### 环境变量
 
 | 变量名 | 作用 |
 |-------|------|
-| `AI_COLLAB_LOG_DIR` | 自定义日志目录 |
-| `AI_COLLAB_COMMAND_TRACE_FILE` | 自定义命令 trace 文件 |
-| `AI_COLLAB_CLI_STATE_DIR` | 自定义 CLI 状态目录 |
-| `AI_COLLAB_TIMEZONE` | 自定义时区显示 |
+| `LOOPMARSHAL_LOG_DIR` | 自定义日志目录 |
+| `LOOPMARSHAL_COMMAND_TRACE_FILE` | 自定义命令 trace 文件 |
+| `LOOPMARSHAL_CLI_STATE_DIR` | 自定义 CLI 状态目录 |
+| `LOOPMARSHAL_TIMEZONE` | 自定义时区显示 |
 
 ---
 
 ## 仓库结构
 
 ```text
-ai-collab/
+loopmarshal/
 ├── apps/
 │   ├── cli/           # 命令行入口（23 个命令）
 │   ├── core/          # 本地协作服务（Fastify HTTP 服务）
@@ -307,7 +307,7 @@ ai-collab/
 ### Q: 为什么不做成全自动 Agent？
 
 因为当前的 AI 还做不到 100% 可靠的自主规划和执行。
-`ai-collab` 走的是"**人机协同**"路线：
+`loopmarshal` 走的是"**人机协同**"路线：
 - AI 负责执行、整合、通信
 - 人负责最终验收、方向把控
 
@@ -345,7 +345,7 @@ ai-collab/
 
 ## 最后一句
 
-`ai-collab` 不是让 AI 取代你，而是让你同时指挥多个 AI 干活的时候，不用那么累。
+`loopmarshal` 不是让 AI 取代你，而是让你同时指挥多个 AI 干活的时候，不用那么累。
 
 ---
 

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 import * as vscode from "vscode";
-import { AiCollabSdkError, createAiCollabClient } from "@ai-collab/sdk";
+import { LoopMarshalSdkError, createLoopMarshalClient } from "@loopmarshal/sdk";
 
 type SessionState = {
   sessionId: string;
@@ -23,13 +23,13 @@ type SessionState = {
   displayName: string;
 };
 
-const stateKey = "ai-collab.currentSession";
+const stateKey = "loopmarshal.currentSession";
 
 const getClient = () => {
-  return createAiCollabClient({
+  return createLoopMarshalClient({
     headers: {
-      "x-ai-collab-client": "vscode-extension",
-      "x-ai-collab-process": String(process.pid)
+      "x-loopmarshal-client": "vscode-extension",
+      "x-loopmarshal-process": String(process.pid)
     }
   });
 };
@@ -49,14 +49,14 @@ const setStoredState = async (
 
 const renderStatusBarText = (state: SessionState | undefined): string => {
   if (!state) {
-    return "$(hubot) AI Collab: idle";
+    return "$(hubot) LoopMarshal: idle";
   }
 
-  return `$(hubot) AI Collab: ${state.role} • ${state.sessionId.slice(0, 8)}`;
+  return `$(hubot) LoopMarshal: ${state.role} • ${state.sessionId.slice(0, 8)}`;
 };
 
 const toErrorMessage = (error: unknown): string => {
-  if (error instanceof AiCollabSdkError) {
+  if (error instanceof LoopMarshalSdkError) {
     return `${error.message} (${error.statusCode})`;
   }
 
@@ -64,7 +64,7 @@ const toErrorMessage = (error: unknown): string => {
     return error.message;
   }
 
-  return "Unknown AI Collab error.";
+  return "Unknown LoopMarshal error.";
 };
 
 const promptDisplayName = async (): Promise<string | undefined> => {
@@ -224,7 +224,7 @@ const openInbox = async (context: vscode.ExtensionContext) => {
   const localState = getStoredState(context);
   if (!localState) {
     void vscode.window.showWarningMessage(
-      "This VS Code client has not joined an AI Collab session."
+      "This VS Code client has not joined an LoopMarshal session."
     );
     return;
   }
@@ -233,9 +233,9 @@ const openInbox = async (context: vscode.ExtensionContext) => {
     const messages = await getClient().getInbox(localState.agentId);
     const content =
       messages.length === 0
-        ? "# AI Collab Inbox\n\nNo messages."
+        ? "# LoopMarshal Inbox\n\nNo messages."
         : [
-            "# AI Collab Inbox",
+            "# LoopMarshal Inbox",
             "",
             ...messages.map((message, index) => {
               return [
@@ -270,7 +270,7 @@ const leaveSession = async (
 ) => {
   await setStoredState(context, undefined);
   statusBar.text = renderStatusBarText(undefined);
-  void vscode.window.showInformationMessage("Cleared local AI Collab session.");
+  void vscode.window.showInformationMessage("Cleared local LoopMarshal session.");
 };
 
 export const activate = (context: vscode.ExtensionContext) => {
@@ -278,25 +278,25 @@ export const activate = (context: vscode.ExtensionContext) => {
     vscode.StatusBarAlignment.Left,
     100
   );
-  statusBar.command = "aiCollab.showStatus";
+  statusBar.command = "loopMarshal.showStatus";
   statusBar.text = renderStatusBarText(getStoredState(context));
   statusBar.show();
 
   context.subscriptions.push(statusBar);
   context.subscriptions.push(
-    vscode.commands.registerCommand("aiCollab.hostSession", async () => {
+    vscode.commands.registerCommand("loopMarshal.hostSession", async () => {
       await hostSession(context, statusBar);
     }),
-    vscode.commands.registerCommand("aiCollab.joinSession", async () => {
+    vscode.commands.registerCommand("loopMarshal.joinSession", async () => {
       await joinSession(context, statusBar);
     }),
-    vscode.commands.registerCommand("aiCollab.showStatus", async () => {
+    vscode.commands.registerCommand("loopMarshal.showStatus", async () => {
       await showStatus(context);
     }),
-    vscode.commands.registerCommand("aiCollab.openInbox", async () => {
+    vscode.commands.registerCommand("loopMarshal.openInbox", async () => {
       await openInbox(context);
     }),
-    vscode.commands.registerCommand("aiCollab.leaveSession", async () => {
+    vscode.commands.registerCommand("loopMarshal.leaveSession", async () => {
       await leaveSession(context, statusBar);
     })
   );

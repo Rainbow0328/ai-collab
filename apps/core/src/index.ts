@@ -29,7 +29,7 @@ const executedDirectly =
 
 if (executedDirectly) {
   main().catch((error: unknown) => {
-    console.error("Failed to start ai-collab core.", error);
+    console.error("Failed to start loopmarshal core.", error);
     process.exitCode = 1;
   });
 }

@@ -8,7 +8,7 @@ import { UserPreferencesService } from "../services/user-preferences-service.js"
 
 describe("UserPreferencesService", () => {
   it("stores global preferences outside project knowledge and supports search", async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), "ai-collab-prefs-"));
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "loopmarshal-prefs-"));
     try {
       const filePath = path.join(tempRoot, "user-preferences.json");
       const service = new UserPreferencesService(filePath);
@@ -33,7 +33,7 @@ describe("UserPreferencesService", () => {
   });
 
   it("recovers from a corrupt preferences file", async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), "ai-collab-prefs-"));
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "loopmarshal-prefs-"));
     try {
       const filePath = path.join(tempRoot, "user-preferences.json");
       await writeFile(filePath, "{broken", "utf8");
@@ -50,7 +50,7 @@ describe("UserPreferencesService", () => {
   });
 
   it("imports explicit preference sections from legacy session knowledge", async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), "ai-collab-prefs-"));
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "loopmarshal-prefs-"));
     try {
       const filePath = path.join(tempRoot, "user-preferences.json");
       const knowledgeRoot = path.join(tempRoot, ".knowledge");
@@ -118,7 +118,7 @@ describe("UserPreferencesService", () => {
 
 describe("McpToolService user preference tools", () => {
   it("lets the host read preferences and only the knowledge keeper update them", async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), "ai-collab-prefs-"));
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "loopmarshal-prefs-"));
     try {
       const userPreferencesService = new UserPreferencesService(
         path.join(tempRoot, "user-preferences.json")

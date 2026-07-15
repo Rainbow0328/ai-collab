@@ -30,7 +30,7 @@ AI COLLAB HOST 工程驾驭能力
 
 主 Host Skill 中的知识库构建、L1/L2/L3 引用判断、Worker 回报裁决规则必须完整执行。本文件只定义工程驾驭方法，不得覆盖知识库职责边界。
 
-如果 ai-collab 服务未启动，引导用户执行 `ai-collab start --daemon`（CMD 启动）。服务启动后，所有协作操作通过 MCP 工具完成。
+如果 loopmarshal 服务未启动，引导用户执行 `loopmarshal start --daemon`（CMD 启动）。服务启动后，所有协作操作通过 MCP 工具完成。
 
 上下文管理：
 

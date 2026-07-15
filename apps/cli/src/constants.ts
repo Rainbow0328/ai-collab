@@ -1,5 +1,5 @@
-import type { MessageType } from "@ai-collab/protocol";
-import { loadConfig } from "@ai-collab/shared";
+import type { MessageType } from "@loopmarshal/protocol";
+import { loadConfig } from "@loopmarshal/shared";
 
 const config = loadConfig();
 

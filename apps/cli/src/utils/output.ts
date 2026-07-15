@@ -1,5 +1,5 @@
 import { inspect } from "node:util";
-import { wrapForDisplay } from "@ai-collab/shared";
+import { wrapForDisplay } from "@loopmarshal/shared";
 
 export const printJson = (value: unknown): void => {
   console.log(JSON.stringify(wrapForDisplay(value), null, 2));

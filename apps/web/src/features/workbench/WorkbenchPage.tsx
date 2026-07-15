@@ -5,7 +5,7 @@ import type {
   ConsoleTaskThread,
   MessageRecord,
   WebAgentRuntime,
-} from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
 import { useWebSocket } from "@/lib/websocket-client";
 import { formatMessageText, formatJson, formatTime, formatTimeFull, truncateText } from "./text";
 import {

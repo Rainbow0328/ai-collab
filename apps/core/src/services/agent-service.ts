@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { AgentRepository } from "@ai-collab/store";
+import { AgentRepository } from "@loopmarshal/store";
 
 import { coreErrors } from "../errors.js";
 import type { SessionService } from "./session-service.js";

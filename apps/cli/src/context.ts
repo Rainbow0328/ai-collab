@@ -18,9 +18,9 @@ import type {
   ConnectionMode,
   SessionJoinResult,
   WindowBinding
-} from "@ai-collab/protocol";
-import { AiCollabSdkError, createAiCollabClient } from "@ai-collab/sdk";
-import { errorCodes } from "@ai-collab/protocol";
+} from "@loopmarshal/protocol";
+import { LoopMarshalSdkError, createLoopMarshalClient } from "@loopmarshal/sdk";
+import { errorCodes } from "@loopmarshal/protocol";
 
 export type CliIdentityContext = {
   identity: string;
@@ -37,10 +37,10 @@ export type CliIdentityContext = {
   updatedAt: string;
 };
 
-const client = createAiCollabClient({
+const client = createLoopMarshalClient({
   headers: {
-    "x-ai-collab-client": "cli",
-    "x-ai-collab-process": String(process.pid)
+    "x-loopmarshal-client": "cli",
+    "x-loopmarshal-process": String(process.pid)
   }
 });
 
@@ -101,7 +101,7 @@ export const readCliIdentity = async (
     return buildContextFromBinding(binding);
   } catch (error: unknown) {
     if (
-      error instanceof AiCollabSdkError &&
+      error instanceof LoopMarshalSdkError &&
       error.code === errorCodes.sessionNotFound
     ) {
       return undefined;
@@ -172,7 +172,7 @@ export const requireCliIdentity = async (
   const context = await readCliIdentity(projectRoot, identity);
   if (!context) {
     throw new Error(
-      `No binding found for identity="${identity}". Run ai-collab attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<description>" first. Binding source: "${bindingStoreDescriptor}".`
+      `No binding found for identity="${identity}". Run loopmarshal attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<description>" first. Binding source: "${bindingStoreDescriptor}".`
     );
   }
 

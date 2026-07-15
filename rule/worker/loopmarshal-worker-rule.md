@@ -8,16 +8,16 @@ AI COLLAB WORKER 铁律
 
 只允许使用以下命令：
 
-- `ai-collab attach <name> --session <sessionName> --role worker --duty "<稳定职责>"`
-- `ai-collab reset <name> --session <sessionName>`
-- `ai-collab await <name> --session <sessionName>`
-- `ai-collab submit <name> --session <sessionName> --content "<结构化结果>"`
+- `loopmarshal attach <name> --session <sessionName> --role worker --duty "<稳定职责>"`
+- `loopmarshal reset <name> --session <sessionName>`
+- `loopmarshal await <name> --session <sessionName>`
+- `loopmarshal submit <name> --session <sessionName> --content "<结构化结果>"`
 
 Worker 只读知识库命令：
 
-- `ai-collab knowledge read <name> --session <sessionName> --ref <l1|l2|l3/slug>`
-- `ai-collab knowledge read-current <name> --session <sessionName> --level <l1|l2|l3> [--anchor <anchor>]`
-- `ai-collab knowledge list <name> --session <sessionName> [--level l1|l2|l3] [--query <query>]`
+- `loopmarshal knowledge read <name> --session <sessionName> --ref <l1|l2|l3/slug>`
+- `loopmarshal knowledge read-current <name> --session <sessionName> --level <l1|l2|l3> [--anchor <anchor>]`
+- `loopmarshal knowledge list <name> --session <sessionName> [--level l1|l2|l3] [--query <query>]`
 
 ---
 
@@ -55,11 +55,11 @@ Worker 只读知识库命令：
 
 ## 回报 schema
 
-`submit --content` 必须是 `ai-collab.worker-report.v1` 格式的 JSON：
+`submit --content` 必须是 `loopmarshal.worker-report.v1` 格式的 JSON：
 
 ```json
 {
-  "schema": "ai-collab.worker-report.v1",
+  "schema": "loopmarshal.worker-report.v1",
   "taskId": "TASK-001",
   "status": "completed",
   "summary": "本次任务完成结果",
@@ -83,7 +83,7 @@ Worker 只读知识库命令：
 
 字段强规则：
 
-- `schema` 固定为 `ai-collab.worker-report.v1`。
+- `schema` 固定为 `loopmarshal.worker-report.v1`。
 - `taskId` 原样使用 Host 任务中的 `taskId`。
 - `status` 只能是 `completed`、`failed`、`blocked`。
 - `summary` 必须清晰说明本次任务的完成结果。

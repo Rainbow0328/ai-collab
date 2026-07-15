@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { AgentPermissionPolicy } from "@ai-collab/protocol";
+import type { AgentPermissionPolicy } from "@loopmarshal/protocol";
 import { McpToolService } from "../services/mcp-tool-service.js";
 
 function createPolicy(input: Partial<AgentPermissionPolicy> = {}): AgentPermissionPolicy {
@@ -58,7 +58,7 @@ describe("McpToolService local operations", () => {
   });
 
   it("enforces allowed paths for file read and write", async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), "ai-collab-mcp-"));
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "loopmarshal-mcp-"));
     const previousCwd = process.cwd();
     process.chdir(tempRoot);
     try {
@@ -101,7 +101,7 @@ describe("McpToolService local operations", () => {
   });
 
   it("runs only explicitly allowed commands without approval requirement", async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), "ai-collab-cmd-"));
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "loopmarshal-cmd-"));
     const previousCwd = process.cwd();
     process.chdir(tempRoot);
     try {
