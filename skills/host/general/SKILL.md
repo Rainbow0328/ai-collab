@@ -8,7 +8,6 @@ description: 任意支持 skill 的宿主 AI 作为 host 接入 loopmarshal 时�
 优先遵守：
 
 - `../SKILL.md`
-- `../harness-engineering/SKILL.md`
 
 如果本文件与主 Host Skill 冲突，必须以 `../SKILL.md` 为准。
 
@@ -38,17 +37,14 @@ description: 任意支持 skill 的宿主 AI 作为 host 接入 loopmarshal 时�
 
 上下文管理：
 
-- 上下文压缩和清空是安全的，后端已持久化所有协作状态
+- 上下文压缩是安全的，后端已持久化所有协作状态
 - 如果当前 IDE 支持 `/compact` 命令，在 `knowledge_upsert` 完成后或处理完一轮回报后建议用户 compact
-- 如果当前 IDE 支持清空上下文（`/clear` 或新对话），在知识库充分维护且当前阶段完成时建议用户清空
-- 清空后调用 `resume` 工具一键恢复协作状态（attach + 读 L1 + 列成员）
 - MCP 工具不会截断输出，模型自行控制输出给用户的内容量
 - `await` 返回中间状态时静默继续，不输出自然语言
 - `await` 返回 `PROCESS_SESSION_IDLE` 时直接进入规划，不解释原因
 - 但用户需要了解本轮做了什么时，必须给出清晰、简洁的说明，不能变成黑盒
 - 读取知识库后只提取结论，不复制大段正文到上下文
 - 派发任务时只传 `knowledgeRefs`，不传知识库正文
-- 建议用户清空前，必须确认没有未完成的任务和未裁决的知识库候选更新
 
 标识符规则：
 

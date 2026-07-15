@@ -23,9 +23,8 @@ Claude 额外约束：
 
 上下文管理（Claude Code 专属）：
 
-- Claude Code 支持 `/compact` 和 `/clear` 命令
+- Claude Code 支持 `/compact` 命令
 - `submit` 完成后、进入下一轮 `await` 之前，如果上下文较大，建议用户执行 `/compact`
-- 当知识库已充分维护且当前任务已完成时，建议用户执行 `/clear`，然后调用 `resume` 工具恢复
 - MCP 工具不会截断输出，模型自行控制输出给用户的内容量
 - `await` 返回中间状态时静默继续，不输出自然语言
 - `await` 返回 `END_TURN_SILENTLY` 时直接静默结束

@@ -41,7 +41,7 @@ loopmarshal mcp setup
 - `submit` — 提交任务回报
 - `knowledge_read` — 只读读取知识库
 - `knowledge_list` — 列出知识库
-- `resume` — 上下文 compact/clear 后一键恢复（attach + 读 L1 + 列成员）
+- `resume` — 上下文 compact 后一键恢复（attach + 读 L1 + 列成员）
 - `status` — 查看当前会话快照状态
 
 ## 1. 主循环
@@ -323,7 +323,7 @@ AI IDE Worker 不得新增、编辑、删除、绑定、解绑系统内 Agent Sk
 
 ## 11. 上下文管理
 
-AI IDE 的上下文窗口是有限的。loopmarshal 后端已完整持久化所有协作状态（会话、成员、消息、知识库、等待链），因此上下文压缩和清空是安全的。
+AI IDE 的上下文窗口是有限的。loopmarshal 后端已完整持久化所有协作状态（会话、成员、消息、知识库、等待链），因此上下文压缩是安全的。
 
 ### 模型自行精简输出（工具不截断输出）
 
@@ -351,25 +351,13 @@ loopmarshal MCP 工具不会修改或截断 CLI 返回的内容。模型自己�
 
 compact 是安全的：后端的会话状态、消息历史、等待链状态全部持久化，压缩不会丢失协作上下文。
 
-### clear + resume 流程
-
-当 L1/L2/L3 知识库维护充分时，可以安全清空上下文（如 Claude Code 的 `/clear`、Cursor 的新对话）：
-
-1. 确认当前没有未完成的任务（已 `submit` 或没有 `PROCESS_CLAIMED_MESSAGE`）。
-2. 建议用户清空上下文。
-3. 清空后，调用 `resume` 工具一键恢复：
-   - `resume` 自动执行 `attach`（复用已有绑定）+ 读取 L1 方向 + 列出成员。
-4. 根据 `resume` 返回的 L1 方向和成员状态，决定下一步是 `await` 还是其他操作。
-
-### 判断 compact 还是 clear
+### compact 判断
 
 | 条件 | 建议 |
 |---|---|
 | 刚完成一个任务，上下文中有很多代码 | compact |
-| 知识库 L1/L2/L3 已充分维护 | clear + resume |
 | 上下文接近上限但协作还需继续 | compact |
-| 协作进入新阶段，旧上下文已无用 | clear + resume |
-| 不确定 | 先 compact，如不够再 clear |
+| 不确定 | compact |
 
 ## 12. 标识符规则
 

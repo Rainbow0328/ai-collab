@@ -8,7 +8,6 @@ description: Codex 作为 host 接入 loopmarshal 时使用。
 优先遵守：
 
 - `../SKILL.md`
-- `../harness-engineering/SKILL.md`
 
 如果本文件与主 Host Skill 冲突，必须以 `../SKILL.md` 为准。
 
@@ -24,9 +23,7 @@ Codex 额外约束：
 
 上下文管理（Codex 专属）：
 
-- Codex 没有显式 `/compact` 命令，依赖会话重启或新会话来清理上下文
-- `knowledge_upsert` 完成后，如果上下文较大，建议用户开启新会话
-- 新会话后调用 `resume` 工具恢复协作状态（attach + 读 L1 + 列成员）
+- Codex 依赖宿主自身的上下文管理能力
 - MCP 工具不会截断输出，模型自行控制输出给用户的内容量
 - `await` 返回中间状态时静默继续，不输出自然语言
 - `await` 返回 `PROCESS_SESSION_IDLE` 时直接进入规划

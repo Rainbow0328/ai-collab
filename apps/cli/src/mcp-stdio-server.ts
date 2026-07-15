@@ -243,7 +243,7 @@ const parseCmdString = (cmd: string): string[] => {
 
 /**
  * Run multiple CLI commands sequentially and return combined output.
- * Used by the `resume` tool to restore session context after a context clear.
+ * Used by the `resume` tool to restore compact session context.
  */
 const runMultiCliCommands = async (
   commands: { args: string[]; label: string }[]
@@ -455,9 +455,9 @@ const tools: ToolDef[] = [
   {
     name: "resume",
     description:
-      "Restore session context after a context compact/clear. " +
+      "Restore session context after context compact. " +
       "Combines attach + read L1 direction + list members into a single compact response. " +
-      "Use this when the AI context has been compressed or cleared and you need to quickly " +
+      "Use this when the AI context has been compressed and you need to quickly " +
       "recover your collaboration state without consuming excessive context tokens.",
     inputSchema: {
       type: "object",
@@ -476,7 +476,7 @@ const tools: ToolDef[] = [
     description:
       "Get a compact snapshot of the current session state: members, pending messages, " +
       "and your current runtime state. Use this to check what happened while you were away " +
-      "or to decide whether it's safe to compact/clear context.",
+      "or to decide whether it's a good time to compact context.",
     inputSchema: {
       type: "object",
       properties: {

@@ -8,7 +8,6 @@ description: Trae 作为 host 接入 loopmarshal 时使用。
 优先遵守：
 
 - `../SKILL.md`
-- `../harness-engineering/SKILL.md`
 
 如果本文件与主 Host Skill 冲突，必须以 `../SKILL.md` 为准。
 
@@ -27,8 +26,6 @@ Trae 额外约束：
 上下文管理（Trae 专属）：
 
 - Trae 通过对话内自动压缩管理上下文，无显式 `/compact` 命令
-- 当对话变长时，建议用户开启新对话来清理上下文
-- 新对话后调用 `resume` 工具恢复协作状态（attach + 读 L1 + 列成员）
 - MCP 工具不会截断输出，模型自行控制输出给用户的内容量
 - `await` 返回中间状态时静默继续，不输出自然语言
 - `await` 返回 `PROCESS_SESSION_IDLE` 时直接进入规划

@@ -8,7 +8,6 @@ description: Claude 作为 host 接入 loopmarshal 时使用。
 优先遵守：
 
 - `../SKILL.md`
-- `../harness-engineering/SKILL.md`
 
 如果本文件与主 Host Skill 冲突，必须以 `../SKILL.md` 为准。
 
@@ -24,9 +23,8 @@ Claude 额外约束：
 
 上下文管理（Claude Code 专属）：
 
-- Claude Code 支持 `/compact` 和 `/clear` 命令
+- Claude Code 支持 `/compact` 命令
 - `knowledge_upsert` 完成后、派发下一批任务前，如果上下文较大，建议用户执行 `/compact`
-- 当 L1/L2/L3 知识库已充分维护且当前阶段已完成时，建议用户执行 `/clear`，然后调用 `resume` 工具恢复
 - MCP 工具不会截断输出，模型自行控制输出给用户的内容量
 - `await` 返回中间状态时静默继续，不输出自然语言
 - `await` 返回 `PROCESS_SESSION_IDLE` 时直接进入规划
