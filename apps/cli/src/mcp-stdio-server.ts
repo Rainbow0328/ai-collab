@@ -77,7 +77,9 @@ const sendProgress = (
     method: "notifications/progress",
     params: {
       progressToken,
-      progress: { kind: "report", message, progress, total }
+      progress,
+      ...(total !== undefined ? { total } : {}),
+      message
     }
   });
 };

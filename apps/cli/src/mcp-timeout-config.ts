@@ -197,7 +197,7 @@ const updateCodexToml = async (
     path: filePath,
     action: exists ? "updated" : "created",
     changed: true,
-    message: `Set [mcp_servers.ai_collab].tool_timeout_sec to ${timeoutSeconds}.`
+    message: `Set [mcp_servers.ai-collab].tool_timeout_sec to ${timeoutSeconds}.`
   };
 };
 
@@ -263,7 +263,7 @@ const findServerName = (servers: Record<string, unknown>): string | null => {
 };
 
 const setCodexServerTimeout = (content: string, timeoutSeconds: number): string => {
-  const header = "[mcp_servers.ai_collab]";
+  const header = "[mcp_servers.ai-collab]";
   if (!content.trim()) {
     return `${header}\ntool_timeout_sec = ${timeoutSeconds}\n`;
   }

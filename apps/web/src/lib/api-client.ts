@@ -144,7 +144,7 @@ export const api = {
       name: string;
       url: string;
       description?: string | null;
-      transport?: "stdio" | "sse";
+      transport?: "sse";
       headers?: Record<string, string> | null;
       enabled?: boolean;
     }) => getApiClient().createMcpServer(input),
@@ -152,7 +152,7 @@ export const api = {
       name?: string;
       url?: string;
       description?: string | null;
-      transport?: "stdio" | "sse";
+      transport?: "sse";
       headers?: Record<string, string> | null;
       enabled?: boolean;
     }) => getApiClient().updateMcpServer(serverId, input),

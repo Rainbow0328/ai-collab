@@ -231,7 +231,7 @@ export const joinSessionByNameInputSchema = z.object({
 export const attachSessionInputSchema = z.object({
   sessionName: z.string().min(1),
   agentName: z.string().min(1),
-  role: z.enum(["host", "worker"]),
+  role: z.enum(["host", "worker", "knowledge_keeper"]),
   roleDescription: z.string().min(1)
 });
 

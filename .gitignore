@@ -27,6 +27,8 @@ log/
 .codex/
 .claude/
 .cursor/
+.aider/
+.codebuddy/
 
 # Data
 .knowledge/
@@ -51,3 +53,16 @@ Desktop.ini
 *.swo
 *~
 /apps/web/docs/
+
+# Build artifacts and debug output
+*.tsbuildinfo
+build-output.txt
+core-error.txt
+core-output.txt
+
+# Internal planning docs
+*PROBLEM_ANALYSIS.md
+*REFACTOR_PLAN.md
+*SUMMARY.md
+*PLAN.md
+*ANALYSIS.md

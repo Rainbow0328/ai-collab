@@ -5,6 +5,8 @@ export interface ModelConfigRecord {
   name: string;
   provider: string;
   modelId: string;
+  apiKey: string | null;
+  baseUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,6 +24,8 @@ const CREATE_TABLE = `
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     model_id TEXT NOT NULL,
+    api_key TEXT,
+    base_url TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -37,9 +41,9 @@ export class ModelConfigRepository {
 
   public findById(id: string): ModelConfigRecord | null {
     const statement = this.db.prepare(
-      "SELECT id, name, provider, model_id AS modelId, created_at AS createdAt, updated_at AS updatedAt FROM model_configs WHERE id = ?"
+      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, created_at AS createdAt, updated_at AS updatedAt FROM model_configs WHERE id = ?"
     );
-    const row = statement.get(id) as Record<string, string> | undefined;
+    const row = statement.get(id) as Record<string, string | null> | undefined;
     return row ? (row as unknown as ModelConfigRecord) : null;
   }
 
@@ -51,28 +55,30 @@ export class ModelConfigRepository {
     return {
       ...record,
       modelName: record.modelId,
-      baseUrl: resolveModelBaseUrl(record.provider),
-      apiKeyEncrypted: resolveModelApiKey(record.provider),
+      baseUrl: record.baseUrl ?? resolveModelBaseUrl(record.provider),
+      apiKeyEncrypted: record.apiKey ?? resolveModelApiKey(record.provider),
       timeoutSeconds: 60
     };
   }
 
   public list(): ModelConfigRecord[] {
     const statement = this.db.prepare(
-      "SELECT id, name, provider, model_id AS modelId, created_at AS createdAt, updated_at AS updatedAt FROM model_configs ORDER BY name"
+      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, created_at AS createdAt, updated_at AS updatedAt FROM model_configs ORDER BY name"
     );
-    const rows = statement.all() as Record<string, string>[];
+    const rows = statement.all() as Record<string, string | null>[];
     return rows as unknown as ModelConfigRecord[];
   }
 
   public upsert(record: ModelConfigRecord): void {
     const statement = this.db.prepare(`
-      INSERT INTO model_configs (id, name, provider, model_id, created_at, updated_at)
-      VALUES (@id, @name, @provider, @modelId, @createdAt, @updatedAt)
+      INSERT INTO model_configs (id, name, provider, model_id, api_key, base_url, created_at, updated_at)
+      VALUES (@id, @name, @provider, @modelId, @apiKey, @baseUrl, @createdAt, @updatedAt)
       ON CONFLICT (id) DO UPDATE SET
         name = excluded.name,
         provider = excluded.provider,
         model_id = excluded.model_id,
+        api_key = excluded.api_key,
+        base_url = excluded.base_url,
         updated_at = excluded.updated_at
     `);
     statement.run({
@@ -80,6 +86,8 @@ export class ModelConfigRepository {
       name: record.name,
       provider: record.provider,
       modelId: record.modelId,
+      apiKey: record.apiKey,
+      baseUrl: record.baseUrl,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });

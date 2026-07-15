@@ -67,7 +67,7 @@ export type McpServerConfig = {
   id: string;
   name: string;
   description: string | null;
-  transport: "stdio" | "sse";
+  transport: "sse";
   url: string;
   headers?: Record<string, string> | null;
   enabled: boolean;
@@ -79,7 +79,7 @@ export type McpServerConfig = {
 export type CreateMcpServerInput = {
   name: string;
   description?: string | null;
-  transport: "stdio" | "sse";
+  transport: "sse";
   url: string;
   headers?: Record<string, string> | null;
 };
@@ -88,7 +88,7 @@ export type CreateMcpServerInput = {
 export type UpdateMcpServerInput = {
   name?: string;
   description?: string | null;
-  transport?: "stdio" | "sse";
+  transport?: "sse";
   url?: string;
   headers?: Record<string, string> | null;
   enabled?: boolean;

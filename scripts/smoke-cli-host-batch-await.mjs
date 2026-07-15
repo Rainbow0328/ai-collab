@@ -159,7 +159,7 @@ const main = async () => {
       env
     });
     assert(
-      firstHostAwait.op === "PROCESS_CLAIMED_MESSAGES",
+      firstHostAwait.op === "PROCESS_CLAIMED_MESSAGE",
       `host await should return a claimed message batch, got ${firstHostAwait.op}`
     );
     assert(firstHostAwait.messageCount === 2, "host should claim both reports");
@@ -169,7 +169,7 @@ const main = async () => {
       env
     });
     assert(
-      restoredHostAwait.op === "PROCESS_CLAIMED_MESSAGES" &&
+      restoredHostAwait.op === "PROCESS_CLAIMED_MESSAGE" &&
         restoredHostAwait.messageCount === 2,
       "host await should restore the already claimed batch before claiming anything else"
     );

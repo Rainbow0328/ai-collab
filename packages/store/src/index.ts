@@ -24,3 +24,4 @@ export * from "./repositories/task-event-repository.js";
 export * from "./repositories/web-agent-runtime-repository.js";
 export * from "./repositories/workflow-definition-repository.js";
 export * from "./repositories/model-config-repository.js";
+export * from "./repositories/external-mcp-server-repository.js";

@@ -317,7 +317,7 @@ export type JoinSessionByNameInput = {
 export type AttachSessionInput = {
   sessionName: string;
   agentName: string;
-  role: "host" | "worker";
+  role: "host" | "worker" | "knowledge_keeper";
   roleDescription: string;
 };
 

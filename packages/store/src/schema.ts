@@ -285,6 +285,21 @@ export const schemaDDL = `
     updated_at TEXT NOT NULL
   );
 
+  -- ============================================
+  -- mcp_servers: 外部 MCP Server 配置
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS mcp_servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    transport TEXT NOT NULL DEFAULT 'sse',
+    url TEXT NOT NULL,
+    headers_json TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   -- 记录 schema 版本
   INSERT OR IGNORE INTO schema_version (version, applied_at)
   VALUES (1, datetime('now'));

@@ -105,13 +105,13 @@ function AddServerDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
-  const [transport, setTransport] = useState<"stdio" | "sse">("sse");
+  const [transport, setTransport] = useState<"sse">("sse");
 
   const create = useMutation({
     mutationFn: () => api.mcpServers.create({ name: name.trim(), url: url.trim(), description: description.trim() || null, transport, enabled: true }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SERVERS_KEY });
-      setName(""); setUrl(""); setDescription(""); setTransport("sse");
+      setName(""); setUrl(""); setDescription("");
       pushToast("MCP Server 已添加", "success");
       onClose();
     },
@@ -124,14 +124,8 @@ function AddServerDialog({ open, onClose }: { open: boolean; onClose: () => void
         <Field label="名称" required>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="github-mcp" />
         </Field>
-        <Field label="URL / 命令" required hint="SSE 填 http://…，STDIO 填命令路径">
+        <Field label="URL" required hint="SSE 填 http://…">
           <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://127.0.0.1:3001/sse" />
-        </Field>
-        <Field label="传输方式">
-          <select className="input" value={transport} onChange={(e) => setTransport(e.target.value as "stdio" | "sse")}>
-            <option value="sse">SSE</option>
-            <option value="stdio">STDIO</option>
-          </select>
         </Field>
         <Field label="描述">
           <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="GitHub MCP Server" />

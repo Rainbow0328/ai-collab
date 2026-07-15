@@ -297,7 +297,7 @@ export class SessionService {
       agentName: input.agentName,
       displayName: defaultAgentDisplayName(input.agentName),
       platform: defaultAgentPlatform,
-      role: "worker",
+      role: input.role,
       roleDescription: input.roleDescription,
       capabilities: defaultAgentCapabilities,
       connectionMode: defaultAgentConnectionMode

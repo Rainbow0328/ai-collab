@@ -19,6 +19,8 @@ export class DatabaseManager {
   public migrate(): void {
     this.database.exec(schemaDDL);
     this.ensureColumn("model_configs", "model_id", "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn("model_configs", "api_key", "TEXT");
+    this.ensureColumn("model_configs", "base_url", "TEXT");
     this.ensureColumn("model_configs", "created_at", "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn("model_configs", "updated_at", "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn("web_agent_runtimes", "agent_profile_id", "TEXT");

@@ -156,7 +156,7 @@ const main = async () => {
       env
     });
     assert(
-      hostAwait.op === "PROCESS_CLAIMED_MESSAGES",
+      hostAwait.op === "PROCESS_CLAIMED_MESSAGE",
       `host should claim both reports, got ${hostAwait.op}`
     );
     assert(hostAwait.messageCount === 2, "host should claim both reports");
@@ -187,7 +187,7 @@ const main = async () => {
       env
     });
     assert(
-      secondHostAwait.op === "PROCESS_CLAIMED_MESSAGES",
+      secondHostAwait.op === "PROCESS_CLAIMED_MESSAGE",
       `host should still have the second claimed message, got ${secondHostAwait.op}`
     );
     assert(secondHostAwait.messageCount === 1, "host should have 1 remaining message");

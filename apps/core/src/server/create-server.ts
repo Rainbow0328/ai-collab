@@ -896,6 +896,8 @@ export const createServer = async (
       name: body.name,
       provider: body.provider,
       modelId: body.modelId,
+      apiKey: body.apiKey ?? null,
+      baseUrl: body.baseUrl ?? null,
       createdAt: timestamp,
       updatedAt: timestamp,
     });

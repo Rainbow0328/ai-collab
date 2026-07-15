@@ -321,11 +321,22 @@ const cleanupResidualWindowMember = async (options: {
 
 const ensureWindowRole = (
   profile: WindowProfile,
-  expectedRole: "host" | "worker"
+  expectedRole: "host" | "worker" | "knowledge_keeper"
 ): void => {
   if (profile.role !== expectedRole) {
     throw new Error(
       `window="${profile.windowName}" 的角色是 "${profile.role}"，不能执行 ${expectedRole} 命令。`
+    );
+  }
+};
+
+const ensureWindowRoleAny = (
+  profile: WindowProfile,
+  allowedRoles: Array<"host" | "worker" | "knowledge_keeper">
+): void => {
+  if (!allowedRoles.includes(profile.role as "host" | "worker" | "knowledge_keeper")) {
+    throw new Error(
+      `window="${profile.windowName}" 的角色是 "${profile.role}"，需要 ${allowedRoles.join(" 或 ")} 角色才能执行此命令。`
     );
   }
 };
@@ -345,7 +356,7 @@ const syncWindowProfileWithContext = async (
 const requireLiveWindowContext = async (
   sessionName: string,
   windowName: string,
-  expectedRole?: "host" | "worker"
+  expectedRole?: "host" | "worker" | "knowledge_keeper"
 ): Promise<{
   profile: WindowProfile;
   context: CliIdentityContext;
@@ -365,7 +376,7 @@ const requireLiveWindowContext = async (
 const attachNamedMember = async (options: {
   sessionName: string;
   name: string;
-  role: "host" | "worker";
+  role: "host" | "worker" | "knowledge_keeper";
   duty: string;
 }) => {
   const result = await client.attachNamedSession(options.sessionName, {
@@ -4124,23 +4135,23 @@ program
 
 program
   .command("attach")
-  .description("Attach the current member to one collaboration session as host or worker")
+  .description("Attach the current member to one collaboration session as host, worker, or knowledge_keeper")
   .argument("<name>", "Stable unique member name inside the session")
   .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .requiredOption("--role <role>", "host or worker")
+  .requiredOption("--role <role>", "host, worker, or knowledge_keeper")
   .requiredOption("--duty <roleDescription>", "Stable duty for this member")
   .action(
     async (
       name: string,
       options: {
         session: string;
-        role: "host" | "worker";
+        role: "host" | "worker" | "knowledge_keeper";
         duty: string;
       }
     ) => {
       try {
-        if (options.role !== "host" && options.role !== "worker") {
-          throw new Error('role 仅支持 "host" 或 "worker"。');
+        if (options.role !== "host" && options.role !== "worker" && options.role !== "knowledge_keeper") {
+          throw new Error('role 仅支持 "host"、"worker" 或 "knowledge_keeper"。');
         }
 
         const attached = await attachNamedMember({
@@ -4772,8 +4783,8 @@ knowledgeCommand
 
 knowledgeCommand
   .command("upsert")
-  .description("Create or update one knowledge document as host")
-  .argument("<name>", "Stable host member name inside the session")
+  .description("Create or update one knowledge document as host or knowledge_keeper")
+  .argument("<name>", "Stable member name inside the session (host or knowledge_keeper)")
   .requiredOption("--session <sessionName>", "Explicit collaboration session name")
   .requiredOption("--level <level>", "Knowledge level: l1, l2, or l3")
   .requiredOption("--slug <slug>", "Knowledge slug")
@@ -4802,11 +4813,11 @@ knowledgeCommand
       }
     ) => {
       try {
-        const { context } = await requireLiveWindowContext(
+        const { profile, context } = await requireLiveWindowContext(
           options.session,
-          name,
-          "host"
+          name
         );
+        ensureWindowRoleAny(profile, ["host", "knowledge_keeper"]);
         const document = await client.upsertKnowledge({
           level: ensureKnowledgeLevel(options.level),
           slug: options.slug,

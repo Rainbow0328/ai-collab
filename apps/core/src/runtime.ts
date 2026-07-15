@@ -15,6 +15,7 @@
 import {
   AgentRepository,
   DatabaseManager,
+  ExternalMcpServerRepository,
   IdentityLeaseRepository,
   MessageRepository,
   ModelConfigRepository,
@@ -77,9 +78,23 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
       name: "Default Model",
       provider: process.env.AI_COLLAB_LLM_PROVIDER ?? "openai",
       modelId: process.env.AI_COLLAB_LLM_MODEL ?? "gpt-4o-mini",
+      apiKey: null,
+      baseUrl: null,
       createdAt: timestamp,
       updatedAt: timestamp
     });
+  }
+
+  // Load persisted API keys and base URLs into process.env for runtime use.
+  // This allows the LLM client to pick up credentials stored via the web UI
+  // without requiring manual environment variable configuration.
+  for (const config of modelConfigRepository.list()) {
+    if (config.apiKey) {
+      process.env[`${config.provider.toUpperCase()}_API_KEY`] = config.apiKey;
+    }
+    if (config.baseUrl) {
+      process.env[`${config.provider.toUpperCase()}_BASE_URL`] = config.baseUrl;
+    }
   }
   const webAgentRuntimeRepository = new WebAgentRuntimeRepository(
     databaseManager.connection
@@ -140,7 +155,9 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     messageService,
     windowBindingService
   );
-  const externalMcpService = new ExternalMcpService();
+  const externalMcpService = new ExternalMcpService(
+    new ExternalMcpServerRepository(databaseManager.connection)
+  );
   const mcpToolService = new McpToolService(webAgentRuntimeRepository);
   const stdioMcpRegistryService = new StdioMcpRegistryService();
   const webAgentRuntimeService = new WebAgentRuntimeService(

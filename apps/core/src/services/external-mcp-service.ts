@@ -2,10 +2,11 @@
  * 外部 MCP Server 管理服务
  *
  * 支持 SSE 传输方式连接外部 MCP Server，发现工具，代理调用。
- * MCP 协议通过 JSON-RPC over HTTP 实现。
+ * 配置持久化到 SQLite 数据库，重启后自动恢复。
  */
 import { randomUUID } from "node:crypto";
 import type { McpServerConfig, CreateMcpServerInput, UpdateMcpServerInput } from "@ai-collab/protocol";
+import type { ExternalMcpServerRepository } from "@ai-collab/store";
 import { getLogger } from "@ai-collab/shared";
 
 const logger = getLogger();
@@ -33,19 +34,35 @@ type CachedTools = {
 };
 
 export class ExternalMcpService {
-  private servers: Map<string, McpServerConfig> = new Map();
+  private repository: ExternalMcpServerRepository;
+  /** 内存中的配置缓存（从数据库加载） */
+  private configs: Map<string, McpServerConfig> = new Map();
   /** 工具列表缓存（5分钟有效期） */
   private toolCache: Map<string, CachedTools> = new Map();
   private rpcId = 0;
 
+  public constructor(repository: ExternalMcpServerRepository) {
+    this.repository = repository;
+    this.loadFromDatabase();
+  }
+
+  /** 从数据库加载所有配置到内存缓存 */
+  private loadFromDatabase(): void {
+    const all = this.repository.list();
+    this.configs.clear();
+    for (const config of all) {
+      this.configs.set(config.id, config);
+    }
+  }
+
   /** 列出所有外部 MCP Server */
   list(): McpServerConfig[] {
-    return Array.from(this.servers.values());
+    return Array.from(this.configs.values());
   }
 
   /** 获取单个 */
   get(id: string): McpServerConfig | null {
-    return this.servers.get(id) ?? null;
+    return this.configs.get(id) ?? null;
   }
 
   /** 创建外部 MCP Server */
@@ -62,15 +79,15 @@ export class ExternalMcpService {
       createdAt: now,
       updatedAt: now,
     };
-    this.servers.set(config.id, config);
-    // 清除该 server 的工具缓存
+    this.repository.insert(config);
+    this.configs.set(config.id, config);
     this.toolCache.delete(config.id);
     return config;
   }
 
   /** 更新外部 MCP Server */
   update(id: string, input: UpdateMcpServerInput): McpServerConfig {
-    const existing = this.servers.get(id);
+    const existing = this.configs.get(id);
     if (!existing) {
       throw new Error(`MCP Server not found: ${id}`);
     }
@@ -84,7 +101,8 @@ export class ExternalMcpService {
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       updatedAt: new Date().toISOString(),
     };
-    this.servers.set(id, updated);
+    this.repository.update(updated);
+    this.configs.set(id, updated);
     // URL/headers 变更时清除工具缓存
     this.toolCache.delete(id);
     return updated;
@@ -93,7 +111,11 @@ export class ExternalMcpService {
   /** 删除外部 MCP Server */
   delete(id: string): { deleted: boolean } {
     this.toolCache.delete(id);
-    return { deleted: this.servers.delete(id) };
+    const deleted = this.repository.delete(id);
+    if (deleted) {
+      this.configs.delete(id);
+    }
+    return { deleted };
   }
 
   /**
@@ -101,7 +123,7 @@ export class ExternalMcpService {
    * 通过 JSON-RPC `tools/list` 方法获取
    */
   async listTools(serverId: string): Promise<Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>> {
-    const server = this.servers.get(serverId);
+    const server = this.configs.get(serverId);
     if (!server || !server.enabled) {
       return [];
     }
@@ -128,7 +150,7 @@ export class ExternalMcpService {
    */
   async listAllTools(): Promise<Array<{ name: string; description: string; inputSchema: Record<string, unknown>; serverId: string; serverName: string }>> {
     const allTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown>; serverId: string; serverName: string }> = [];
-    for (const [serverId, server] of this.servers) {
+    for (const [serverId, server] of this.configs) {
       if (!server.enabled) continue;
       try {
         const tools = await this.listTools(serverId);
@@ -155,7 +177,7 @@ export class ExternalMcpService {
     toolName: string,
     args: Record<string, unknown>
   ): Promise<{ success: boolean; result: unknown; error?: string }> {
-    const server = this.servers.get(serverId);
+    const server = this.configs.get(serverId);
     if (!server) {
       return { success: false, result: null, error: `MCP Server not found: ${serverId}` };
     }
@@ -195,7 +217,7 @@ export class ExternalMcpService {
     toolName: string,
     args: Record<string, unknown>
   ): Promise<{ success: boolean; result: unknown; error?: string }> {
-    for (const [serverId, server] of this.servers) {
+    for (const [serverId, server] of this.configs) {
       if (!server.enabled) continue;
       try {
         const tools = await this.listTools(serverId);
@@ -209,14 +231,8 @@ export class ExternalMcpService {
     return { success: false, result: null, error: `No MCP server provides tool: ${toolName}` };
   }
 
-  /** 发送 JSON-RPC 请求到 MCP Server */
+  /** 发送 JSON-RPC 请求到 MCP Server（SSE/HTTP 传输） */
   private async sendRpc(server: McpServerConfig, method: string, params: Record<string, unknown>): Promise<unknown> {
-    if (server.transport === "stdio") {
-      // stdio 传输暂不支持（需要进程管理，后续迭代）
-      throw new Error("stdio transport is not yet supported for external MCP servers");
-    }
-
-    // SSE/HTTP 传输
     const request: JsonRpcRequest = {
       jsonrpc: "2.0",
       id: ++this.rpcId,
