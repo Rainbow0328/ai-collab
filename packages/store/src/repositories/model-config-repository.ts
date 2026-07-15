@@ -1,86 +1,114 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { SQLInputValue } from "node:sqlite";
-import type { ModelConfig } from "@ai-collab/protocol";
+
+export interface ModelConfigRecord {
+  id: string;
+  name: string;
+  provider: string;
+  modelId: string;
+  apiKey: string | null;
+  baseUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModelConfigWithSecret extends ModelConfigRecord {
+  modelName: string;
+  baseUrl: string;
+  apiKeyEncrypted: string | null;
+  timeoutSeconds: number;
+}
+
+const CREATE_TABLE = `
+  CREATE TABLE IF NOT EXISTS model_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    api_key TEXT,
+    base_url TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`;
 
 export class ModelConfigRepository {
-  public constructor(private readonly database: DatabaseSync) {}
+  private readonly db: DatabaseSync;
 
-  public insert(config: ModelConfig & { apiKeyEncrypted?: string | null }): void {
-    const statement = this.database.prepare(`
-      INSERT INTO model_configs (id, name, provider, base_url, api_key_encrypted, api_key_hint, model_name, temperature, max_tokens, top_p, timeout_seconds, enabled, created_at, updated_at)
-      VALUES (@id, @name, @provider, @baseUrl, @apiKeyEncrypted, @apiKeyHint, @modelName, @temperature, @maxTokens, @topP, @timeoutSeconds, @enabled, @createdAt, @updatedAt)
+  public constructor(db: DatabaseSync) {
+    this.db = db;
+    this.db.exec(CREATE_TABLE);
+  }
+
+  public findById(id: string): ModelConfigRecord | null {
+    const statement = this.db.prepare(
+      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, created_at AS createdAt, updated_at AS updatedAt FROM model_configs WHERE id = ?"
+    );
+    const row = statement.get(id) as Record<string, string | null> | undefined;
+    return row ? (row as unknown as ModelConfigRecord) : null;
+  }
+
+  public getFull(id: string): ModelConfigWithSecret {
+    const record = this.findById(id);
+    if (!record) {
+      throw new Error(`Model config '${id}' not found.`);
+    }
+    return {
+      ...record,
+      modelName: record.modelId,
+      baseUrl: record.baseUrl ?? resolveModelBaseUrl(record.provider),
+      apiKeyEncrypted: record.apiKey ?? resolveModelApiKey(record.provider),
+      timeoutSeconds: 60
+    };
+  }
+
+  public list(): ModelConfigRecord[] {
+    const statement = this.db.prepare(
+      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, created_at AS createdAt, updated_at AS updatedAt FROM model_configs ORDER BY name"
+    );
+    const rows = statement.all() as Record<string, string | null>[];
+    return rows as unknown as ModelConfigRecord[];
+  }
+
+  public upsert(record: ModelConfigRecord): void {
+    const statement = this.db.prepare(`
+      INSERT INTO model_configs (id, name, provider, model_id, api_key, base_url, created_at, updated_at)
+      VALUES (@id, @name, @provider, @modelId, @apiKey, @baseUrl, @createdAt, @updatedAt)
+      ON CONFLICT (id) DO UPDATE SET
+        name = excluded.name,
+        provider = excluded.provider,
+        model_id = excluded.model_id,
+        api_key = excluded.api_key,
+        base_url = excluded.base_url,
+        updated_at = excluded.updated_at
     `);
     statement.run({
-      ...config,
-      enabled: config.enabled ? 1 : 0
+      id: record.id,
+      name: record.name,
+      provider: record.provider,
+      modelId: record.modelId,
+      apiKey: record.apiKey,
+      baseUrl: record.baseUrl,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
     });
   }
 
-  public findById(id: string): (ModelConfig & { apiKeyEncrypted?: string | null }) | null {
-    const statement = this.database.prepare(`
-      SELECT
-        id, name, provider, base_url AS baseUrl,
-        api_key_encrypted AS apiKeyEncrypted, api_key_hint AS apiKeyHint,
-        model_name AS modelName, temperature, max_tokens AS maxTokens,
-        top_p AS topP, timeout_seconds AS timeoutSeconds,
-        enabled, created_at AS createdAt, updated_at AS updatedAt
-      FROM model_configs WHERE id = ?
-    `);
-    const row = statement.get(id) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    return { ...row, enabled: Boolean(row.enabled) } as ModelConfig & { apiKeyEncrypted?: string | null };
-  }
-
-  public findByName(name: string): (ModelConfig & { apiKeyEncrypted?: string | null }) | null {
-    const statement = this.database.prepare(`
-      SELECT
-        id, name, provider, base_url AS baseUrl,
-        api_key_encrypted AS apiKeyEncrypted, api_key_hint AS apiKeyHint,
-        model_name AS modelName, temperature, max_tokens AS maxTokens,
-        top_p AS topP, timeout_seconds AS timeoutSeconds,
-        enabled, created_at AS createdAt, updated_at AS updatedAt
-      FROM model_configs WHERE name = ?
-    `);
-    const row = statement.get(name) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    return { ...row, enabled: Boolean(row.enabled) } as ModelConfig & { apiKeyEncrypted?: string | null };
-  }
-
-  public listAll(): ModelConfig[] {
-    const statement = this.database.prepare(`
-      SELECT
-        id, name, provider, base_url AS baseUrl,
-        api_key_hint AS apiKeyHint,
-        model_name AS modelName, temperature, max_tokens AS maxTokens,
-        top_p AS topP, timeout_seconds AS timeoutSeconds,
-        enabled, created_at AS createdAt, updated_at AS updatedAt
-      FROM model_configs ORDER BY updated_at DESC
-    `);
-    const rows = statement.all() as Record<string, unknown>[];
-    return rows.map((row) => ({ ...row, enabled: Boolean(row.enabled) })) as ModelConfig[];
-  }
-
-  public update(id: string, updates: Record<string, SQLInputValue>): void {
-    const fields: string[] = [];
-    const values: Record<string, SQLInputValue> = { id };
-
-    for (const [key, value] of Object.entries(updates)) {
-      if (value !== undefined) {
-        const column = key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-        fields.push(`${column} = @${key}`);
-        values[key] = key === "enabled" ? (value ? 1 : 0) : value;
-      }
-    }
-
-    if (fields.length === 0) return;
-
-    fields.push("updated_at = @updatedAt");
-    values.updatedAt = new Date().toISOString();
-
-    this.database.prepare(`UPDATE model_configs SET ${fields.join(", ")} WHERE id = @id`).run(values);
-  }
-
-  public deleteById(id: string): void {
-    this.database.prepare("DELETE FROM model_configs WHERE id = ?").run(id);
+  public delete(id: string): void {
+    const statement = this.db.prepare("DELETE FROM model_configs WHERE id = ?");
+    statement.run(id);
   }
 }
+
+const resolveModelBaseUrl = (provider: string): string => {
+  if (provider === "anthropic") {
+    return process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com";
+  }
+  return process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+};
+
+const resolveModelApiKey = (provider: string): string | null => {
+  if (provider === "anthropic") {
+    return process.env.ANTHROPIC_API_KEY ?? null;
+  }
+  return process.env.OPENAI_API_KEY ?? null;
+};

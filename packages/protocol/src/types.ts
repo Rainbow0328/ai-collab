@@ -20,8 +20,14 @@ export type SessionStatus = (typeof sessionStatuses)[number];
 export const agentPlatforms = ["generic"] as const;
 export type AgentPlatform = string;
 
-export const agentRoles = ["host", "worker", "knowledge_keeper"] as const;
+export const agentRoles = ["host", "worker", "observer", "knowledge_keeper"] as const;
 export type AgentRole = (typeof agentRoles)[number];
+
+export type UserProfileEntry = {
+  key: string;
+  value: string;
+  updatedAt: string;
+};
 
 export const connectionModes = [
   "plugin",
@@ -47,8 +53,7 @@ export const messageTypes = [
   "result",
   "heartbeat",
   "ack",
-  "error",
-  "knowledge_feedback"
+  "error"
 ] as const;
 export type MessageType = (typeof messageTypes)[number];
 
@@ -69,6 +74,21 @@ export const messageProcessingStatuses = [
 ] as const;
 export type MessageProcessingStatus =
   (typeof messageProcessingStatuses)[number];
+
+export const taskStatuses = [
+  "created",
+  "assigned",
+  "accepted",
+  "in_progress",
+  "completed",
+  "failed",
+  "cancelled",
+  "awaiting_reassign"
+] as const;
+export type TaskStatus = (typeof taskStatuses)[number];
+
+export const taskPriorities = ["low", "normal", "high"] as const;
+export type TaskPriority = (typeof taskPriorities)[number];
 
 export const reviewStatuses = [
   "in_progress",
@@ -125,6 +145,20 @@ export type WindowBindingDefaults = {
 
 export type WindowRuntimeMessageKind = "task" | "report";
 
+export const collaborationRunStates = [
+  "idle",
+  "waiting",
+  "waiting_continue_required",
+  "assigned",
+  "in_progress",
+  "submit_pending_continue",
+  "resolve_pending_continue",
+  "stale",
+  "blocked_requires_user",
+  "session_complete"
+] as const;
+export type CollaborationRunState = (typeof collaborationRunStates)[number];
+
 export type WindowRuntimeState = {
   activeFlow: string | null;
   currentMessageId: string | null;
@@ -142,6 +176,12 @@ export type WindowRuntimeState = {
   lastWorkflowStep: string | null;
   lastAutomationState: string | null;
   lastTurnDisposition: string | null;
+  state: CollaborationRunState | null;
+  requiredAction: string | null;
+  requiredTool: string | null;
+  continuationToken: string | null;
+  userVisibleResponseAllowed: boolean | null;
+  leaseExpiresAt: string | null;
   updatedAt: string | null;
 };
 
@@ -177,6 +217,30 @@ export type MessageEnvelope = {
   payload: unknown;
 };
 
+export type Task = {
+  id: string;
+  sessionId: string;
+  title: string;
+  description: string;
+  createdByAgentId: string;
+  assignedToAgentId?: string | undefined;
+  status: TaskStatus;
+  priority: TaskPriority;
+  capabilityHint?: string | undefined;
+  parentTaskId?: string | undefined;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskEvent = {
+  id: string;
+  taskId: string;
+  eventType: string;
+  actorAgentId: string;
+  payload: unknown;
+  createdAt: string;
+};
+
 export type AckPayload = {
   messageId: string;
   processed: boolean;
@@ -190,10 +254,6 @@ export type MessageClaimInput = {
   identity?: string | undefined;
   flow?: "host" | "worker" | undefined;
   ownerToken?: string | undefined;
-};
-
-export type MessageClaimManyInput = MessageClaimInput & {
-  maxMessages?: number | undefined;
 };
 
 export type MessageProcessCompleteInput = {
@@ -303,6 +363,22 @@ export type AgentQueueStats = {
   pending: number;
   claimed: number;
   total: number;
+};
+
+export type CreateTaskInput = {
+  sessionId: string;
+  title: string;
+  description: string;
+  createdByAgentId: string;
+  assignedToAgentId?: string | undefined;
+  priority: TaskPriority;
+  capabilityHint?: string | undefined;
+  parentTaskId?: string | undefined;
+};
+
+export type CompleteTaskInput = {
+  completedByAgentId: string;
+  summary?: string | undefined;
 };
 
 export type SessionInsight = {
@@ -416,6 +492,12 @@ export type UpdateWindowRuntimeStateInput = {
   lastWorkflowStep?: string | null | undefined;
   lastAutomationState?: string | null | undefined;
   lastTurnDisposition?: string | null | undefined;
+  state?: CollaborationRunState | null | undefined;
+  requiredAction?: string | null | undefined;
+  requiredTool?: string | null | undefined;
+  continuationToken?: string | null | undefined;
+  userVisibleResponseAllowed?: boolean | null | undefined;
+  leaseExpiresAt?: string | null | undefined;
 };
 
 export type ApiResponse<T = unknown> = {
@@ -428,45 +510,4 @@ export type ApiResponse<T = unknown> = {
   };
   timestamp: string;
   requestId?: string;
-};
-
-export type TraceType = "sent" | "claimed" | "submitted" | "failed" | "delivery_failed";
-
-export type MessageTrace = {
-  id: string;
-  sessionId: string;
-  messageId: string;
-  agentId: string;
-  traceType: TraceType;
-  correlationId: string | null;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-};
-
-export type MessageTraceInput = {
-  sessionId: string;
-  messageId: string;
-  agentId: string;
-  traceType: TraceType;
-  correlationId?: string | undefined;
-  metadata?: Record<string, unknown> | undefined;
-};
-
-export type AgentAnalytics = {
-  agentId: string;
-  agentName: string;
-  role: string;
-  totalDispatched: number;
-  totalCompleted: number;
-  totalFailed: number;
-  avgProcessingSeconds: number | null;
-  lastActiveAt: string | null;
-  status: string;
-};
-
-export type SessionTimeline = {
-  sessionId: string;
-  sessionName: string;
-  traces: MessageTrace[];
-  agentAnalytics: AgentAnalytics[];
 };

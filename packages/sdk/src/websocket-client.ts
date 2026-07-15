@@ -43,10 +43,12 @@ export class AiCollabWebSocketClient {
     event: K,
     listener: (...args: WebSocketEventMap[K]) => void
   ): this {
-    if (!this.listeners[event]) {
-      this.listeners[event] = [];
+    let list = this.listeners[event];
+    if (!list) {
+      list = [];
+      this.listeners[event] = list;
     }
-    this.listeners[event]!.push(listener);
+    list.push(listener);
     return this;
   }
 

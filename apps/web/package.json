@@ -6,22 +6,24 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@ai-collab/sdk": "workspace:*",
     "@ai-collab/protocol": "workspace:*",
+    "@ai-collab/sdk": "workspace:*",
     "@ai-collab/shared": "workspace:*",
+    "@tanstack/react-query": "^5.80.7",
+    "@tanstack/react-router": "^1.120.15",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-router-dom": "^6.26.0",
-    "zustand": "^5.0.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.8",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.1.8",
     "typescript": "^5.9.2",
     "vite": "^6.0.0"
   }

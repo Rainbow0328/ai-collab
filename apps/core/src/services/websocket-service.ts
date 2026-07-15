@@ -5,11 +5,28 @@ import type {
   WsProgressUpdateNotification,
 } from "@ai-collab/protocol";
 import { getLogger } from "@ai-collab/shared";
+import type { FastifyRequest } from "fastify";
 
 const logger = getLogger();
 
+/** Minimal WebSocket interface to avoid requiring @types/ws */
+interface WebSocketLike {
+  readyState: number;
+  close(code?: number, reason?: string): void;
+  send(data: string): void;
+  on(event: "message", listener: (data: Buffer) => void): void;
+  on(event: "close", listener: () => void): void;
+  on(event: "error", listener: (error: Error) => void): void;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+}
+
+/** Minimal Fastify server interface for WebSocket registration */
+interface FastifyServerLike {
+  get(path: string, opts: { websocket: true }, handler: (socket: WebSocketLike, request: FastifyRequest) => void): void;
+}
+
 export type ConnectionInfo = {
-  socket: any;
+  socket: WebSocketLike;
   agentId: string;
   sessionId: string;
   connectedAt: Date;
@@ -19,13 +36,13 @@ export type ConnectionInfo = {
 export class WebSocketService {
   private connections: Map<string, ConnectionInfo[]> = new Map();
 
-  public register(server: any): void {
-    server.get("/ws", { websocket: true }, (socket: any, request: any) => {
+  public register(server: FastifyServerLike): void {
+    server.get("/ws", { websocket: true }, (socket: WebSocketLike, request: FastifyRequest) => {
       this.handleConnection(socket, request);
     });
   }
 
-  private handleConnection(socket: any, request: any): void {
+  private handleConnection(socket: WebSocketLike, request: FastifyRequest): void {
     const query = request.query as { agentId?: string; sessionId?: string };
     const agentId = query.agentId;
     const sessionId = query.sessionId;
@@ -75,7 +92,7 @@ export class WebSocketService {
     });
   }
 
-  private handleMessage(agentId: string, message: any): void {
+  private handleMessage(agentId: string, message: Record<string, unknown>): void {
     const connections = this.connections.get(agentId);
     if (!connections || connections.length === 0) {
       return;

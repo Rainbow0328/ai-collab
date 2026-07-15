@@ -15,69 +15,48 @@
 import {
   AgentRepository,
   DatabaseManager,
+  ExternalMcpServerRepository,
   IdentityLeaseRepository,
   MessageRepository,
+  ModelConfigRepository,
   SessionRepository,
   SessionInsightRepository,
-  ModelConfigRepository,
-  AgentProfileRepository,
-  SkillRepository,
-  SessionBindingRepository,
-  KnowledgeBuildJudgementRepository,
-  MessageTraceRepository
+  TaskEventRepository,
+  TaskRepository,
+  WebAgentRuntimeRepository,
+  WorkflowDefinitionRepository
 } from "@ai-collab/store";
 
-import type { CoreConfig } from "@ai-collab/shared";
-import { loadConfig } from "@ai-collab/shared";
+import type { CoreConfig } from "./config.js";
+import { defaultCoreConfig } from "./config.js";
 import { createServer } from "./server/create-server.js";
 import {
   AgentService,
+  CollaborationWaitService,
+  ExternalMcpService,
+  ExtractionService,
   GuardService,
   IdentityLeaseService,
   KnowledgeFileStore,
   KnowledgeService,
+  McpToolService,
   MessageService,
   ProgressService,
   SessionConsoleService,
   SessionService,
   SessionInsightService,
+  TaskService,
+  UserPreferencesService,
+  WebAgentRuntimeExecutorService,
+  WebAgentRuntimeService,
   WebSocketService,
   WindowBindingService,
-  ModelConfigService,
-  AgentProfileService,
-  SkillService,
-  HostKnowledgeBuildService,
-  TraceService,
-  AnalyticsService,
-  UserProfileService
+  WorkflowDefinitionService,
+  StdioMcpRegistryService
 } from "./services/index.js";
 
-export const startCoreServer = async (
-  config: Partial<CoreConfig> = {}
-) => {
-  const defaultConfig = loadConfig();
-  const resolvedConfig: CoreConfig = {
-    ...defaultConfig,
-    ...config,
-    websocket: {
-      ...defaultConfig.websocket,
-      ...config.websocket
-    },
-    waitChain: {
-      ...defaultConfig.waitChain,
-      ...config.waitChain
-    },
-    logging: {
-      ...defaultConfig.logging,
-      ...config.logging
-    },
-    console: {
-      ...defaultConfig.console,
-      ...config.console
-    }
-  };
-
-  const databaseManager = new DatabaseManager(resolvedConfig.databasePath);
+export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) => {
+  const databaseManager = new DatabaseManager(config.databasePath);
   databaseManager.migrate();
 
   const sessionRepository = new SessionRepository(databaseManager.connection);
@@ -86,21 +65,42 @@ export const startCoreServer = async (
   const identityLeaseRepository = new IdentityLeaseRepository(
     databaseManager.connection
   );
+  const taskRepository = new TaskRepository(databaseManager.connection);
+  const taskEventRepository = new TaskEventRepository(databaseManager.connection);
   const sessionInsightRepository = new SessionInsightRepository(
     databaseManager.connection
   );
   const modelConfigRepository = new ModelConfigRepository(databaseManager.connection);
-  const agentProfileRepository = new AgentProfileRepository(databaseManager.connection);
-  const skillRepository = new SkillRepository(databaseManager.connection);
-  const sessionBindingRepository = new SessionBindingRepository(databaseManager.connection);
-  const knowledgeBuildJudgementRepository = new KnowledgeBuildJudgementRepository(databaseManager.connection);
-  const messageTraceRepository = new MessageTraceRepository(databaseManager.connection);
+  if (modelConfigRepository.list().length === 0) {
+    const timestamp = new Date().toISOString();
+    modelConfigRepository.upsert({
+      id: "default-model",
+      name: "Default Model",
+      provider: process.env.AI_COLLAB_LLM_PROVIDER ?? "openai",
+      modelId: process.env.AI_COLLAB_LLM_MODEL ?? "gpt-4o-mini",
+      apiKey: null,
+      baseUrl: null,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+  }
 
-  const traceService = new TraceService(messageTraceRepository);
-  const analyticsService = new AnalyticsService(
-    messageTraceRepository,
-    messageRepository,
-    agentRepository
+  // Load persisted API keys and base URLs into process.env for runtime use.
+  // This allows the LLM client to pick up credentials stored via the web UI
+  // without requiring manual environment variable configuration.
+  for (const config of modelConfigRepository.list()) {
+    if (config.apiKey) {
+      process.env[`${config.provider.toUpperCase()}_API_KEY`] = config.apiKey;
+    }
+    if (config.baseUrl) {
+      process.env[`${config.provider.toUpperCase()}_BASE_URL`] = config.baseUrl;
+    }
+  }
+  const webAgentRuntimeRepository = new WebAgentRuntimeRepository(
+    databaseManager.connection
+  );
+  const workflowDefinitionRepository = new WorkflowDefinitionRepository(
+    databaseManager.connection
   );
 
   const sessionService = new SessionService(
@@ -108,12 +108,10 @@ export const startCoreServer = async (
     sessionRepository,
     agentRepository,
     messageRepository,
+    taskRepository,
+    taskEventRepository,
     sessionInsightRepository,
-    identityLeaseRepository,
-    sessionBindingRepository,
-    skillRepository,
-    agentProfileRepository,
-    modelConfigRepository
+    identityLeaseRepository
   );
   const agentService = new AgentService(agentRepository, sessionService);
   const sessionInsightService = new SessionInsightService(
@@ -126,21 +124,24 @@ export const startCoreServer = async (
     sessionRepository,
     agentRepository,
     messageRepository,
-    identityLeaseRepository,
-    traceService
+    identityLeaseRepository
   );
   const identityLeaseService = new IdentityLeaseService(identityLeaseRepository);
   const windowBindingService = new WindowBindingService(agentRepository);
+  const taskService = new TaskService(
+    sessionRepository,
+    agentRepository,
+    taskRepository,
+    taskEventRepository
+  );
   const knowledgeFileStore = new KnowledgeFileStore(process.cwd());
   const knowledgeService = new KnowledgeService(knowledgeFileStore);
+  const userPreferencesService = new UserPreferencesService();
+  userPreferencesService.importFromLegacyKnowledgeRoot(
+    knowledgeFileStore.getRootPath()
+  );
+  const extractionService = new ExtractionService();
   const guardService = new GuardService();
-
-  const modelConfigService = new ModelConfigService(modelConfigRepository);
-  const agentProfileService = new AgentProfileService(agentProfileRepository);
-  const skillService = new SkillService(skillRepository);
-  const hostKnowledgeBuildService = new HostKnowledgeBuildService(knowledgeBuildJudgementRepository);
-
-  const userProfileService = new UserProfileService();
 
   const websocketService = new WebSocketService();
   const progressService = new ProgressService();
@@ -148,45 +149,76 @@ export const startCoreServer = async (
     sessionService,
     messageService,
     progressService,
-    knowledgeService,
-    resolvedConfig.console
+    knowledgeService
+  );
+  const collaborationWaitService = new CollaborationWaitService(
+    messageService,
+    windowBindingService
+  );
+  const externalMcpService = new ExternalMcpService(
+    new ExternalMcpServerRepository(databaseManager.connection)
+  );
+  const mcpToolService = new McpToolService(webAgentRuntimeRepository);
+  const stdioMcpRegistryService = new StdioMcpRegistryService();
+  const webAgentRuntimeService = new WebAgentRuntimeService(
+    webAgentRuntimeRepository,
+    sessionRepository,
+    agentRepository,
+    modelConfigRepository
+  );
+  const workflowDefinitionService = new WorkflowDefinitionService(
+    workflowDefinitionRepository
+  );
+  workflowDefinitionService.seedBuiltins();
+
+  let services: Parameters<typeof createServer>[1];
+  const webAgentRuntimeExecutorService = new WebAgentRuntimeExecutorService(
+    () => services
   );
 
-  const server = await createServer(resolvedConfig, {
+  services = {
     sessionService,
     agentService,
     identityLeaseService,
     messageService,
+    taskService,
     sessionInsightService,
     windowBindingService,
     websocketService,
     progressService,
     sessionConsoleService,
     knowledgeService,
+    userPreferencesService,
+    extractionService,
     guardService,
-    modelConfigService,
-    agentProfileService,
-    skillService,
-    hostKnowledgeBuildService,
-    traceService,
-    analyticsService,
-    userProfileService
-  });
+    modelConfigService: modelConfigRepository,
+    externalMcpService,
+    mcpToolService,
+    stdioMcpRegistryService,
+    collaborationWaitService,
+    webAgentRuntimeService,
+    webAgentRuntimeExecutorService,
+    workflowDefinitionService
+  };
+
+  const server = await createServer(config, services);
 
   messageService.setWebSocketService(websocketService);
+  for (const runtime of webAgentRuntimeRepository.listRunningEnabled()) {
+    webAgentRuntimeExecutorService.start(runtime);
+  }
 
   await server.listen({
-    host: resolvedConfig.host,
-    port: resolvedConfig.port
+    host: config.host,
+    port: config.port
   });
-
-  const frontendUrl = `http://${resolvedConfig.host}:${resolvedConfig.port}`;
-  console.log(`\nai-collab started\n  URL: ${frontendUrl}\n`);
 
   return {
     server,
     databaseManager,
+    stdioMcpRegistryService,
     close: async () => {
+      webAgentRuntimeExecutorService.stopAll();
       await server.close();
       databaseManager.close();
     }

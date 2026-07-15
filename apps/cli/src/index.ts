@@ -1,14 +1,10 @@
 #!/usr/bin/env node
 
 import { createHash, randomUUID } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync
-} from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import path from "node:path";
+import fs from "node:fs";
 import { Command } from "commander";
 import {
   createAiCollabClient,
@@ -58,6 +54,14 @@ import {
   createCommandTrace,
   getCommandTraceStorePath
 } from "./command-trace.js";
+import {
+  configureMcpTimeouts,
+  type McpTimeoutConfigureTarget
+} from "./mcp-timeout-config.js";
+import {
+  setupMcp,
+  type McpSetupTarget
+} from "./mcp-setup.js";
 
 import {
   DEFAULT_LOOP_INTERVAL_SECONDS,
@@ -111,7 +115,7 @@ const loadRuntimeModule = async () => {
 
 const requireIdentityOption = (identity: string | undefined): string => {
   if (!identity) {
-    throw new Error("--identity must be explicitly provided.");
+    throw new Error("必须显式提供 --identity。");
   }
 
   return identity;
@@ -134,7 +138,7 @@ const requireLiveCliIdentity = async (
     context = await requireCliIdentity(projectRoot, identity);
   } catch (error: unknown) {
     if (error instanceof Error) {
-      throw new Error(`${error.message} The binding may have been automatically cleaned up.`);
+      throw new Error(`${error.message} 该绑定可能已自动清理。`);
     }
     throw error;
   }
@@ -146,7 +150,7 @@ const requireLiveCliIdentity = async (
       await clearCliIdentity(projectRoot, identity);
       await clearWindowProfilesForIdentity(projectRoot, identity);
       throw new Error(
-        `identity="${identity}" local binding is invalid and has been automatically cleaned up: member "${context.agentName}" no longer exists in the remote session. Please re-run ai-collab attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<duty>".`
+        `identity="${identity}" 的本地绑定已失效，已自动清理：远端会话中已不存在成员 "${context.agentName}"。请重新执行 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。`
       );
     }
   } catch (error: unknown) {
@@ -172,7 +176,7 @@ const requireLiveCliIdentity = async (
         await clearWindowProfilesForIdentity(projectRoot, identity);
       }
       throw new Error(
-        `identity="${identity}" local binding is invalid and has been automatically cleaned up: ${error.message}. Please re-run ai-collab attach <name> --session <sessionName> --role <host|worker|knowledge_keeper> --duty "<duty>".`
+        `identity="${identity}" 的本地绑定已失效，已自动清理：${error.message}。请重新执行 ai-collab attach <name> --session <sessionName> --role <host|worker> --duty "<职责>"。`
       );
     }
 
@@ -321,18 +325,18 @@ const ensureWindowRole = (
 ): void => {
   if (profile.role !== expectedRole) {
     throw new Error(
-      `window="${profile.windowName}" has role "${profile.role}", cannot execute ${expectedRole} command.`
+      `window="${profile.windowName}" 的角色是 "${profile.role}"，不能执行 ${expectedRole} 命令。`
     );
   }
 };
 
 const ensureWindowRoleAny = (
   profile: WindowProfile,
-  expectedRoles: Array<"host" | "worker" | "knowledge_keeper">
+  allowedRoles: Array<"host" | "worker" | "knowledge_keeper">
 ): void => {
-  if (!expectedRoles.includes(profile.role as "host" | "worker" | "knowledge_keeper")) {
+  if (!allowedRoles.includes(profile.role as "host" | "worker" | "knowledge_keeper")) {
     throw new Error(
-      `window="${profile.windowName}" has role "${profile.role}", only ${expectedRoles.join(" or ")} can execute this command.`
+      `window="${profile.windowName}" 的角色是 "${profile.role}"，需要 ${allowedRoles.join(" 或 ")} 角色才能执行此命令。`
     );
   }
 };
@@ -388,14 +392,8 @@ const attachNamedMember = async (options: {
     intervalSeconds: DEFAULT_LOOP_INTERVAL_SECONDS,
     maxRounds: DEFAULT_LOOP_MAX_ROUNDS
   });
-
-  const activeFlow =
-    options.role === "host" ? "host-cycle" :
-    options.role === "knowledge_keeper" ? "worker-cycle" :
-    "worker-cycle";
-
   const runtimeState = await persistWindowRuntimeState(profile, {
-    activeFlow,
+    activeFlow: options.role === "host" ? "host-cycle" : "worker-cycle",
     activeWaitPid: null,
     currentMessageId: null,
     currentCorrelationId: null,
@@ -502,6 +500,12 @@ const persistWindowRuntimeState = async (
     lastWorkflowStep: existing?.lastWorkflowStep ?? null,
     lastAutomationState: existing?.lastAutomationState ?? null,
     lastTurnDisposition: existing?.lastTurnDisposition ?? null,
+    state: existing?.state ?? null,
+    requiredAction: existing?.requiredAction ?? null,
+    requiredTool: existing?.requiredTool ?? null,
+    continuationToken: existing?.continuationToken ?? null,
+    userVisibleResponseAllowed: existing?.userVisibleResponseAllowed ?? null,
+    leaseExpiresAt: existing?.leaseExpiresAt ?? null,
     updatedAt: new Date().toISOString(),
     ...patch
   });
@@ -676,16 +680,6 @@ const updateWindowStateFromResult = async (
         "correlationId"
       );
       currentMessageKind = currentMessageId ? "report" : null;
-    } else {
-      currentMessageId = getRuntimeStringField(
-        (currentMessageRecord ?? currentTaskRecord ?? currentReportRecord) ?? {},
-        "messageId"
-      );
-      currentCorrelationId = getRuntimeStringField(
-        (currentMessageRecord ?? currentTaskRecord ?? currentReportRecord) ?? {},
-        "correlationId"
-      );
-      currentMessageKind = null;
     }
     activeWaitPid = null;
   } else if (status !== "already_running") {
@@ -864,22 +858,12 @@ const dedupeControlMessageViews = (
 
 const inferClaimedMessageKind = (result: Record<string, unknown>) => {
   const messageKind = getRuntimeStringField(result, "messageKind");
-  if (
-    messageKind === "task" ||
-    messageKind === "report" ||
-    messageKind === "mixed" ||
-    messageKind === "unknown"
-  ) {
+  if (messageKind === "task" || messageKind === "report") {
     return messageKind;
   }
 
   const itemKind = getRuntimeStringField(result, "itemKind");
-  if (
-    itemKind === "task" ||
-    itemKind === "report" ||
-    itemKind === "mixed" ||
-    itemKind === "unknown"
-  ) {
+  if (itemKind === "task" || itemKind === "report") {
     return itemKind;
   }
 
@@ -891,9 +875,6 @@ const inferClaimedMessageKind = (result: Record<string, unknown>) => {
     return "report";
   }
 
-  if (result.tasks && result.reports) {
-    return "mixed";
-  }
   if (result.task || result.tasks) {
     return "task";
   }
@@ -906,7 +887,7 @@ const inferClaimedMessageKind = (result: Record<string, unknown>) => {
 
 const inferRuntimeRole = (result: Record<string, unknown>) => {
   const workflowRole = getRuntimeStringField(result, "workflowRole");
-  if (workflowRole === "host" || workflowRole === "worker" || workflowRole === "knowledge_keeper") {
+  if (workflowRole === "host" || workflowRole === "worker") {
     return workflowRole;
   }
 
@@ -916,9 +897,6 @@ const inferRuntimeRole = (result: Record<string, unknown>) => {
   }
   if (mode?.startsWith("worker")) {
     return "worker";
-  }
-  if (mode?.startsWith("knowledge")) {
-    return "knowledge_keeper";
   }
 
   return null;
@@ -1008,13 +986,12 @@ const buildWindowControlResult = (
     (debugResult.matched === true && claimedMessages.length > 0)
   ) {
     return {
-      op: "PROCESS_CLAIMED_MESSAGES",
+      op: "PROCESS_CLAIMED_MESSAGE",
       role: inferRuntimeRole(debugResult),
       kind: messageKind,
       status,
       message: claimedMessage,
-      messages: claimedMessages,
-      messageCount: claimedMessages.length
+      ...(claimedMessages.length > 1 ? { messages: claimedMessages } : {})
     };
   }
 
@@ -1023,19 +1000,13 @@ const buildWindowControlResult = (
     workflowStep === "session_idle_detected" ||
     nextActionRequired === "continue_host_planning"
   ) {
-    const idleData = debugResult.idleAssessment as Record<string, unknown> | undefined;
     return {
       op: "PROCESS_SESSION_IDLE",
       role: "host",
       status: status ?? "all_workers_waiting",
-      businessWorkersIdle: idleData?.businessWorkersIdle ?? true,
-      knowledgeKeepersIdle: idleData?.knowledgeKeepersIdle ?? true,
-      sessionIdle: idleData?.sessionIdle ?? true,
-      pendingKnowledgeTasks: idleData?.pendingKnowledgeTasks ?? false,
-      nextExpectedOwner: "host",
       message: {
         content:
-          "All workers are currently in waiting/idle state. Host cannot continue waiting. Please proceed with planning, dispatch the next round, check for knowledge base updates, or report back to the user."
+          "所有 worker 当前都处于等待/空闲状态，Host 不能继续等待。请继续规划、派发下一轮、检查知识库更新，或向用户汇报收口。"
       }
     };
   }
@@ -1051,29 +1022,6 @@ const buildWindowControlResult = (
     return {
       op: "END_TURN_SILENTLY",
       status: status ?? nextActionRequired ?? "silent_stop"
-    };
-  }
-
-  if (
-    explicitResultType === "host_decision_required" ||
-    nextActionRequired === "host_must_decide" ||
-    debugResult.workflowDirective === "host_decision_required" ||
-    debugResult.turnDisposition === "host_decision_required"
-  ) {
-    return {
-      op: "HOST_DECISION_REQUIRED",
-      status: status ?? "resolved",
-      resolvedCount: debugResult.resolvedCount ?? 0,
-      failedCount: debugResult.failedCount ?? 0,
-      resolvedMessageIds: debugResult.resolvedMessageIds ?? [],
-      failed: debugResult.failed ?? [],
-      nextAllowedActions: [
-        "await_remaining_workers",
-        "dispatch_next_batch",
-        "update_project_knowledge",
-        "update_user_profile",
-        "finish"
-      ]
     };
   }
 
@@ -1199,7 +1147,7 @@ const ensureKnowledgeLevel = (value: string | undefined): KnowledgeLevel => {
   if (value === "l1" || value === "l2" || value === "l3") {
     return value;
   }
-  throw new Error("knowledge level must be l1, l2, or l3.");
+  throw new Error("knowledge level 必须是 l1、l2 或 l3。");
 };
 
 const ensureKnowledgeSourceKind = (
@@ -1210,7 +1158,7 @@ const ensureKnowledgeSourceKind = (
     return normalized as KnowledgeSourceKind;
   }
   throw new Error(
-    `knowledge source-kind must be one of: ${knowledgeSourceKinds.join(", ")}.`
+    `knowledge source-kind 必须是 ${knowledgeSourceKinds.join("、")} 之一。`
   );
 };
 
@@ -1225,7 +1173,7 @@ const parseKnowledgeRef = (ref: string): {
     .replace(/^\/+/, "");
   const [level, ...slugParts] = normalized.split("/");
   if (slugParts.length === 0) {
-    throw new Error(`Invalid knowledge reference "${ref}". Expected format: L1/session-direction or l2/cli-flow#section.`);
+    throw new Error(`知识库引用 "${ref}" 无效，应形如 L1/session-direction 或 l2/cli-flow#section。`);
   }
   return {
     level: ensureKnowledgeLevel(level?.toLowerCase()),
@@ -1237,151 +1185,6 @@ const parseKnowledgeRef = (ref: string): {
 type WindowDispatchTaskSpec = {
   targetWindowName: string;
   content: string;
-};
-
-const ensurePathWithinProject = (inputPath: string): string => {
-  const resolved = resolve(projectRoot, inputPath);
-  if (!resolved.startsWith(resolve(projectRoot))) {
-    throw new Error(
-      `Path traversal detected: "${inputPath}" is outside the project root directory.`
-    );
-  }
-  return resolved;
-};
-
-const ensureStagingDir = (sessionId: string, subDir: string): string => {
-  const dir = join(projectRoot, ".knowledge", sessionId, "staging", subDir);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  return dir;
-};
-
-const readContentFile = (filePath: string): string => {
-  const resolved = ensurePathWithinProject(filePath);
-  if (!existsSync(resolved)) {
-    throw new Error(`File does not exist: ${filePath}`);
-  }
-  return readFileSync(resolved, "utf-8");
-};
-
-const writeOutputFile = (filePath: string, content: string): void => {
-  const resolved = ensurePathWithinProject(filePath);
-  const dir = dirname(resolved);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  writeFileSync(resolved, content, "utf-8");
-};
-
-const resolveKnowledgeRefFragment = (
-  content: string,
-  anchor: string
-): { found: boolean; fragment: string; availableAnchors: string[] } => {
-  const lines = content.split("\n");
-  const headingPattern = new RegExp(`^##\\s+${anchor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
-  const allAnchors: string[] = [];
-  for (const line of lines) {
-    const match = /^##\s+(.+)$/.exec(line);
-    if (match) {
-      allAnchors.push(match[1]!.trim());
-    }
-  }
-
-  const lineStart = lines.findIndex((line) => headingPattern.test(line));
-  if (lineStart === -1) {
-    return { found: false, fragment: content, availableAnchors: allAnchors };
-  }
-
-  let lineEnd = lineStart + 1;
-  while (lineEnd < lines.length && !/^##\s/.test(lines[lineEnd]!)) {
-    lineEnd++;
-  }
-  lineEnd--;
-
-  return {
-    found: true,
-    fragment: lines.slice(lineStart, lineEnd + 1).join("\n"),
-    availableAnchors: allAnchors
-  };
-};
-
-const extractTaskIdFromPayload = (payloadContent: string): string | null => {
-  try {
-    const parsed = JSON.parse(payloadContent) as Record<string, unknown>;
-    if (parsed.schema === "ai-collab.task.v1" && typeof parsed.taskId === "string") {
-      return parsed.taskId;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-};
-
-const getNextTaskId = (sessionId: string): string => {
-  const counterPath = join(
-    projectRoot,
-    ".knowledge",
-    sessionId,
-    "meta",
-    "task-counter.json"
-  );
-  let counter = 1;
-  if (existsSync(counterPath)) {
-    try {
-      const data = JSON.parse(readFileSync(counterPath, "utf-8")) as { nextId: number };
-      counter = data.nextId ?? 1;
-    } catch {
-      counter = 1;
-    }
-  }
-  const dir = dirname(counterPath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  writeFileSync(counterPath, JSON.stringify({ nextId: counter + 1 }), "utf-8");
-  return `TASK-${String(counter).padStart(3, "0")}`;
-};
-
-const wrapSimpleTaskAsV1 = (
-  goal: string,
-  knowledgeRefs: string | undefined
-): string => {
-  const refs: Array<{ ref: string; reason?: string }> = [];
-  if (knowledgeRefs) {
-    for (const rawRef of knowledgeRefs.split(",")) {
-      const trimmed = rawRef.trim();
-      if (trimmed) {
-        refs.push({ ref: trimmed });
-      }
-    }
-  }
-  const task: Record<string, unknown> = {
-    schema: "ai-collab.task.v1",
-    taskId: "TASK-AUTO",
-    goal,
-    ...(refs.length > 0 ? { knowledgeRefs: refs } : {})
-  };
-  return JSON.stringify(task);
-};
-
-const inferSourceKind = (
-  source: string
-): string => {
-  const mapping: Record<string, string> = {
-    user_message: "user_feedback",
-    user_feedback: "user_feedback",
-    host_planning: "host_update",
-    worker_report: "worker_report",
-    system_idle: "system"
-  };
-  return mapping[source] ?? "manual";
-};
-
-const inferNextAction = (
-  knowledgeBuild: boolean
-): string => {
-  return knowledgeBuild ? "knowledge_upsert_then_dispatch" : "dispatch";
 };
 
 type PreparedWindowDispatchTask = {
@@ -1396,7 +1199,7 @@ const parseWindowDispatchTaskSpec = (
   const value = rawValue.trim();
   if (!value) {
     throw new Error(
-      "Batch dispatch tasks cannot be empty. Use --task \"<workerWindow>::<task content>\"."
+      "批量派发任务不能为空。请使用 --task \"<workerWindow>::<任务内容>\"。"
     );
   }
 
@@ -1421,14 +1224,14 @@ const parseWindowDispatchTaskSpec = (
       }
     } catch (error: unknown) {
       throw new Error(
-        `Failed to parse batch dispatch task JSON: ${
+        `无法解析批量派发任务 JSON：${
           error instanceof Error ? error.message : String(error)
         }`
       );
     }
 
     throw new Error(
-      "Batch dispatch task JSON must include one of to/windowName/workerWindow, and content."
+      "批量派发任务 JSON 必须包含 to/windowName/workerWindow 之一，以及 content。"
     );
   }
 
@@ -1449,7 +1252,7 @@ const parseWindowDispatchTaskSpec = (
   }
 
   throw new Error(
-    "Invalid batch dispatch task format. Use --task \"<workerWindow>::<task content>\", or pass JSON containing to and content."
+    "批量派发任务格式无效。请使用 --task \"<workerWindow>::<任务内容>\"，或传入包含 to 和 content 的 JSON。"
   );
 };
 
@@ -1459,7 +1262,7 @@ const buildMergedDispatchTaskContent = (contents: string[]) => {
   }
 
   return contents
-    .map((content, index) => `Task ${index + 1}\n${content}`)
+    .map((content, index) => `任务 ${index + 1}\n${content}`)
     .join("\n\n---\n\n");
 };
 
@@ -1483,7 +1286,7 @@ const normalizeWindowDispatchTasks = (
 };
 
 const resolveWorkerRoleDescription = (
-  role: "worker",
+  role: "worker" | "observer",
   roleDescription: string | undefined,
   optionName: string
 ): string | undefined => {
@@ -1494,7 +1297,7 @@ const resolveWorkerRoleDescription = (
 
   if (!normalized) {
     throw new Error(
-      `Worker joining must provide a role description. Use ${optionName} \"<description>\" to describe this worker's purpose.`
+      `当前 worker 加入必须提供角色说明。请通过 ${optionName} \"<说明>\" 告诉系统这个 worker 是干什么用的。`
     );
   }
 
@@ -1507,7 +1310,7 @@ const ensureMessageType = (value: string): MessageType => {
   }
 
   throw new Error(
-    `Unsupported message type "${value}". Supported values: ${SUPPORTED_MESSAGE_TYPES.join(", ")}`
+    `不支持的消息类型 "${value}"，可选值：${SUPPORTED_MESSAGE_TYPES.join(", ")}`
   );
 };
 
@@ -1765,7 +1568,7 @@ const decodeWindowContinueToken = (
       !issuedAtRaw ||
       !expiresAtRaw
     ) {
-      throw new Error("continue token version or alias is invalid.");
+      throw new Error("continue token 版本或 alias 无效。");
     }
 
     const issuedAt = new Date(Number(issuedAtRaw)).toISOString();
@@ -1779,7 +1582,7 @@ const decodeWindowContinueToken = (
     );
 
     if (Date.parse(expiresAt) <= Date.now()) {
-      throw new Error("continue token has expired.");
+      throw new Error("continue token 已过期。");
     }
 
     return {
@@ -1802,7 +1605,7 @@ const decodeWindowContinueToken = (
     typeof aliasValue !== "string" ||
     !isWindowWaitAliasName(aliasValue)
   ) {
-    throw new Error("continue token version or alias is invalid.");
+    throw new Error("continue token 版本或 alias 无效。");
   }
 
   const windowName =
@@ -1810,7 +1613,7 @@ const decodeWindowContinueToken = (
   const sessionName =
     typeof parsed.sessionName === "string" ? parsed.sessionName : null;
   if (windowName !== expectedWindowName || sessionName !== expectedSessionName) {
-    throw new Error("continue token does not match the current window/session.");
+    throw new Error("continue token 与当前 window/session 不匹配。");
   }
 
   const sequenceId =
@@ -1838,11 +1641,11 @@ const decodeWindowContinueToken = (
   );
 
   if (!sequenceId || !originCommand || !issuedAt || !expiresAt) {
-    throw new Error("continue token is missing required fields.");
+    throw new Error("continue token 缺少必要字段。");
   }
 
   if (Date.parse(expiresAt) <= Date.now()) {
-    throw new Error("continue token has expired.");
+    throw new Error("continue token 已过期。");
   }
 
   return {
@@ -2144,15 +1947,14 @@ const getWindowWaitTraceEvent = (result: Record<string, unknown>) => {
 };
 
 const computeLeaseSeconds = (options: {
-  flow: "host" | "worker" | "knowledge_keeper";
+  flow: "host" | "worker";
   intervalSeconds?: number | undefined;
   maxRounds?: number | undefined;
 }) => {
-  const leaseFlow = options.flow === "knowledge_keeper" ? "worker" : options.flow;
   const estimatedRuntimeSeconds =
     (options.intervalSeconds ?? DEFAULT_LOOP_INTERVAL_SECONDS) *
     (options.maxRounds ?? DEFAULT_LOOP_MAX_ROUNDS);
-  const minimumSeconds = leaseFlow === "host" ? 180 : 120;
+  const minimumSeconds = options.flow === "host" ? 180 : 120;
   return Math.min(Math.max(estimatedRuntimeSeconds + 90, minimumSeconds), 7200);
 };
 
@@ -2179,32 +1981,30 @@ const sliceWaitRounds = (options: {
 
 const buildWaitChainAuth = (
   context: CliIdentityContext,
-  flow: "host" | "worker" | "knowledge_keeper"
+  flow: "host" | "worker"
 ) => {
-  const leaseFlow = flow === "knowledge_keeper" ? "worker" : flow;
   return {
     identity: context.identity,
-    flow: leaseFlow,
+    flow,
     ownerToken: cliLeaseOwnerToken
   };
 };
 
 const withCliIdentityLease = async <T>(
   context: CliIdentityContext,
-  flow: "host" | "worker" | "knowledge_keeper",
+  flow: "host" | "worker",
   options: {
     intervalSeconds?: number | undefined;
     maxRounds?: number | undefined;
   },
   task: () => Promise<T>
 ): Promise<T> => {
-  const leaseFlow = flow === "knowledge_keeper" ? "worker" : flow;
   await client.acquireIdentityLease({
     identity: context.identity,
-    flow: leaseFlow,
+    flow,
     ownerToken: cliLeaseOwnerToken,
     leaseSeconds: computeLeaseSeconds({
-      flow: leaseFlow,
+      flow,
       intervalSeconds: options.intervalSeconds,
       maxRounds: options.maxRounds
     }),
@@ -2217,7 +2017,7 @@ const withCliIdentityLease = async <T>(
     try {
       await client.releaseIdentityLease({
         identity: context.identity,
-        flow: leaseFlow,
+        flow,
         ownerToken: cliLeaseOwnerToken
       });
     } catch {
@@ -2228,20 +2028,19 @@ const withCliIdentityLease = async <T>(
 
 const renewCliIdentityLease = async (
   context: CliIdentityContext,
-  flow: "host" | "worker" | "knowledge_keeper",
+  flow: "host" | "worker",
   options: {
     intervalSeconds?: number | undefined;
     maxRounds?: number | undefined;
   }
 ): Promise<boolean> => {
-  const leaseFlow = flow === "knowledge_keeper" ? "worker" : flow;
   try {
     await client.acquireIdentityLease({
       identity: context.identity,
-      flow: leaseFlow,
+      flow,
       ownerToken: cliLeaseOwnerToken,
       leaseSeconds: computeLeaseSeconds({
-        flow: leaseFlow,
+        flow,
         intervalSeconds: options.intervalSeconds,
         maxRounds: options.maxRounds
       }),
@@ -2320,7 +2119,7 @@ const ensurePositiveInteger = (
     return fallback;
   }
   if (parsed <= 0) {
-    throw new Error(`${name} must be an integer greater than 0.`);
+    throw new Error(`${name} 必须是大于 0 的整数。`);
   }
   return parsed;
 };
@@ -2331,7 +2130,7 @@ const resolveContinueAfterMatch = (
 ) => {
   if (!continueAfterMatch && maxMatches > 1) {
     throw new Error(
-      "When max-matches is greater than 1, --continue-after-match must also be enabled."
+      "max-matches 大于 1 时，必须同时开启 --continue-after-match。"
     );
   }
 
@@ -2396,7 +2195,7 @@ type HostLoopResult = {
   finishedAt: string;
 };
 
-type HostLoopItemKind = "task" | "report" | "mixed" | "unknown" | null;
+type HostLoopItemKind = "task" | "report" | null;
 
 type HostLoopUnifiedResult = {
   mode: "host-await-loop";
@@ -2411,15 +2210,11 @@ type HostLoopUnifiedResult = {
   actionHint:
     | "execute_locally"
     | "review_report"
-    | "review_messages"
     | "idle_timeout";
   message: MessageRecord | null;
   item: RuntimeMessageSummary | null;
   task: RuntimeMessageSummary | null;
   report: RuntimeMessageSummary | null;
-  items: RuntimeMessageSummary[];
-  tasks: RuntimeMessageSummary[];
-  reports: RuntimeMessageSummary[];
   messageCount: number;
   messages: MessageRecord[];
   matchedRounds: number[];
@@ -2499,101 +2294,6 @@ const summarizeMessage = (message: MessageRecord): RuntimeMessageSummary => {
   };
 };
 
-const isUnfinishedClaimedMessage = (message: MessageRecord | null): message is MessageRecord => {
-  return message?.processingStatus === "claimed";
-};
-
-const findClaimedRememberedMessage = async (
-  context: CliIdentityContext,
-  messageId: string | null | undefined
-): Promise<MessageRecord | null> => {
-  if (!messageId) {
-    return null;
-  }
-  const message = await findMessageForAgent(context, messageId);
-  return isUnfinishedClaimedMessage(message) ? message : null;
-};
-
-const sortMessagesByCreatedAt = <T extends { createdAt: string }>(
-  messages: T[]
-): T[] => {
-  return [...messages].sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt)
-  );
-};
-
-const filterClaimedMessagesForContext = (
-  messages: MessageRecord[],
-  options: {
-    types?: MessageType[] | undefined;
-    fromAgentId?: string | undefined;
-    correlationId?: string | undefined;
-  } = {}
-): MessageRecord[] => {
-  return sortMessagesByCreatedAt(
-    messages.filter((message) => {
-      if (message.processingStatus !== "claimed") {
-        return false;
-      }
-      if (options.types && !options.types.includes(message.type)) {
-        return false;
-      }
-      if (options.fromAgentId && message.fromAgentId !== options.fromAgentId) {
-        return false;
-      }
-      if (
-        options.correlationId &&
-        message.correlationId !== options.correlationId
-      ) {
-        return false;
-      }
-      return true;
-    })
-  );
-};
-
-const isHostTaskMessage = (message: MessageRecord): boolean =>
-  HOST_EXECUTABLE_MESSAGE_TYPES.includes(message.type);
-
-const isHostReportMessage = (message: MessageRecord): boolean =>
-  HOST_REPORT_MESSAGE_TYPES.includes(message.type);
-
-const classifyHostMessages = (messages: MessageRecord[]) => {
-  const sortedMessages = sortMessagesByCreatedAt(messages);
-  const items = sortedMessages.map((message) => summarizeMessage(message));
-  const tasks = sortedMessages
-    .filter((message) => isHostTaskMessage(message))
-    .map((message) => summarizeMessage(message));
-  const reports = sortedMessages
-    .filter((message) => isHostReportMessage(message))
-    .map((message) => summarizeMessage(message));
-  const unknowns = sortedMessages.filter(
-    (message) => !isHostTaskMessage(message) && !isHostReportMessage(message)
-  );
-  const itemKind: HostLoopItemKind =
-    sortedMessages.length === 0
-      ? null
-      : unknowns.length > 0
-        ? "unknown"
-        : tasks.length > 0 && reports.length > 0
-          ? "mixed"
-          : tasks.length > 0
-            ? "task"
-            : "report";
-
-  return {
-    itemKind,
-    messages: sortedMessages,
-    items,
-    tasks,
-    reports,
-    unknowns,
-    firstItem: items[0] ?? null,
-    firstTask: tasks[0] ?? null,
-    firstReport: reports[0] ?? null
-  };
-};
-
 const isWorkerWaitingOrIdle = (binding: WindowBinding): boolean => {
   const state = binding.runtimeState;
   const pendingInboxCount = state.pendingInboxCount ?? 0;
@@ -2620,7 +2320,6 @@ const assessSessionIdleForHost = async (context: CliIdentityContext) => {
     client.getSessionQueueStats(context.sessionId)
   ]);
   const workers = bindings.filter((binding) => binding.role === "worker");
-  const knowledgeKeepers = bindings.filter((binding) => binding.role === "knowledge_keeper");
   const hasQueuedMessages = queueStats.some(
     (stats) => stats.pending > 0 || stats.claimed > 0
   );
@@ -2631,38 +2330,16 @@ const assessSessionIdleForHost = async (context: CliIdentityContext) => {
     waitingOrIdle: isWorkerWaitingOrIdle(worker),
     runtimeState: worker.runtimeState
   }));
-  const knowledgeKeeperStates = knowledgeKeepers.map((keeper) => ({
-    agentId: keeper.agentId,
-    agentName: keeper.agentName,
-    windowName: keeper.windowName,
-    waitingOrIdle: isWorkerWaitingOrIdle(keeper),
-    runtimeState: keeper.runtimeState
-  }));
-  const businessWorkersIdle =
+  const allWorkersWaiting =
     workers.length > 0 &&
+    !hasQueuedMessages &&
     workerStates.every((worker) => worker.waitingOrIdle);
-  const knowledgeKeepersIdle =
-    knowledgeKeepers.length === 0 ||
-    knowledgeKeeperStates.every((keeper) => keeper.waitingOrIdle);
-  const sessionIdle =
-    businessWorkersIdle &&
-    knowledgeKeepersIdle &&
-    !hasQueuedMessages;
-  const pendingKnowledgeTasks = queueStats.some(
-    (stats) => stats.pending > 0 || stats.claimed > 0
-  );
 
   return {
-    allWorkersWaiting: sessionIdle,
-    businessWorkersIdle,
-    knowledgeKeepersIdle,
-    sessionIdle,
-    pendingKnowledgeTasks,
+    allWorkersWaiting,
     workerCount: workers.length,
-    knowledgeKeeperCount: knowledgeKeepers.length,
     hasQueuedMessages,
     workerStates,
-    knowledgeKeeperStates,
     queueStats
   };
 };
@@ -2703,7 +2380,7 @@ const runWorkerAwaitTask = async (
       : ("stop_silently" as const),
     workflowModel: "message_loop" as const,
     workflowContract: "wait_receive_process_report_wait" as const,
-    workflowRole: (options.profile?.role === "knowledge_keeper" ? "knowledge_keeper" : "worker") as "knowledge_keeper" | "worker",
+    workflowRole: "worker" as const,
     workflowStep: loopResult.matched
       ? ("message_received" as const)
       : ("waiting" as const),
@@ -2774,17 +2451,20 @@ const submitWorkerResult = async (
     correlationId?: string | undefined;
     idempotencyKey?: string | undefined;
     failReason?: string | undefined;
-    markAs: "completed" | "failed";
-    role?: "worker" | "knowledge_keeper" | undefined;
-    knowledgeUpdateAssessment?: Record<string, unknown> | undefined;
+    markAs: "completed" | "failed" | "contested";
   }
 ) => {
-  const markAs = options.markAs === "failed" ? "failed" : "completed";
+  const markAs = options.markAs;
   const resolvedType =
     options.type ??
     (markAs === "failed" ? ("error" as const) : ("result" as const));
   const resolvedResult =
-    options.result ?? (markAs === "failed" ? "failed" : "completed");
+    options.result ??
+    (markAs === "failed"
+      ? "failed"
+      : markAs === "contested"
+        ? "contested"
+        : "completed");
   const sourceMessage = await client.getMessageById(options.messageId);
   const resolvedCorrelationId =
     options.correlationId ?? sourceMessage.correlationId ?? undefined;
@@ -2793,10 +2473,8 @@ const submitWorkerResult = async (
     result: resolvedResult,
     type: resolvedType,
     correlationId: resolvedCorrelationId,
-    idempotencyKey: options.idempotencyKey,
-    knowledgeUpdateAssessment: options.knowledgeUpdateAssessment
+    idempotencyKey: options.idempotencyKey
   });
-  const authFlow = options.role === "knowledge_keeper" ? "knowledge_keeper" : "worker";
   let processedMessage: MessageRecord;
 
   try {
@@ -2805,11 +2483,11 @@ const submitWorkerResult = async (
         ? await client.failMessage(options.messageId, {
             agentId: context.agentId,
             ...(options.failReason ? { reason: options.failReason } : {}),
-            ...buildWaitChainAuth(context, authFlow)
+            ...buildWaitChainAuth(context, "worker")
           })
         : await client.completeMessage(options.messageId, {
             agentId: context.agentId,
-            ...buildWaitChainAuth(context, authFlow)
+            ...buildWaitChainAuth(context, "worker")
           });
   } catch (error: unknown) {
     if (!isSdkErrorCode(error, errorCodes.messageAlreadyFinished)) {
@@ -2937,9 +2615,7 @@ const runHostAwaitMessage = async (
     nextActionRequired: loopResult.matched
       ? loopResult.itemKind === "task"
         ? ("process_claimed_host_task_now" as const)
-        : loopResult.itemKind === "report"
-          ? ("review_claimed_report_now" as const)
-          : ("review_claimed_messages_now" as const)
+        : ("review_claimed_report_now" as const)
       : allWorkersWaiting
         ? ("continue_host_planning" as const)
       : ("stop_silently" as const),
@@ -2980,13 +2656,6 @@ const runHostAwaitMessage = async (
     message: loopResult.item,
     task: loopResult.task,
     report: loopResult.report,
-    item: loopResult.item,
-    items: loopResult.items,
-    tasks: loopResult.tasks,
-    reports: loopResult.reports,
-    messages: loopResult.messages,
-    messageCount: loopResult.messageCount,
-    claimedCount: loopResult.messageCount,
     waitChainId: buildRuntimeWaitChainId(context, "host"),
     lastPollAt: loopResult.lastPollAt,
     lastClaimAt: loopResult.lastClaimAt,
@@ -2999,9 +2668,7 @@ const runHostAwaitMessage = async (
     workflowDirective: loopResult.matched
       ? loopResult.itemKind === "task"
         ? ("process_claimed_message" as const)
-        : loopResult.itemKind === "report"
-          ? ("review_received_report" as const)
-          : ("review_received_messages" as const)
+        : ("review_received_report" as const)
       : allWorkersWaiting
         ? ("continue_host_planning" as const)
       : ("continue_silently" as const),
@@ -3021,9 +2688,7 @@ const runHostAwaitMessage = async (
     automationState: loopResult.matched
       ? loopResult.itemKind === "task"
         ? ("host_execute_local" as const)
-        : loopResult.itemKind === "report"
-          ? ("host_report_received" as const)
-          : ("host_messages_received" as const)
+        : ("host_report_received" as const)
       : allWorkersWaiting
         ? ("host_session_idle_detected" as const)
       : loopResult.superseded
@@ -3032,9 +2697,7 @@ const runHostAwaitMessage = async (
     internalInstruction: loopResult.matched
       ? loopResult.itemKind === "task"
         ? `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed a host task, so the current turn must continue immediately into host-side processing. After finishing, resolve it with ai-collab resolve. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
-        : loopResult.itemKind === "report"
-          ? `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed one or more worker reports. Review every returned report together and resolve them with ai-collab resolve after finishing. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
-          : `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed one or more host messages. Review every returned message and resolve them with ai-collab resolve after finishing. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
+        : `${finalRuntimeResultPreamble}Do not reply to the user. This command has already claimed the worker report, so the current turn must continue immediately into report review. After finishing the review, resolve it with ai-collab resolve. Do not insert Start-Sleep, sleep, timeout, ping, or any pure wait command.`
       : loopResult.superseded
         ? `${finalRuntimeResultPreamble}Do not reply to the user. This wait chain has been superseded by a newer wait command from the same window. Stop here silently and let the newer wait chain continue. Do not execute Start-Sleep, sleep, timeout, ping, or any other pure wait command.`
         : allWorkersWaiting
@@ -3055,7 +2718,7 @@ const resolveSessionMemberByName = async (
   );
 
   if (!matchedMember) {
-    throw new Error(`Collaboration member with name "${agentName}" not found.`);
+    throw new Error(`未找到名称为 "${agentName}" 的协作成员。`);
   }
 
   return matchedMember;
@@ -3105,23 +2768,30 @@ const findClaimedMessageForContext = async (
     correlationId?: string | undefined;
   } = {}
 ): Promise<MessageRecord | null> => {
-  const claimedMessages = await findClaimedMessagesForContext(context, options);
-  return claimedMessages[0] ?? null;
-};
-
-const findClaimedMessagesForContext = async (
-  context: CliIdentityContext,
-  options: {
-    types?: MessageType[] | undefined;
-    fromAgentId?: string | undefined;
-    correlationId?: string | undefined;
-  } = {}
-): Promise<MessageRecord[]> => {
   const claimedInbox = await client.getInboxWithOptions(context.agentId, {
     claimedOnly: true
   });
 
-  return filterClaimedMessagesForContext(claimedInbox, options);
+  return (
+    claimedInbox.find((message) => {
+      if (message.processingStatus !== "claimed") {
+        return false;
+      }
+      if (options.types && !options.types.includes(message.type)) {
+        return false;
+      }
+      if (options.fromAgentId && message.fromAgentId !== options.fromAgentId) {
+        return false;
+      }
+      if (
+        options.correlationId &&
+        message.correlationId !== options.correlationId
+      ) {
+        return false;
+      }
+      return true;
+    }) ?? null
+  );
 };
 
 const claimOrReuseHostReport = async (
@@ -3216,7 +2886,7 @@ const runWorkerAwaitLoop = async (
   });
 
   for (let round = 1; round <= options.maxRounds; round += 1) {
-    const leaseStillOwned = await renewCliIdentityLease(context, options.profile?.role === "knowledge_keeper" ? "knowledge_keeper" : "worker", {
+    const leaseStillOwned = await renewCliIdentityLease(context, "worker", {
       intervalSeconds: options.intervalSeconds,
       maxRounds: options.maxRounds
     });
@@ -3368,22 +3038,22 @@ const runHostReportAwaitLoop = async (
   const startedAtMs = Date.now();
   if (!options.ackMatched) {
     throw new Error(
-      "host-report-await-loop has been consolidated into atomic claim mode and does not support --no-ack-matched."
+      "host-report-await-loop 已收口为原子 claim 模式，不支持 --no-ack-matched。"
     );
   }
   if (options.includeAcknowledged) {
     throw new Error(
-      "host-report-await-loop has been consolidated into atomic claim mode and does not support --include-acknowledged."
+      "host-report-await-loop 已收口为原子 claim 模式，不支持 --include-acknowledged。"
     );
   }
   if (options.excludeMessageIds.length > 0) {
     throw new Error(
-      "host-report-await-loop has been consolidated into atomic claim mode and does not support --exclude-message-id."
+      "host-report-await-loop 已收口为原子 claim 模式，不支持 --exclude-message-id。"
     );
   }
   if (options.type && !HOST_REPORT_MESSAGE_TYPES.includes(options.type)) {
     throw new Error(
-      `host-report-await-loop only supports host report message types: ${HOST_REPORT_MESSAGE_TYPES.join(", ")}.`
+      `host-report-await-loop 仅支持 host 回报消息类型：${HOST_REPORT_MESSAGE_TYPES.join(", ")}。`
     );
   }
 
@@ -3407,7 +3077,7 @@ const runHostReportAwaitLoop = async (
 
     if (expectedFromAgentId && expectedFromAgentId !== matchedMember.id) {
       throw new Error(
-        `from-name "${options.fromName}" does not match from-agent-id "${expectedFromAgentId}".`
+        `from-name "${options.fromName}" 与 from-agent-id "${expectedFromAgentId}" 不一致。`
       );
     }
 
@@ -3615,17 +3285,17 @@ const runHostAwaitLoop = async (
   const startedAtMs = Date.now();
   if (!options.ackMatched) {
     throw new Error(
-      "host-await-loop has been consolidated into atomic claim mode and does not support --no-ack-matched."
+      "host-await-loop 已收口为原子 claim 模式，不支持 --no-ack-matched。"
     );
   }
   if (options.includeAcknowledged) {
     throw new Error(
-      "host-await-loop has been consolidated into atomic claim mode and does not support --include-acknowledged."
+      "host-await-loop 已收口为原子 claim 模式，不支持 --include-acknowledged。"
     );
   }
   if (options.excludeMessageIds.length > 0) {
     throw new Error(
-      "host-await-loop has been consolidated into atomic claim mode and does not support --exclude-message-id."
+      "host-await-loop 已收口为原子 claim 模式，不支持 --exclude-message-id。"
     );
   }
 
@@ -3648,7 +3318,7 @@ const runHostAwaitLoop = async (
 
     if (expectedFromAgentId && expectedFromAgentId !== matchedMember.id) {
       throw new Error(
-        `from-name "${options.fromName}" does not match from-agent-id "${expectedFromAgentId}".`
+        `from-name "${options.fromName}" 与 from-agent-id "${expectedFromAgentId}" 不一致。`
       );
     }
 
@@ -3670,9 +3340,6 @@ const runHostAwaitLoop = async (
     item: null,
     task: null,
     report: null,
-    items: [],
-    tasks: [],
-    reports: [],
     messageCount: 0,
     messages: [],
     matchedRounds,
@@ -3689,58 +3356,6 @@ const runHostAwaitLoop = async (
     }
   });
 
-  const buildMatchedResult = (resultOptions: {
-    round: number;
-    messages: MessageRecord[];
-    backlog: {
-      pendingInboxCount: number;
-      claimedInboxCount: number;
-    };
-    restored: boolean;
-  }): HostLoopUnifiedResult => {
-    const classified = classifyHostMessages(resultOptions.messages);
-    const actionHint: HostLoopUnifiedResult["actionHint"] =
-      classified.itemKind === "task"
-        ? "execute_locally"
-        : classified.itemKind === "report"
-          ? "review_report"
-          : "review_messages";
-
-    return {
-      mode: "host-await-loop",
-      matched: true,
-      superseded: false,
-      round: resultOptions.round,
-      maxRounds: options.maxRounds,
-      intervalSeconds: options.intervalSeconds,
-      agentId: context.agentId,
-      agentName: context.agentName,
-      itemKind: classified.itemKind,
-      actionHint,
-      message: classified.messages[0] ?? null,
-      item: classified.firstItem,
-      task: classified.firstTask,
-      report: classified.firstReport,
-      items: classified.items,
-      tasks: classified.tasks,
-      reports: classified.reports,
-      messageCount: classified.messages.length,
-      messages: classified.messages,
-      matchedRounds,
-      acknowledgedMessageIds,
-      backlog: resultOptions.backlog,
-      lastPollAt,
-      lastClaimAt,
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      defaults: {
-        intervalSeconds: DEFAULT_LOOP_INTERVAL_SECONDS,
-        maxRounds: DEFAULT_LOOP_MAX_ROUNDS,
-        ackMatched: DEFAULT_HOST_LOOP_ACK_MATCHED
-      }
-    };
-  };
-
   for (let round = 1; round <= options.maxRounds; round += 1) {
     const leaseStillOwned = await renewCliIdentityLease(context, "host", {
       intervalSeconds: options.intervalSeconds,
@@ -3750,73 +3365,16 @@ const runHostAwaitLoop = async (
       return buildSupersededResult(Math.max(round - 1, 0));
     }
 
-    const claimedMessages = await findClaimedMessagesForContext(context, {
-      ...(expectedFromAgentId ? { fromAgentId: expectedFromAgentId } : {}),
-      ...(options.correlationId ? { correlationId: options.correlationId } : {}),
-      ...(options.type ? { types: [options.type] } : {})
-    });
-    lastPollAt = new Date().toISOString();
-    backlog = await getInboxCountsForContext(context);
-
-    if (claimedMessages.length > 0) {
-      matchedRounds.push(round);
-      lastClaimAt = lastPollAt;
-      if (options.profile) {
-        const classified = classifyHostMessages(claimedMessages);
-        await recordWindowWaitHeartbeat({
-          profile: options.profile,
-          context,
-          flow: "host",
-          commandName: "await",
-          status: "message_claimed",
-          workflowStep: "message_received",
-          automationState:
-            classified.itemKind === "task"
-              ? "host_execute_local"
-              : classified.itemKind === "report"
-                ? "host_report_received"
-                : "host_messages_received",
-          turnDisposition: "silent_handoff",
-          message: claimedMessages[0] ?? null,
-          messageKind:
-            classified.itemKind === "task" || classified.itemKind === "report"
-              ? classified.itemKind
-              : null,
-          markClaimed: true,
-          inboxCounts: backlog
-        });
-      }
-      options.trace?.step("wait_claimed", {
-        flow: "host-cycle",
-        round,
-        matched: true,
-        restored: true,
-        messageIds: claimedMessages.map((message) => message.id),
-        messageCount: claimedMessages.length,
-        backlog
-      });
-
-      return buildMatchedResult({
-        round,
-        messages: claimedMessages,
-        backlog,
-        restored: true
-      });
-    }
-
-    let newlyClaimedMessages: MessageRecord[];
+    let claimedTask: MessageRecord | null;
     try {
-      const claimOptions = {
-        types: options.type ? [options.type] : HOST_RESOLVABLE_MESSAGE_TYPES,
-        ...(expectedFromAgentId ? { fromAgentId: expectedFromAgentId } : {}),
-        ...(options.correlationId ? { correlationId: options.correlationId } : {}),
-        maxMessages: 10,
-        ...buildWaitChainAuth(context, "host")
-      };
-      newlyClaimedMessages = await client.claimMany(
-        context.agentId,
-        claimOptions
-      );
+      claimedTask =
+        (await findClaimedMessageForContext(context, {
+          types: HOST_EXECUTABLE_MESSAGE_TYPES
+        })) ??
+        (await client.claimNext(context.agentId, {
+          types: HOST_EXECUTABLE_MESSAGE_TYPES,
+          ...buildWaitChainAuth(context, "host")
+        }));
     } catch (error: unknown) {
       if (isWaitChainControlError(error)) {
         return buildSupersededResult(round);
@@ -3827,15 +3385,10 @@ const runHostAwaitLoop = async (
     lastPollAt = new Date().toISOString();
     backlog = await getInboxCountsForContext(context);
 
-    const matchedMessages = newlyClaimedMessages.filter(
-      (message) => !excludedIds.has(message.id)
-    );
-
-    if (matchedMessages.length > 0) {
+    if (claimedTask && !excludedIds.has(claimedTask.id)) {
       matchedRounds.push(round);
       lastClaimAt = lastPollAt;
       if (options.profile) {
-        const classified = classifyHostMessages(matchedMessages);
         await recordWindowWaitHeartbeat({
           profile: options.profile,
           context,
@@ -3843,18 +3396,10 @@ const runHostAwaitLoop = async (
           commandName: "await",
           status: "message_claimed",
           workflowStep: "message_received",
-          automationState:
-            classified.itemKind === "task"
-              ? "host_execute_local"
-              : classified.itemKind === "report"
-                ? "host_report_received"
-                : "host_messages_received",
+          automationState: "host_execute_local",
           turnDisposition: "silent_handoff",
-          message: matchedMessages[0] ?? null,
-          messageKind:
-            classified.itemKind === "task" || classified.itemKind === "report"
-              ? classified.itemKind
-              : null,
+          message: claimedTask,
+          messageKind: "task",
           markClaimed: true,
           inboxCounts: backlog
         });
@@ -3863,70 +3408,165 @@ const runHostAwaitLoop = async (
         flow: "host-cycle",
         round,
         matched: true,
-        messageIds: matchedMessages.map((message) => message.id),
-        messageCount: matchedMessages.length,
+        messageId: claimedTask.id,
+        messageKind: "task",
         backlog
       });
+      const task = summarizeMessage(claimedTask);
 
-      return buildMatchedResult({
+      return {
+        mode: "host-await-loop",
+        matched: true,
+        superseded: false,
         round,
-        messages: matchedMessages,
+        maxRounds: options.maxRounds,
+        intervalSeconds: options.intervalSeconds,
+        agentId: context.agentId,
+        agentName: context.agentName,
+        itemKind: "task",
+        actionHint: "execute_locally",
+        message: claimedTask,
+        item: task,
+        task,
+        report: null,
+        messageCount: 1,
+        messages: [claimedTask],
+        matchedRounds,
+        acknowledgedMessageIds,
         backlog,
-        restored: false
-      });
+        lastPollAt,
+        lastClaimAt,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        defaults: {
+          intervalSeconds: DEFAULT_LOOP_INTERVAL_SECONDS,
+          maxRounds: DEFAULT_LOOP_MAX_ROUNDS,
+          ackMatched: DEFAULT_HOST_LOOP_ACK_MATCHED
+        }
+      };
     }
 
-    const idleAssessment = await assessSessionIdleForHost(context);
-    if (idleAssessment.allWorkersWaiting) {
+    let claimedReportResult: {
+      message: MessageRecord | null;
+      acknowledgedMessageIds: string[];
+    };
+    try {
+      claimedReportResult =
+        options.ackMatched &&
+        !options.includeAcknowledged &&
+        (!options.type || HOST_REPORT_MESSAGE_TYPES.includes(options.type))
+          ? await claimOrReuseHostReport(context, {
+              fromAgentId: expectedFromAgentId,
+              correlationId: options.correlationId,
+              type: options.type
+            })
+          : {
+              message: null,
+              acknowledgedMessageIds: []
+            };
+    } catch (error: unknown) {
+      if (isWaitChainControlError(error)) {
+        return buildSupersededResult(round);
+      }
+      throw error;
+    }
+    const matchedReport =
+      claimedReportResult.message &&
+      !excludedIds.has(claimedReportResult.message.id)
+        ? claimedReportResult.message
+        : null;
+
+    if (!matchedReport) {
       if (options.profile) {
         await recordWindowWaitHeartbeat({
           profile: options.profile,
           context,
           flow: "host",
           commandName: "await",
-          status: "all_workers_waiting",
-          workflowStep: "session_idle_detected",
-          automationState: "host_session_idle_detected",
-          turnDisposition: "host_continue",
+          status: "wait_polling",
+          workflowStep: "waiting",
+          automationState: "host_wait_loop_active",
+          turnDisposition: "silent_hold",
           inboxCounts: backlog
         });
       }
-      options.trace?.step("wait_timeout", {
+      options.trace?.step("wait_poll", {
         flow: "host-cycle",
         round,
-        status: "session_idle_detected",
-        idleAssessment,
+        matched: false,
+        messageId: null,
         backlog
       });
-      break;
+      if (backlog.pendingInboxCount > 0 || backlog.claimedInboxCount > 0) {
+        options.trace?.step("wait_backlog", {
+          flow: "host-cycle",
+          round,
+          backlog
+        });
+      }
     }
 
-    if (options.profile) {
-      await recordWindowWaitHeartbeat({
-        profile: options.profile,
-        context,
-        flow: "host",
-        commandName: "await",
-        status: "wait_polling",
-        workflowStep: "waiting",
-        automationState: "host_wait_loop_active",
-        turnDisposition: "silent_hold",
-        inboxCounts: backlog
-      });
-    }
-    options.trace?.step("wait_poll", {
-      flow: "host-cycle",
-      round,
-      matched: false,
-      messageId: null,
-      backlog
-    });
-    if (backlog.pendingInboxCount > 0 || backlog.claimedInboxCount > 0) {
-      options.trace?.step("wait_backlog", {
+    if (matchedReport) {
+      excludedIds.add(matchedReport.id);
+      acknowledgedMessageIds.push(...claimedReportResult.acknowledgedMessageIds);
+      matchedRounds.push(round);
+      lastClaimAt = lastPollAt;
+      if (options.profile) {
+        await recordWindowWaitHeartbeat({
+          profile: options.profile,
+          context,
+          flow: "host",
+          commandName: "await",
+          status: "message_claimed",
+          workflowStep: "message_received",
+          automationState: "host_report_received",
+          turnDisposition: "silent_handoff",
+          message: matchedReport,
+          messageKind: "report",
+          markClaimed: true,
+          inboxCounts: backlog
+        });
+      }
+      options.trace?.step("wait_claimed", {
         flow: "host-cycle",
         round,
+        matched: true,
+        messageId: matchedReport.id,
+        messageKind: "report",
         backlog
       });
+      const report = summarizeMessage(matchedReport);
+
+      return {
+        mode: "host-await-loop",
+        matched: true,
+        superseded: false,
+        round,
+        maxRounds: options.maxRounds,
+        intervalSeconds: options.intervalSeconds,
+        agentId: context.agentId,
+        agentName: context.agentName,
+        itemKind: "report",
+        actionHint: "review_report",
+        message: matchedReport,
+        item: report,
+        task: null,
+        report,
+        messageCount: 1,
+        messages: [matchedReport],
+        matchedRounds,
+        acknowledgedMessageIds,
+        backlog,
+        lastPollAt,
+        lastClaimAt,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        defaults: {
+          intervalSeconds: DEFAULT_LOOP_INTERVAL_SECONDS,
+          maxRounds: DEFAULT_LOOP_MAX_ROUNDS,
+          ackMatched: DEFAULT_HOST_LOOP_ACK_MATCHED
+        }
+      };
     }
 
     const elapsedMilliseconds = Date.now() - startedAtMs;
@@ -3960,9 +3600,6 @@ const runHostAwaitLoop = async (
     item: null,
     task: null,
     report: null,
-    items: [],
-    tasks: [],
-    reports: [],
     messageCount: 0,
     messages: [],
     matchedRounds,
@@ -3988,7 +3625,6 @@ const sendStandardHostReport = async (
     type: MessageType;
     correlationId?: string | undefined;
     idempotencyKey?: string | undefined;
-    knowledgeUpdateAssessment?: Record<string, unknown> | undefined;
   }
 ) => {
   const session = await client.getSession(context.sessionId);
@@ -4009,10 +3645,7 @@ const sendStandardHostReport = async (
     type: options.type,
     payload: {
       content: options.content,
-      result: options.result,
-      ...(options.knowledgeUpdateAssessment
-        ? { knowledgeUpdateAssessment: options.knowledgeUpdateAssessment }
-        : {})
+      result: options.result
     },
     correlationId:
       options.correlationId ??
@@ -4061,11 +3694,25 @@ const dispatchCliTaskMessage = async (
           claimedOnly: true
         })
       ]);
+      const pendingTasks = pendingInbox.filter(
+        (message) =>
+          message.toAgentId === targetMember.id &&
+          HOST_EXECUTABLE_MESSAGE_TYPES.includes(message.type)
+      );
       options.trace?.step("dispatch_queue_state", {
         toName: targetMember.agentName,
         pendingInboxCount: pendingInbox.length,
-        claimedInboxCount: claimedInbox.length
+        claimedInboxCount: claimedInbox.length,
+        pendingExecutableCount: pendingTasks.length
       });
+
+      if (pendingTasks.length > 0) {
+        payload = mergeCliDispatchPayloads(pendingTasks, basePayload);
+        supersededMessageIds = pendingTasks.map((message) => message.id);
+        resolvedCorrelationId =
+          options.correlationId ?? pendingTasks[0]?.correlationId ?? undefined;
+        dispatchMode = "merged";
+      }
     }
 
     const resolvedIdempotencyKey =
@@ -4114,7 +3761,7 @@ const dispatchCliTaskMessage = async (
     }
   }
 
-  throw new Error("task-dispatch retry limit exhausted.");
+  throw new Error("task-dispatch 重试次数已耗尽。");
 };
 
 const prepareWindowDispatchTasks = async (options: {
@@ -4122,7 +3769,7 @@ const prepareWindowDispatchTasks = async (options: {
   rawTasks: WindowDispatchTaskSpec[];
 }): Promise<PreparedWindowDispatchTask[]> => {
   if (options.rawTasks.length === 0) {
-    throw new Error("At least one dispatch task is required.");
+    throw new Error("至少需要一条派发任务。");
   }
 
   const normalizedTasks = normalizeWindowDispatchTasks(options.rawTasks);
@@ -4172,55 +3819,6 @@ const executeWindowHostDispatchCommand = async (options: {
       "host"
     );
     trace.step("binding_loaded", buildWindowProfileSummary(profile));
-
-    const rememberedState = await readWindowRuntimeState(
-      projectRoot,
-      options.sessionName,
-      options.windowName
-    );
-    const currentMessageId = rememberedState?.currentMessageId ?? null;
-
-    if (currentMessageId) {
-      const existingJudgement =
-        await client.getKnowledgeBuildJudgementBySourceMessage(
-          context.sessionId,
-          currentMessageId
-        );
-
-      if (!existingJudgement) {
-        printJson({
-          error: {
-            code: "KNOWLEDGE_JUDGEMENT_REQUIRED",
-            message:
-              "The current user message has not yet been judged for knowledge base construction. Worker dispatch is blocked. Please run ai-collab knowledge judge first.",
-            hint: {
-              command:
-                "ai-collab knowledge judge <host-name> --session <session> --source user_message --source-message-id <messageId> --knowledge-build-required <true|false> --target-levels <l1,l2,l3> --source-kind <kind> --reason <reason> --next-action <action>",
-              currentMessageId
-            }
-          }
-        });
-        process.exitCode = 1;
-        return;
-      }
-
-      if (
-        existingJudgement.knowledgeBuildRequired &&
-        !existingJudgement.fulfilledAt
-      ) {
-        printJson({
-          error: {
-            code: "KNOWLEDGE_UPDATE_REQUIRED",
-            message:
-              "Knowledge base judgement requires a knowledge base update, but the update has not been completed. Please run ai-collab knowledge fulfil-judgement first.",
-            judgement: existingJudgement
-          }
-        });
-        process.exitCode = 1;
-        return;
-      }
-    }
-
     const preparedTasks = await prepareWindowDispatchTasks({
       sessionName: options.sessionName,
       rawTasks: options.rawTasks
@@ -4265,10 +3863,14 @@ const executeWindowHostDispatchCommand = async (options: {
                 type: DEFAULT_WORKER_TASK_TYPE
               });
               trace.step(
-                "message_sent",
+                dispatchResult.dispatchMode === "merged"
+                  ? "message_merged"
+                  : "message_sent",
                 {
                   toWindow: preparedTask.targetWindowName,
-                  correlationId: dispatchResult.correlationId
+                  correlationId: dispatchResult.correlationId,
+                  dispatchMode: dispatchResult.dispatchMode,
+                  supersededMessageIds: dispatchResult.supersededMessageIds
                 }
               );
               dispatchedItems.push({
@@ -4403,7 +4005,7 @@ const resolveHostMessage = async (
   const sourceMessage = await findMessageForAgent(context, options.messageId);
   if (!sourceMessage) {
     throw new Error(
-      `Host task with messageId "${options.messageId}" not found.`
+      `未找到 messageId 为 "${options.messageId}" 的 host 任务。`
     );
   }
 
@@ -4415,7 +4017,7 @@ const resolveHostMessage = async (
       : null;
 
   if (!action) {
-    throw new Error("action only supports completed, failed, delegated.");
+    throw new Error("action 仅支持 completed、failed、delegated。");
   }
 
   let processedMessage: MessageRecord;
@@ -4537,34 +4139,26 @@ program
   .argument("<name>", "Stable unique member name inside the session")
   .requiredOption("--session <sessionName>", "Explicit collaboration session name")
   .requiredOption("--role <role>", "host, worker, or knowledge_keeper")
-  .option("--duty <roleDescription>", "Stable duty for this member (required for worker)")
+  .requiredOption("--duty <roleDescription>", "Stable duty for this member")
   .action(
     async (
       name: string,
       options: {
         session: string;
-        role: string;
-        duty?: string;
+        role: "host" | "worker" | "knowledge_keeper";
+        duty: string;
       }
     ) => {
       try {
         if (options.role !== "host" && options.role !== "worker" && options.role !== "knowledge_keeper") {
-          throw new Error('role only supports "host", "worker", or "knowledge_keeper".');
-        }
-
-        const resolvedDuty = options.duty
-          || (options.role === "host" ? "session host and orchestration owner" : undefined)
-          || (options.role === "knowledge_keeper" ? "project knowledge and user profile maintenance" : undefined);
-
-        if (!resolvedDuty) {
-          throw new Error('worker role must provide --duty.');
+          throw new Error('role 仅支持 "host"、"worker" 或 "knowledge_keeper"。');
         }
 
         const attached = await attachNamedMember({
           sessionName: options.session,
           name,
-          role: options.role as "host" | "worker" | "knowledge_keeper",
-          duty: resolvedDuty
+          role: options.role,
+          duty: options.duty
         });
 
         printControlJson({
@@ -4659,7 +4253,6 @@ program
         memberCount: members.length
       });
 
-      const windowBindings = await client.listWindowBindings(options.session);
       const result = {
         op: "SESSION_MEMBERS",
         sessionName: options.session,
@@ -4669,16 +4262,9 @@ program
           duty: profile.roleDescription,
           identity: profile.identity
         },
-        members: members.map((member) => {
-          const binding = windowBindings.find(
-            (b) => b.agentId === member.id
-          );
-          return {
-            ...buildSessionMemberView(options.session, member),
-            pendingTasks: binding?.runtimeState?.pendingInboxCount ?? 0,
-            claimedTasks: binding?.runtimeState?.claimedInboxCount ?? 0
-          };
-        })
+        members: members.map((member) =>
+          buildSessionMemberView(options.session, member)
+        )
       };
       trace.finish(result);
       printJson(result);
@@ -4750,137 +4336,44 @@ program
     parseListOption,
     [] as string[]
   )
-  .option(
-    "--task-file <taskFileSpec>",
-    "Repeatable. Use <workerName>::<filePath>. CLI reads file as task content.",
-    parseListOption,
-    [] as string[]
-  )
-  .option("--knowledge-refs <refs>", "Comma-separated knowledge refs for simple text tasks (e.g. l2/current#message-protocol)")
   .action(
     async (
       name: string,
       options: {
         session: string;
         task: string[];
-        taskFile: string[];
-        knowledgeRefs?: string;
       }
     ) => {
-      const rawTasks: WindowDispatchTaskSpec[] = [];
-
-      for (const spec of options.task) {
-        const parsed = parseWindowDispatchTaskSpec(spec);
-        let content = parsed.content;
-
-        const isAlreadyV1 = (() => {
-          try {
-            const obj = JSON.parse(content) as Record<string, unknown>;
-            return obj.schema === "ai-collab.task.v1";
-          } catch {
-            return false;
-          }
-        })();
-
-        if (!isAlreadyV1) {
-          const { profile, context } = await requireLiveWindowContext(options.session, name, "host");
-          const taskId = getNextTaskId(context.sessionId);
-          const wrapped = wrapSimpleTaskAsV1(content, options.knowledgeRefs);
-          const withRealId = JSON.parse(wrapped) as Record<string, unknown>;
-          withRealId.taskId = taskId;
-          content = JSON.stringify(withRealId);
-          void profile;
-        }
-
-        rawTasks.push({ targetWindowName: parsed.targetWindowName, content });
-      }
-
-      for (const spec of options.taskFile) {
-        const separatorIndex = spec.indexOf("::");
-        if (separatorIndex <= 0) {
-          printJson({ error: { code: "INVALID_INPUT", message: "--task-file format must be <workerName>::<filePath>" } });
-          process.exitCode = 1;
-          return;
-        }
-        const targetWindowName = spec.slice(0, separatorIndex).trim();
-        const filePath = spec.slice(separatorIndex + 2).trim();
-        const fileContent = readContentFile(filePath);
-
-        const isAlreadyV1 = (() => {
-          try {
-            const obj = JSON.parse(fileContent) as Record<string, unknown>;
-            return obj.schema === "ai-collab.task.v1";
-          } catch {
-            return false;
-          }
-        })();
-
-        if (isAlreadyV1) {
-          rawTasks.push({ targetWindowName, content: fileContent });
-        } else {
-          const { profile, context } = await requireLiveWindowContext(options.session, name, "host");
-          const taskId = getNextTaskId(context.sessionId);
-          let parsed: Record<string, unknown>;
-          try {
-            parsed = JSON.parse(fileContent) as Record<string, unknown>;
-          } catch {
-            parsed = { goal: fileContent };
-          }
-          parsed.schema = "ai-collab.task.v1";
-          parsed.taskId = taskId;
-          if (!parsed.knowledgeRefs && options.knowledgeRefs) {
-            const refs: Array<{ ref: string }> = [];
-            for (const rawRef of options.knowledgeRefs.split(",")) {
-              const trimmed = rawRef.trim();
-              if (trimmed) refs.push({ ref: trimmed });
-            }
-            if (refs.length > 0) parsed.knowledgeRefs = refs;
-          }
-          rawTasks.push({ targetWindowName, content: JSON.stringify(parsed) });
-          void profile;
-        }
-      }
-
-      if (rawTasks.length === 0) {
-        printJson({ error: { code: "INVALID_INPUT", message: "At least one task is required. Use --task or --task-file." } });
-        process.exitCode = 1;
-        return;
-      }
-
       await executeWindowHostDispatchCommand({
         commandName: "dispatch-many",
         traceCommandName: "dispatch-many",
         windowName: name,
         sessionName: options.session,
-        rawTasks
+        rawTasks: options.task.map((task) => parseWindowDispatchTaskSpec(task))
       });
     }
   );
 
 program
   .command("submit")
-  .description("Submit one worker or knowledge_keeper result by attached member name")
+  .description("Submit one worker result by attached member name")
   .argument("<name>", "Stable unique worker member name inside the session")
   .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .option("--content <content>", "Result content text (legacy, use --report-file for structured reports)")
-  .option("--report-file <path>", "Read structured worker report from file (ai-collab.worker-report.v1)")
+  .requiredOption("--content <content>", "Result content text")
   .option("--result <result>", "Payload result marker")
   .option("--type <type>", `Message type: ${SUPPORTED_MESSAGE_TYPES.join(", ")}`)
   .option("--fail-reason <reason>", "Failure reason for the claimed message")
-  .option("--mark-as <state>", "completed or failed", "completed")
-  .option("--knowledge-update-assessment <json>", "JSON knowledge update assessment for host review (legacy)")
+  .option("--mark-as <state>", "completed, failed, or contested", "completed")
   .action(
     async (
       name: string,
       options: {
-        content?: string;
-        reportFile?: string;
+        content: string;
         session: string;
         result?: string;
         type?: string;
         failReason?: string;
-        markAs: "completed" | "failed";
-        knowledgeUpdateAssessment?: string;
+        markAs: "completed" | "failed" | "contested";
       }
     ) => {
       const trace = createCommandTrace(projectRoot, {
@@ -4897,13 +4390,9 @@ program
       try {
         const { profile, context } = await requireLiveWindowContext(
           options.session,
-          name
+          name,
+          "worker"
         );
-        if (profile.role !== "worker" && profile.role !== "knowledge_keeper") {
-          throw new Error(
-            `window="${name}" has role "${profile.role}", only worker or knowledge_keeper can execute submit.`
-          );
-        }
         trace.step("binding_loaded", buildWindowProfileSummary(profile));
         const rememberedState = await readWindowRuntimeState(
           projectRoot,
@@ -4911,60 +4400,20 @@ program
           name
         );
         const claimedMessage =
-          (await findClaimedRememberedMessage(
-            context,
-            rememberedState?.currentMessageId
-          )) ??
+          (rememberedState?.currentMessageId
+            ? await findMessageForAgent(context, rememberedState.currentMessageId)
+            : null) ??
           (await findClaimedMessageForContext(context));
 
         if (!claimedMessage) {
           throw new Error(
-            `name="${name}" has no claimed worker task and cannot execute submit. Please run ai-collab await ${name} --session ${options.session} first.`
+            `name="${name}" 当前没有已领取的 worker 任务，不能执行 submit。请先执行 ai-collab await ${name} --session ${options.session}。`
           );
         }
         trace.step("binding_validated", {
           messageId: claimedMessage.id,
           correlationId: claimedMessage.correlationId ?? null
         });
-
-        let finalContent: string;
-        let finalKnowledgeUpdateAssessment: Record<string, unknown> | undefined;
-
-        if (options.reportFile) {
-          const reportRaw = readContentFile(options.reportFile);
-          const payloadObj = claimedMessage.payload as Record<string, unknown> | null;
-          const inferredTaskId = extractTaskIdFromPayload(
-            typeof payloadObj?.content === "string"
-              ? payloadObj.content
-              : ""
-          );
-
-          let report: Record<string, unknown>;
-          try {
-            report = JSON.parse(reportRaw) as Record<string, unknown>;
-          } catch {
-            report = { summary: reportRaw };
-          }
-
-          report.schema = "ai-collab.worker-report.v1";
-          report.taskId = inferredTaskId ?? `TASK-AUTO-${Date.now()}`;
-          report.status = options.markAs;
-
-          if (report.knowledgeUpdate && typeof report.knowledgeUpdate === "object") {
-            finalKnowledgeUpdateAssessment = report.knowledgeUpdate as Record<string, unknown>;
-          }
-
-          finalContent = JSON.stringify(report);
-        } else if (options.content) {
-          finalContent = options.content;
-          if (options.knowledgeUpdateAssessment) {
-            finalKnowledgeUpdateAssessment = JSON.parse(options.knowledgeUpdateAssessment) as Record<string, unknown>;
-          }
-        } else {
-          printJson({ error: { code: "INVALID_INPUT", message: "Must provide --content or --report-file." } });
-          process.exitCode = 1;
-          return;
-        }
 
         const locked = await withLocalLoopLock(
           projectRoot,
@@ -4976,63 +4425,49 @@ program
           async () =>
             withCliIdentityLease(
               context,
-              profile.role === "knowledge_keeper" ? "knowledge_keeper" : "worker",
+              "worker",
               {},
               async () =>
                 submitWorkerResult(context, {
                   messageId: claimedMessage.id,
-                  content: finalContent,
+                  content: options.content,
                   result: options.result,
                   type: options.type
                     ? ensureMessageType(options.type)
                     : undefined,
                   failReason: options.failReason,
-                  markAs: options.markAs,
-                  role: profile.role === "knowledge_keeper" ? "knowledge_keeper" : "worker",
-                  knowledgeUpdateAssessment: finalKnowledgeUpdateAssessment
-                }).then(async (submission) => {
-                  const remainingInbox = await client.getInboxWithOptions(context.agentId, {
-                    pendingOnly: true
-                  });
-                  const remainingTasks = remainingInbox.filter(
-                    (msg) =>
-                      msg.toAgentId === context.agentId &&
-                      HOST_EXECUTABLE_MESSAGE_TYPES.includes(msg.type)
-                  );
-                  return {
-                    commandResultState: "completed" as const,
-                    commandResultIsFinal: true,
-                    ignoreIntermediateCommandStateText: true,
-                    intermediateCommandStateTextIsNotAuthoritative: true,
-                    runtimeTerminalProgressHints,
-                    workflowModel: "message_loop" as const,
-                    workflowContract: "wait_receive_process_report_wait" as const,
-                    workflowRole: (profile.role === "knowledge_keeper" ? "knowledge_keeper" : "worker") as "knowledge_keeper" | "worker",
-                    workflowStep: "command_handoff" as const,
-                    messageKind: null,
-                    userReplyForbidden: true,
-                    mode: "submit" as const,
-                    matched: false,
-                    status: "reported" as const,
-                    action: "submit_completed" as const,
-                    identity: context.identity,
-                    agentId: context.agentId,
-                    agentName: context.agentName,
-                    submittedAt:
-                      submission.processedMessage.processedAt ??
-                      submission.processedMessage.failedAt ??
-                      submission.report.message.createdAt,
-                    submitted: {
-                      markAs: submission.markAs,
-                      correlationId: submission.correlationId,
-                      reportMessage: submission.report.message,
-                      processedMessage: submission.processedMessage
-                    },
-                    remainingPendingTasks: remainingTasks.length,
-                    hasMoreTasks: remainingTasks.length > 0,
-                    turnDisposition: "silent_continue" as const
-                  };
-                })
+                  markAs: options.markAs
+                }).then((submission) => ({
+                  commandResultState: "completed" as const,
+                  commandResultIsFinal: true,
+                  ignoreIntermediateCommandStateText: true,
+                  intermediateCommandStateTextIsNotAuthoritative: true,
+                  runtimeTerminalProgressHints,
+                  workflowModel: "message_loop" as const,
+                  workflowContract: "wait_receive_process_report_wait" as const,
+                  workflowRole: "worker" as const,
+                  workflowStep: "command_handoff" as const,
+                  messageKind: null,
+                  userReplyForbidden: true,
+                  mode: "submit" as const,
+                  matched: false,
+                  status: "reported" as const,
+                  action: "submit_completed" as const,
+                  identity: context.identity,
+                  agentId: context.agentId,
+                  agentName: context.agentName,
+                  submittedAt:
+                    submission.processedMessage.processedAt ??
+                    submission.processedMessage.failedAt ??
+                    submission.report.message.createdAt,
+                  submitted: {
+                    markAs: submission.markAs,
+                    correlationId: submission.correlationId,
+                    reportMessage: submission.report.message,
+                    processedMessage: submission.processedMessage
+                  },
+                  turnDisposition: "silent_continue" as const
+                }))
             )
         );
 
@@ -5091,11 +4526,10 @@ program
 
 program
   .command("resolve")
-  .description("Resolve claimed host messages by attached member name. Defaults to all currently claimed messages.")
+  .description("Resolve one claimed host message by attached member name")
   .argument("<name>", "Stable unique host member name inside the session")
   .requiredOption("--session <sessionName>", "Explicit collaboration session name")
   .requiredOption("--summary <summary>", "Host-side processing summary")
-  .option("--message-id <messageId>", "Repeatable claimed message id. Defaults to all currently claimed host messages.", parseListOption, [] as string[])
   .option("--action <action>", "completed, failed, or delegated", "completed")
   .option("--reply-content <content>", "Optional reply content back to the original sender")
   .option("--reply-result <result>", "Reply payload result marker")
@@ -5106,7 +4540,6 @@ program
       options: {
         session: string;
         summary: string;
-        messageId: string[];
         action: string;
         replyContent?: string;
         replyResult?: string;
@@ -5131,36 +4564,23 @@ program
           "host"
         );
         trace.step("binding_loaded", buildWindowProfileSummary(profile));
+        const rememberedState = await readWindowRuntimeState(
+          projectRoot,
+          options.session,
+          name
+        );
+        const claimedMessage =
+          (rememberedState?.currentMessageId
+            ? await findMessageForAgent(context, rememberedState.currentMessageId)
+            : null) ??
+          (await findClaimedMessageForContext(context, {
+            types: HOST_RESOLVABLE_MESSAGE_TYPES
+          }));
 
-        const allClaimedMessages = await findClaimedMessagesForContext(context);
-
-        if (allClaimedMessages.length === 0) {
+        if (!claimedMessage) {
           throw new Error(
-            `name="${name}" has no claimed host message and cannot execute resolve. Please run ai-collab await ${name} --session ${options.session} first.`
+            `name="${name}" 当前没有已领取的 host 消息，不能执行 resolve。请先执行 ai-collab await ${name} --session ${options.session}。`
           );
-        }
-
-        const specifiedIds = options.messageId ?? [];
-        const claimedMessages =
-          specifiedIds.length > 0
-            ? allClaimedMessages.filter((m) => specifiedIds.includes(m.id))
-            : allClaimedMessages;
-
-        if (specifiedIds.length > 0 && claimedMessages.length === 0) {
-          throw new Error(
-            `The specified message-id does not belong to the current Host's claimed messages, or has already been resolved.`
-          );
-        }
-
-        if (specifiedIds.length > 0) {
-          const notFound = specifiedIds.filter(
-            (id) => !allClaimedMessages.some((m) => m.id === id)
-          );
-          if (notFound.length > 0) {
-            throw new Error(
-              `The following message-ids do not belong to the current Host's claimed messages: ${notFound.join(", ")}`
-            );
-          }
         }
 
         const locked = await withLocalLoopLock(
@@ -5171,55 +4591,15 @@ program
             takeover: true
           },
           async () =>
-            withCliIdentityLease(context, "host", {}, async () => {
-              const resolved = [] as Array<Awaited<ReturnType<typeof resolveHostMessage>>>;
-              const failed = [] as Array<{ messageId: string; error: ReturnType<typeof renderSdkError> }>;
-
-              for (const message of claimedMessages) {
-                try {
-                  resolved.push(
-                    await resolveHostMessage(context, {
-                      messageId: message.id,
-                      action: options.action,
-                      summary: options.summary,
-                      replyContent: options.replyContent,
-                      replyResult: options.replyResult,
-                      replyType: options.replyType
-                    })
-                  );
-                } catch (error: unknown) {
-                  failed.push({
-                    messageId: message.id,
-                    error: renderSdkError(error)
-                  });
-                }
-              }
-
-              const sessionMembers = await client.getMembers(context.sessionId);
-              const windowBindings = await client.listWindowBindings(context.sessionName);
-              const workerInboxes: Array<{
-                agentId: string;
-                agentName: string;
-                pendingCount: number;
-                claimedCount: number;
-              }> = [];
-              for (const member of sessionMembers) {
-                if (member.role === "worker" || member.role === "knowledge_keeper") {
-                  const binding = windowBindings.find(
-                    (b) => b.agentId === member.id
-                  );
-                  workerInboxes.push({
-                    agentId: member.id,
-                    agentName: member.agentName,
-                    pendingCount: binding?.runtimeState?.pendingInboxCount ?? 0,
-                    claimedCount: binding?.runtimeState?.claimedInboxCount ?? 0
-                  });
-                }
-              }
-
-              const hasBusyWorkers = workerInboxes.some((w) => w.pendingCount > 0 || w.claimedCount > 0);
-
-              return {
+            withCliIdentityLease(context, "host", {}, async () =>
+              resolveHostMessage(context, {
+                messageId: claimedMessage.id,
+                action: options.action,
+                summary: options.summary,
+                replyContent: options.replyContent,
+                replyResult: options.replyResult,
+                replyType: options.replyType
+              }).then((resolution) => ({
                 commandResultState: "completed" as const,
                 commandResultIsFinal: true,
                 ignoreIntermediateCommandStateText: true,
@@ -5233,20 +4613,15 @@ program
                 userReplyForbidden: true,
                 mode: "resolve" as const,
                 matched: false,
-                status: failed.length > 0 ? ("partially_resolved" as const) : ("resolved" as const),
+                status: "resolved" as const,
                 action: "resolve_completed" as const,
                 identity: context.identity,
                 agentId: context.agentId,
                 agentName: context.agentName,
-                resolvedCount: resolved.length,
-                failedCount: failed.length,
-                resolved,
-                failed,
-                workerInboxes,
-                hasBusyWorkers,
-                turnDisposition: "host_decision_required" as const
-              };
-            })
+                resolved: resolution,
+                turnDisposition: "silent_continue" as const
+              }))
+            )
         );
 
         const rawResult =
@@ -5260,35 +4635,15 @@ program
                   acquiredAt: locked.lock.metadata?.acquiredAt ?? null
                 }
               })
-            : {
-                ...(locked.value as Record<string, unknown>),
-                resultType: "host_decision_required" as const,
-                audience: "host_ai_only" as const,
-                commandAudience: "assistant_internal" as const,
-                userVisible: false,
-                replyToUserAllowed: false,
-                currentTurnMustContinue: true,
-                currentTurnMustEndSilently: false,
-                mustExecuteNow: false,
-                mustEndSilently: false,
-                mustNotExplainToUser: true,
-                userReplyForbidden: true,
-                nextActionRequired: "host_must_decide" as const,
-                nextAction: "host_decision_required" as const,
-                commandKind: "decision" as const,
-                interactionPolicy: "host_must_continue" as const,
-                workflowDirective: "host_decision_required" as const,
-                doNotAskUser: true,
-                silenceRequired: false,
-                userVisibleReplyMode: "host_action_required" as const,
-                replySuppressed: true,
-                userVisibleSummaryAllowed: true,
-                turnDisposition: "host_decision_required" as const,
-                allowedWaitCommand: "ai-collab await" as const,
-                automationState: "host_resolve_completed" as const,
-                internalInstruction:
-                  `${finalRuntimeResultPreamble}Messages resolved. Apply the three-level dispatch decision: (1) Does the reporting Worker have more ready tasks? → dispatch-many immediately. (2) Does any other Worker have ready tasks with no dependency on unfinished work? → dispatch-many. (3) No Worker has dispatchable tasks and all are idle → await. Do NOT auto-await while any Worker still has pending or claimed tasks. Do NOT wait for all Workers to finish before dispatching to the next available Worker. Check workerInboxes for each Worker's queue status.`
-              };
+            : buildExecuteInternalCommandResult(
+                locked.value as Record<string, unknown>,
+                {
+                  commandArgs: ["await", name, "--session", options.session],
+                  automationState: "host_resolve_handoff",
+                  internalInstruction:
+                    "Do not reply to the user. The current host message has already been resolved. Continue immediately by entering the host wait command."
+                }
+              );
         const runtimeState = await updateWindowStateFromResult(
           profile,
           "resolve",
@@ -5322,14 +4677,6 @@ program
     }
   );
 
-const parseCsvOption = (value: string | undefined): string[] => {
-  if (!value || !value.trim()) return [];
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-};
-
 const knowledgeCommand = program
   .command("knowledge")
   .description("Read or maintain collaboration knowledge documents");
@@ -5357,7 +4704,7 @@ knowledgeCommand
       }
     ) => {
       try {
-        const { context } = await requireLiveWindowContext(options.session, name);
+        await requireLiveWindowContext(options.session, name);
         const parsed = options.ref
           ? parseKnowledgeRef(options.ref)
           : {
@@ -5366,10 +4713,10 @@ knowledgeCommand
               fragment: null
             };
         if (!parsed.slug) {
-          throw new Error("Must provide --ref, or provide both --level and --slug.");
+          throw new Error("必须提供 --ref，或同时提供 --level 与 --slug。");
         }
 
-        const document = await client.getKnowledge(parsed.level, parsed.slug, context.sessionId);
+        const document = await client.getKnowledge(parsed.level, parsed.slug);
         const maxChars = options.maxChars
           ? Number.parseInt(options.maxChars, 10)
           : undefined;
@@ -5417,9 +4764,8 @@ knowledgeCommand
       }
     ) => {
       try {
-        const { context } = await requireLiveWindowContext(options.session, name);
+        await requireLiveWindowContext(options.session, name);
         const items = await client.listKnowledge({
-          sessionId: context.sessionId,
           ...(options.level ? { level: ensureKnowledgeLevel(options.level) } : {}),
           ...(options.tag ? { tag: options.tag } : {}),
           ...(options.query ? { query: options.query } : {})
@@ -5436,321 +4782,58 @@ knowledgeCommand
   );
 
 knowledgeCommand
-  .command("judge")
-  .description("Judge whether user input requires knowledge base updates before dispatching")
-  .argument("<name>", "Stable host member name inside the session")
+  .command("upsert")
+  .description("Create or update one knowledge document as host or knowledge_keeper")
+  .argument("<name>", "Stable member name inside the session (host or knowledge_keeper)")
   .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .requiredOption("--source <source>", "Build source: user_message, user_feedback, host_planning, worker_report, system_idle")
-  .option("--source-message-id <id>", "Source message ID that triggered this judgement (auto-inferred if omitted)")
-  .option("--knowledge-build", "Knowledge build is required (shorthand for --knowledge-build-required true)")
-  .option("--no-knowledge-build", "Knowledge build is not required (shorthand for --knowledge-build-required false)")
-  .option("--levels <levels>", "Comma-separated target knowledge levels: l1,l2,l3 (required when --knowledge-build)")
-  .option("--source-kind <kind>", "Knowledge source kind (auto-inferred if omitted)")
-  .option("--candidate-refs <refs>", "Comma-separated candidate knowledge refs (auto-inferred if omitted)")
-  .option("--reason <reason>", "Reason for the judgement (auto-generated if omitted)")
-  .option("--next-action <action>", "Next action: none, knowledge_upsert, knowledge_upsert_then_dispatch, dispatch (auto-inferred if omitted)")
+  .requiredOption("--level <level>", "Knowledge level: l1, l2, or l3")
+  .requiredOption("--slug <slug>", "Knowledge slug")
+  .requiredOption("--title <title>", "Knowledge title")
+  .requiredOption("--content <content>", "Knowledge content")
+  .option("--summary <summary>", "Knowledge summary")
+  .option("--tags <tags>", "Comma-separated tags")
+  .option("--change-summary <summary>", "Change summary")
+  .option(
+    "--source-kind <kind>",
+    "Knowledge change source: host_update, user_feedback, worker_report, manual, or system"
+  )
   .action(
     async (
       name: string,
       options: {
         session: string;
-        source: string;
-        sourceMessageId?: string;
-        knowledgeBuild?: boolean;
-        levels?: string;
+        level: string;
+        slug: string;
+        title: string;
+        content: string;
+        summary?: string;
+        tags?: string;
+        changeSummary?: string;
         sourceKind?: string;
-        candidateRefs?: string;
-        reason?: string;
-        nextAction?: string;
       }
     ) => {
       try {
         const { profile, context } = await requireLiveWindowContext(
           options.session,
-          name,
-          "host"
+          name
         );
-
-        const validSources = ["user_message", "user_feedback", "host_planning", "worker_report", "system_idle"];
-        if (!validSources.includes(options.source)) {
-          printJson({ error: { code: "INVALID_INPUT", message: `--source must be one of: ${validSources.join(", ")}.` } });
-          process.exitCode = 1;
-          return;
-        }
-
-        const knowledgeBuildRequired = options.knowledgeBuild ?? false;
-
-        let targetLevels: string[] = [];
-        if (options.levels) {
-          targetLevels = parseCsvOption(options.levels);
-          const validLevels = ["l1", "l2", "l3"];
-          for (const level of targetLevels) {
-            if (!validLevels.includes(level)) {
-              printJson({ error: { code: "INVALID_INPUT", message: `"${level}" in --levels is invalid. Must be one of: l1, l2, l3.` } });
-              process.exitCode = 1;
-              return;
-            }
-          }
-        }
-
-        if (knowledgeBuildRequired && targetLevels.length === 0) {
-          printJson({ error: { code: "INVALID_INPUT", message: "--levels is required when using --knowledge-build." } });
-          process.exitCode = 1;
-          return;
-        }
-
-        const sourceKind = options.sourceKind ?? inferSourceKind(options.source);
-        const validSourceKinds = ["manual", "worker_report", "host_update", "system", "user_feedback", "none"];
-        if (!validSourceKinds.includes(sourceKind)) {
-          printJson({ error: { code: "INVALID_INPUT", message: `--source-kind must be one of: ${validSourceKinds.join(", ")}.` } });
-          process.exitCode = 1;
-          return;
-        }
-
-        let candidateRefs: string[] = [];
-        if (options.candidateRefs) {
-          candidateRefs = parseCsvOption(options.candidateRefs);
-        } else if (knowledgeBuildRequired) {
-          candidateRefs = targetLevels.map((level) => `${level}/current`);
-        }
-
-        const nextAction = options.nextAction ?? inferNextAction(knowledgeBuildRequired);
-        const validNextActions = ["none", "knowledge_upsert", "knowledge_upsert_then_dispatch", "dispatch"];
-        if (!validNextActions.includes(nextAction)) {
-          printJson({ error: { code: "INVALID_INPUT", message: `--next-action must be one of: ${validNextActions.join(", ")}.` } });
-          process.exitCode = 1;
-          return;
-        }
-
-        let sourceMessageId = options.sourceMessageId;
-        if (!sourceMessageId) {
-          const rememberedState = await readWindowRuntimeState(
-            projectRoot,
-            options.session,
-            name
-          );
-          sourceMessageId = rememberedState?.currentMessageId ?? undefined;
-        }
-
-        const reason = options.reason ?? `source=${options.source}, levels=${targetLevels.join(",") || "none"}`;
-
-        const judgement = await client.createKnowledgeBuildJudgement({
-          sessionId: context.sessionId,
-          source: options.source as import("@ai-collab/protocol").KnowledgeBuildSource,
-          sourceMessageId,
-          hostAgentId: context.agentId,
-          knowledgeBuildRequired,
-          targetLevels: targetLevels as import("@ai-collab/protocol").KnowledgeLevel[],
-          sourceKind: sourceKind as import("@ai-collab/protocol").KnowledgeSourceKind | "none",
-          candidateRefs,
-          reason,
-          nextAction: nextAction as import("@ai-collab/protocol").KnowledgeBuildNextAction
-        });
-
-        void profile;
-
-        printJson({
-          op: "KNOWLEDGE_BUILD_JUDGEMENT_CREATED",
-          judgement
-        });
-      } catch (error: unknown) {
-        printJson({ error: renderSdkError(error) });
-        process.exitCode = 1;
-      }
-    }
-  );
-
-knowledgeCommand
-  .command("fulfil-judgement")
-  .description("Mark a knowledge build judgement as fulfilled after knowledge updates are complete")
-  .argument("<name>", "Stable host member name inside the session")
-  .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .requiredOption("--judgement-id <id>", "Knowledge build judgement ID to fulfil")
-  .option("--change-ids <ids>", "Comma-separated knowledge change IDs")
-  .option("--knowledge-refs <refs>", "Comma-separated knowledge refs (e.g. l1/project-constitution)")
-  .action(
-    async (
-      name: string,
-      options: {
-        session: string;
-        judgementId: string;
-        changeIds?: string;
-        knowledgeRefs?: string;
-      }
-    ) => {
-      try {
-        const { context } = await requireLiveWindowContext(
-          options.session,
-          name,
-          "host"
-        );
-
-        const changeIds = parseCsvOption(options.changeIds);
-        const knowledgeRefs = parseCsvOption(options.knowledgeRefs);
-
-        const judgement = await client.fulfilKnowledgeBuildJudgement({
-          judgementId: options.judgementId,
-          hostAgentId: context.agentId,
-          changeIds,
-          knowledgeRefs
-        });
-
-        printJson({
-          op: "KNOWLEDGE_BUILD_JUDGEMENT_FULFILLED",
-          judgement
-        });
-      } catch (error: unknown) {
-        printJson({ error: renderSdkError(error) });
-        process.exitCode = 1;
-      }
-    }
-  );
-
-knowledgeCommand
-  .command("read-current")
-  .description("Read a current-level knowledge document by level (l1/l2/l3)")
-  .argument("<name>", "Stable member name inside the session")
-  .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .requiredOption("--level <level>", "Knowledge level: l1, l2, or l3")
-  .option("--anchor <anchor>", "Read only the fragment under ## <anchor> heading")
-  .option("--summary-only", "Return summary and metadata without full content")
-  .option("--max-chars <count>", "Maximum content characters to return (stdout mode only)")
-  .option("--output-file <path>", "Write content to file instead of stdout")
-  .action(
-    async (
-      name: string,
-      options: {
-        session: string;
-        level: string;
-        anchor?: string;
-        summaryOnly?: boolean;
-        maxChars?: string;
-        outputFile?: string;
-      }
-    ) => {
-      try {
-        const { context } = await requireLiveWindowContext(options.session, name);
-        const level = ensureKnowledgeLevel(options.level);
-        const document = await client.getKnowledge(level, "current", context.sessionId);
-
-        if (!document) {
-          if (options.outputFile) {
-            printJson({ error: { code: "NOT_FOUND", message: `${level}/current does not exist` } });
-          } else {
-            printJson({ op: "KNOWLEDGE_READ_CURRENT", level, slug: "current", document: null });
-          }
-          process.exitCode = 1;
-          return;
-        }
-
-        let content = document.content;
-
-        if (options.anchor) {
-          const result = resolveKnowledgeRefFragment(content, options.anchor);
-          if (!result.found) {
-            printJson({
-              error: {
-                code: "ANCHOR_NOT_FOUND",
-                message: `anchor #${options.anchor} not found in ${level}/current`,
-                availableAnchors: result.availableAnchors
-              }
-            });
-            process.exitCode = 1;
-            return;
-          }
-          content = result.fragment;
-        }
-
-        if (options.outputFile) {
-          writeOutputFile(options.outputFile, content);
-          printJson({
-            op: "KNOWLEDGE_READ_CURRENT",
-            level,
-            slug: "current",
-            outputFile: options.outputFile,
-            anchor: options.anchor ?? null,
-            contentLength: content.length
-          });
-        } else {
-          const maxChars = options.maxChars
-            ? Number.parseInt(options.maxChars, 10)
-            : undefined;
-          const displayContent =
-            options.summaryOnly
-              ? undefined
-              : typeof maxChars === "number" && maxChars > 0
-                ? content.slice(0, maxChars)
-                : content;
-
-          printJson({
-            op: "KNOWLEDGE_READ_CURRENT",
-            level,
-            slug: "current",
-            anchor: options.anchor ?? null,
-            document: {
-              ...document,
-              ...(displayContent !== undefined ? { content: displayContent } : { content: undefined })
-            }
-          });
-        }
-      } catch (error: unknown) {
-        printJson({ error: renderSdkError(error) });
-        process.exitCode = 1;
-      }
-    }
-  );
-
-knowledgeCommand
-  .command("update-current")
-  .description("Update a current-level knowledge document by level (l1/l2/l3)")
-  .argument("<name>", "Stable member name inside the session")
-  .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .requiredOption("--level <level>", "Knowledge level: l1, l2, or l3")
-  .option("--content <content>", "New content for the knowledge document (legacy, use --content-file for long content)")
-  .option("--content-file <path>", "Read new content from file")
-  .option("--source-kind <kind>", "Knowledge source kind (default: host_update)")
-  .action(
-    async (
-      name: string,
-      options: {
-        session: string;
-        level: string;
-        content?: string;
-        contentFile?: string;
-        sourceKind?: string;
-      }
-    ) => {
-      try {
-        const { profile, context } = await requireLiveWindowContext(options.session, name);
         ensureWindowRoleAny(profile, ["host", "knowledge_keeper"]);
-        const level = ensureKnowledgeLevel(options.level);
-        const sourceKind = ensureKnowledgeSourceKind(options.sourceKind ?? "host_update");
-
-        let content: string;
-        if (options.contentFile) {
-          content = readContentFile(options.contentFile);
-        } else if (options.content) {
-          content = options.content;
-        } else {
-          printJson({ error: { code: "INVALID_INPUT", message: "Must provide --content or --content-file." } });
-          process.exitCode = 1;
-          return;
-        }
-
         const document = await client.upsertKnowledge({
-          level,
-          slug: "current",
-          content,
-          title: level === "l1" ? "L1 Current" : level === "l2" ? "L2 Current" : "L3 Current",
-          sourceKind,
+          level: ensureKnowledgeLevel(options.level),
+          slug: options.slug,
+          title: options.title,
+          content: options.content,
+          ...(options.summary !== undefined ? { summary: options.summary } : {}),
+          tags: parseTagsOption(options.tags),
+          ownerAgentId: context.agentId,
+          sourceKind: ensureKnowledgeSourceKind(options.sourceKind),
           sourceAgentId: context.agentId,
-          sessionId: context.sessionId
+          ...(options.changeSummary !== undefined
+            ? { changeSummary: options.changeSummary }
+            : {})
         });
-
         printJson({
-          op: "KNOWLEDGE_UPDATE_CURRENT",
-          level,
-          slug: "current",
+          op: "KNOWLEDGE_UPSERTED",
           document
         });
       } catch (error: unknown) {
@@ -5812,7 +4895,7 @@ const executeWindowWaitCommand = async (options: {
       continueOrigin: options.continuation?.continueOrigin
     });
 
-    if (profile.role === "worker" || profile.role === "knowledge_keeper") {
+    if (profile.role === "worker") {
       trace.step("binding_validated", {
         identity: profile.identity,
         role: profile.role,
@@ -5835,7 +4918,7 @@ const executeWindowWaitCommand = async (options: {
         async () =>
           withCliIdentityLease(
             context,
-            profile.role === "knowledge_keeper" ? "knowledge_keeper" : "worker",
+            "worker",
             {
               intervalSeconds: slicedWait.intervalSeconds,
               maxRounds: slicedWait.maxRounds
@@ -5992,8 +5075,8 @@ program
   .command("start")
   .description("Start the local ai-collab core service and web dashboard")
   .option("--daemon", "Start the local core as a background process")
-  .option("--no-web", "Skip starting the web dashboard dev server")
-  .action(async (options: { daemon?: boolean; web?: boolean }) => {
+  .option("--core-only", "Start only the core service without the web dashboard")
+  .action(async (options: { daemon?: boolean; coreOnly?: boolean }) => {
     const runtime = await loadRuntimeModule();
     if (options.daemon) {
       const status = await runtime.startCore(projectRoot);
@@ -6013,54 +5096,23 @@ program
       return;
     }
 
-    const dashboardUrl = "http://127.0.0.1:5173";
-    const coreUrl = runtime.getDashboardUrl();
+    const webDir = path.resolve(projectRoot, "apps", "web");
+    const startWeb = !options.coreOnly && fs.existsSync(path.join(webDir, "package.json"));
 
     console.log(
       JSON.stringify(
         {
           mode: "foreground",
-          message:
-            "Starting ai-collab core + web dashboard. Press Ctrl+C to stop.",
-          coreUrl,
-          dashboardUrl
+          message: "Starting ai-collab core in the foreground. Press Ctrl+C to stop.",
+          dashboardUrl: runtime.getDashboardUrl(),
+          webDashboardUrl: startWeb ? "http://localhost:5173" : null,
+          webDir: startWeb ? webDir : null
         },
         null,
         2
       )
     );
-
-    // Start Vite dev server for the web dashboard
-    let viteProcess: ReturnType<typeof spawn> | null = null;
-    if (options.web !== false) {
-      const webDir = resolve(projectRoot, "apps", "web");
-      if (existsSync(join(webDir, "package.json"))) {
-        viteProcess = spawn("pnpm", ["run", "dev"], {
-          cwd: webDir,
-          stdio: "inherit",
-          shell: true
-        });
-        viteProcess.on("error", (err) => {
-          console.error(`[web] Failed to start: ${err.message}`);
-        });
-      } else {
-        console.warn(`[web] Skipped: ${webDir} not found`);
-      }
-    }
-
-    const cleanup = () => {
-      if (viteProcess && !viteProcess.killed) {
-        viteProcess.kill();
-      }
-    };
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
-
-    try {
-      await runtime.runCoreForeground(projectRoot);
-    } finally {
-      cleanup();
-    }
+    await runtime.runCoreForeground(projectRoot, startWeb ? webDir : undefined);
   });
 
 program
@@ -6087,11 +5139,56 @@ program
   .action(async () => {
     const runtime = await loadRuntimeModule();
     const status = await runtime.getCoreStatus(projectRoot);
+    const mcpServers = status.reachable
+      ? await runtime.getRegisteredMcpServers(
+          status.metadata?.host,
+          status.metadata?.port
+        )
+      : [];
     console.log(
       JSON.stringify(
         {
           ...status,
+          mcpServers,
           dashboardUrl: runtime.getDashboardUrl(status.metadata)
+        },
+        null,
+        2
+      )
+    );
+  });
+
+program
+  .command("mcp:status")
+  .description("Show status of MCP stdio servers connected to the core")
+  .action(async () => {
+    const runtime = await loadRuntimeModule();
+    const status = await runtime.getCoreStatus(projectRoot);
+    if (!status.reachable) {
+      console.log(
+        JSON.stringify(
+          {
+            error: "ai-collab core is not running. Start it with 'ai-collab start --daemon'."
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+    const servers = await runtime.getRegisteredMcpServers(
+      status.metadata?.host,
+      status.metadata?.port
+    );
+    console.log(
+      JSON.stringify(
+        {
+          core: {
+            state: status.state,
+            pid: status.metadata?.pid ?? null
+          },
+          mcpServers: servers,
+          mcpServerCount: servers.length
         },
         null,
         2
@@ -6137,79 +5234,78 @@ program
     );
   });
 
-const profileCommand = program
-  .command("profile")
-  .description("Manage user profile preferences and habits");
-
-profileCommand
-  .command("get")
-  .description("Get user profile entries")
-  .argument("<name>", "Stable member name inside the session")
-  .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .argument("[key]", "Optional profile key")
-  .action(async (name: string, key: string | undefined, options: { session: string }) => {
-    try {
-      const { profile, context } = await requireLiveWindowContext(options.session, name);
-      if (profile.role !== "host" && profile.role !== "knowledge_keeper") {
-        throw new Error(`profile operation only allows host or knowledge_keeper role, current role is "${profile.role}".`);
-      }
-      const snapshot = await client.getProfile(key, context.agentId);
-      printJson({
-        op: "PROFILE_GET",
-        entries: snapshot.entries,
-        updatedAt: snapshot.updatedAt
-      });
-    } catch (error: unknown) {
-      printJson({ error: renderSdkError(error) });
-      process.exitCode = 1;
+program
+  .command("mcp:configure-timeout")
+  .description("Configure supported AI IDE MCP tool timeouts for ai-collab")
+  .option("--target <target>", "auto, claude, codex, cursor, or trae", "auto")
+  .option("--timeout <seconds>", "MCP client tool timeout seconds", "3600")
+  .option("--dry-run", "Print planned changes without writing files", false)
+  .action(async (options: {
+    target: string;
+    timeout: string;
+    dryRun?: boolean;
+  }) => {
+    const target = options.target as McpTimeoutConfigureTarget;
+    if (!["auto", "claude", "codex", "cursor", "trae"].includes(target)) {
+      throw new Error(`Unknown MCP timeout target: ${options.target}`);
     }
+    const timeoutSeconds = Number(options.timeout);
+    if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+      throw new Error(`Invalid timeout seconds: ${options.timeout}`);
+    }
+    const results = await configureMcpTimeouts({
+      projectRoot,
+      target,
+      timeoutSeconds,
+      dryRun: Boolean(options.dryRun)
+    });
+    console.log(JSON.stringify({ results }, null, 2));
   });
 
-profileCommand
-  .command("set")
-  .description("Set a user profile key-value pair")
-  .argument("<name>", "Stable member name inside the session")
-  .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .argument("<key>", "Profile key")
-  .argument("<value>", "Profile value")
-  .action(async (name: string, key: string, value: string, options: { session: string }) => {
-    try {
-      const { profile, context } = await requireLiveWindowContext(options.session, name);
-      if (profile.role !== "host" && profile.role !== "knowledge_keeper") {
-        throw new Error(`profile operation only allows host or knowledge_keeper role, current role is "${profile.role}".`);
-      }
-      const result = await client.setProfile(key, value, context.agentId);
-      printJson({
-        op: "PROFILE_SET",
-        entry: result.entry
-      });
-    } catch (error: unknown) {
-      printJson({ error: renderSdkError(error) });
-      process.exitCode = 1;
-    }
+program
+  .command("mcp:serve")
+  .description("Start the ai-collab MCP stdio server (for IDE MCP integration)")
+  .action(async () => {
+    // The MCP server module self-starts on import.
+    await import("./mcp-stdio-server.js");
   });
 
-profileCommand
-  .command("delete")
-  .description("Delete a user profile entry")
-  .argument("<name>", "Stable member name inside the session")
-  .requiredOption("--session <sessionName>", "Explicit collaboration session name")
-  .argument("<key>", "Profile key to delete")
-  .action(async (name: string, key: string, options: { session: string }) => {
-    try {
-      const { profile, context } = await requireLiveWindowContext(options.session, name);
-      if (profile.role !== "host" && profile.role !== "knowledge_keeper") {
-        throw new Error(`profile operation only allows host or knowledge_keeper role, current role is "${profile.role}".`);
-      }
-      const result = await client.deleteProfile(key, context.agentId);
-      printJson({
-        op: "PROFILE_DELETE",
-        deleted: result.deleted
-      });
-    } catch (error: unknown) {
-      printJson({ error: renderSdkError(error) });
-      process.exitCode = 1;
+program
+  .command("mcp:setup")
+  .description("One-click setup: configure MCP server entry and timeouts for AI IDEs")
+  .option("--target <target>", "auto, claude, codex, or cursor", "auto")
+  .option("--timeout <seconds>", "MCP tool timeout seconds", "3600")
+  .option("--role <role>", "Pre-declare role for tool isolation: host or worker")
+  .option("--dry-run", "Print planned changes without writing files", false)
+  .action(async (options: {
+    target: string;
+    timeout: string;
+    role?: string;
+    dryRun?: boolean;
+  }) => {
+    const target = options.target as McpSetupTarget;
+    if (!["auto", "claude", "codex", "cursor"].includes(target)) {
+      throw new Error(`Unknown MCP setup target: ${options.target}`);
     }
+    const timeoutSeconds = Number(options.timeout);
+    if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+      throw new Error(`Invalid timeout seconds: ${options.timeout}`);
+    }
+    let role: "host" | "worker" | undefined;
+    if (options.role) {
+      if (options.role !== "host" && options.role !== "worker") {
+        throw new Error(`Invalid role: ${options.role}. Must be 'host' or 'worker'.`);
+      }
+      role = options.role;
+    }
+    const results = await setupMcp({
+      projectRoot,
+      target,
+      timeoutSeconds,
+      dryRun: Boolean(options.dryRun),
+      ...(role ? { role } : {})
+    });
+    console.log(JSON.stringify({ results }, null, 2));
   });
 
 await program.parseAsync();

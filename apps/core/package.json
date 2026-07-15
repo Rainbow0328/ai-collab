@@ -14,14 +14,16 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --dir src"
   },
   "dependencies": {
     "@ai-collab/protocol": "workspace:*",
     "@ai-collab/shared": "workspace:*",
     "@ai-collab/store": "workspace:*",
     "@fastify/websocket": "^11.0.2",
-    "fastify": "^5.8.5"
+    "fastify": "^5.8.5",
+    "pino": "^9.6.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "vitest": "^4.1.5"

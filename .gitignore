@@ -12,3 +12,57 @@ coverage/
 .idea
 /docs/
 .npm-cache/
+
+# Environment
+.env
+.env.*
+
+# Logs
+log/
+
+# IDE
+.vscode/
+.trae/
+.qoder/
+.codex/
+.claude/
+.cursor/
+.aider/
+.codebuddy/
+
+# Data
+.knowledge/
+release/
+
+# Lockfile (project uses pnpm)
+package-lock.json
+
+# Internal docs (not for public repo)
+AI-COLLAB-需求与修复文档.md
+post-技术社区.md
+
+# OS generated
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temp files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+/apps/web/docs/
+
+# Build artifacts and debug output
+*.tsbuildinfo
+build-output.txt
+core-error.txt
+core-output.txt
+
+# Internal planning docs
+*PROBLEM_ANALYSIS.md
+*REFACTOR_PLAN.md
+*SUMMARY.md
+*PLAN.md
+*ANALYSIS.md

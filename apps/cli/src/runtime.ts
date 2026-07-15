@@ -204,13 +204,43 @@ export const startCore = async (projectRoot: string): Promise<CoreStatus> => {
 };
 
 export const runCoreForeground = async (
-  projectRoot: string
+  projectRoot: string,
+  webDir?: string
 ): Promise<void> => {
   initializeConfig(projectRoot);
 
   const running = await isCoreReachable();
   if (running) {
     throw new Error("ai-collab core is already running on 127.0.0.1:42688.");
+  }
+
+  // Spawn the web dev server (vite) if a web directory is provided.
+  let webChild: ReturnType<typeof spawn> | null = null;
+  if (webDir) {
+    const pkgManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    webChild = spawn(pkgManager, ["dev"], {
+      cwd: webDir,
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
+    });
+
+    webChild.stdout?.on("data", (chunk: Buffer | string) => {
+      const msg = chunk.toString().trim();
+      if (msg) {
+        console.log(`\x1b[36m[web]\x1b[0m ${msg}`);
+      }
+    });
+
+    webChild.stderr?.on("data", (chunk: Buffer | string) => {
+      const msg = chunk.toString().trim();
+      if (msg) {
+        console.log(`\x1b[36m[web]\x1b[0m ${msg}`);
+      }
+    });
+
+    webChild.on("error", (err: Error) => {
+      console.error(`\x1b[31m[web] Failed to start: ${err.message}\x1b[0m`);
+    });
   }
 
   const { startCoreServer } = await import("@ai-collab/core");
@@ -226,6 +256,9 @@ export const runCoreForeground = async (
 
   const shutdown = async () => {
     clearRuntimeMetadata(projectRoot);
+    if (webChild) {
+      try { webChild.kill(); } catch { /* ignore */ }
+    }
     await instance.close();
     process.exit(0);
   };
@@ -242,6 +275,13 @@ export const runCoreForeground = async (
 
 export const stopCore = async (projectRoot: string): Promise<CoreStatus> => {
   const metadata = readRuntimeMetadata(projectRoot);
+
+  // --- Kill registered MCP stdio servers before stopping core ---
+  // This ensures MCP servers don't outlive the core service.
+  if (metadata?.pid && isProcessRunning(metadata.pid)) {
+    await killRegisteredMcpServers(metadata.host, metadata.port);
+  }
+
   if (metadata?.pid && isProcessRunning(metadata.pid)) {
     process.kill(metadata.pid);
   }
@@ -278,6 +318,57 @@ export const isCoreReachable = async (): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+/**
+ * Fetch the list of registered MCP stdio servers from the core service.
+ */
+export const getRegisteredMcpServers = async (
+  host = defaultHost,
+  port = defaultPort
+): Promise<Array<{ pid: number; startedAt: string; ideLabel: string | null }>> => {
+  try {
+    const response = await fetch(`http://${host}:${port}/api/mcp-stdio/list`);
+    if (!response.ok) return [];
+    const data = (await response.json()) as { data?: { servers?: unknown[] } };
+    const servers = data?.data?.servers;
+    if (!Array.isArray(servers)) return [];
+    return servers.map((s) => {
+      const entry = s as { pid: number; startedAt: string; ideLabel: string | null };
+      return {
+        pid: entry.pid,
+        startedAt: entry.startedAt,
+        ideLabel: entry.ideLabel
+      };
+    });
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Kill all MCP stdio servers registered with the core service.
+ * Called during `ai-collab stop` to ensure MCP servers don't outlive the core.
+ */
+const killRegisteredMcpServers = async (
+  host = defaultHost,
+  port = defaultPort
+): Promise<{ killed: number[]; failed: number[] }> => {
+  const servers = await getRegisteredMcpServers(host, port);
+  const killed: number[] = [];
+  const failed: number[] = [];
+
+  for (const server of servers) {
+    try {
+      process.kill(server.pid);
+      killed.push(server.pid);
+    } catch {
+      // Process may already be dead
+      failed.push(server.pid);
+    }
+  }
+
+  return { killed, failed };
 };
 
 export const runDoctor = async (projectRoot: string) => {

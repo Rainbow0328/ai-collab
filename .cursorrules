@@ -1,0 +1,38 @@
+# Frontend Design Skills — Cursor Rules
+# This file makes skills discoverable in Cursor IDE.
+# For detailed skill usage, see individual SKILL.md files.
+
+## Available Skills
+
+### Core Design
+- Use `skills-src/ui-design/SKILL.md` for layout, grids, visual hierarchy, components, whitespace
+- Use `skills-src/ux-design/SKILL.md` for user research, information architecture, interaction patterns
+
+### Typography, Color & Accessibility
+- Use `skills-src/web-typography/SKILL.md` for font selection, pairing, fluid typography, scales
+- Use `skills-src/color-theory/SKILL.md` for color schemes, 60-30-10, contrast, dark mode
+- Use `skills-src/accessibility/SKILL.md` for WCAG, BFSG, semantic HTML, ARIA, keyboard nav
+
+### Implementation
+- Use `skills-src/usability/SKILL.md` for heuristic evaluation, form design, conversion
+- Use `skills-src/responsive-design/SKILL.md` for mobile-first, breakpoints, fluid grids
+- Use `skills-src/navigation-design/SKILL.md` for menu patterns, breadcrumbs, IA
+- Use `skills-src/images-media/SKILL.md` for image optimization, WebP/AVIF, SVG, lazy loading
+- Use `skills-src/branding-identity/SKILL.md` for brand strategy, corporate design, tone of voice
+
+### Strategy & Process
+- Use `skills-src/customer-journey/SKILL.md` for personas, touchpoints, onboarding
+- Use `skills-src/design-process/SKILL.md` for briefing, wireframing, prototyping, handoff
+- Use `skills-src/ai-design-workflow/SKILL.md` for AI integration in design workflow
+- Use `skills-src/landing-pages/SKILL.md` for conversion structure, CTAs, A/B testing
+- Use `skills-src/website-audit/SKILL.md` for site analysis, relaunch planning, SEO migration
+
+### Trends & Modern Patterns
+- Use `skills-src/design-trends/SKILL.md` for current award-winning patterns, motion, trends
+- Use `skills-src/ui-patterns/SKILL.md` for hero, cards, navigation, pricing, testimonials
+- Use `skills-src/visual-direction/SKILL.md` for color/typography/layout trend intelligence
+- Use `skills-src/component-patterns/SKILL.md` for compound components, design tokens, theming
+- Use `skills-src/agent-ui-design/SKILL.md` for chat interfaces, streaming UI, agent UX
+
+### Design Review
+- Use `skills-src/webdesign-review/SKILL.md` for comprehensive design review (orchestrates all skills)

@@ -169,13 +169,9 @@ const main = async () => {
       env
     });
 
-    assert(
-      hostResolve.op === "HOST_DECISION_REQUIRED",
-      `resolve should return HOST_DECISION_REQUIRED, got ${hostResolve.op}`
-    );
-
+    const hostResolveNextArgs = assertExecuteCmd(hostResolve, "resolve");
     const hostAwaitAfterResolve = await runCliJson({
-      args: ["await", hostName, "--session", sessionName],
+      args: hostResolveNextArgs,
       env
     });
 
@@ -185,7 +181,7 @@ const main = async () => {
     );
 
     assert(
-      hostAwaitMessage.op === "PROCESS_CLAIMED_MESSAGES" &&
+      hostAwaitMessage.op === "PROCESS_CLAIMED_MESSAGE" &&
         hostAwaitMessage.kind === "task" &&
         hostAwaitMessage.message?.content === "请 host 本地处理并回复：host execute 成功",
       "await should expose the normalized host task"
