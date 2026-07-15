@@ -2,9 +2,18 @@ node_modules/
 dist/
 coverage/
 .turbo/
+.cache/
+.vite/
+.eslintcache
+.pnpm-store/
+.npm/
 .DS_Store
 *.log
 *.sqlite
+*.sqlite-journal
+*.db
+*.db-shm
+*.db-wal
 *.sqlite-shm
 *.sqlite-wal
 .ai-collab/
@@ -29,6 +38,15 @@ log/
 .cursor/
 .aider/
 .codebuddy/
+.opencode/
+.windsurf/
+.augment/
+.continue/
+.cline/
+.roo/
+.kilocode/
+.gemini/
+.catpaw/
 
 # Data
 .knowledge/
@@ -53,6 +71,7 @@ Desktop.ini
 *.swo
 *~
 /apps/web/docs/
+apps/web/apps/
 
 # Build artifacts and debug output
 *.tsbuildinfo
