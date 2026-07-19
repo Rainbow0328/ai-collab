@@ -177,6 +177,9 @@ export const schemaDDL = `
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     model_id TEXT NOT NULL,
+    context_window_tokens INTEGER NOT NULL DEFAULT 128000,
+    max_output_tokens INTEGER NOT NULL DEFAULT 4096,
+    context_reserve_tokens INTEGER NOT NULL DEFAULT 1000,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -197,6 +200,10 @@ export const schemaDDL = `
     current_step TEXT,
     last_error TEXT,
     last_tick_at TEXT,
+    last_self_maintenance_at TEXT,
+    external_mcp_server_ids_json TEXT NOT NULL DEFAULT '[]',
+    custom_duty TEXT,
+    custom_skill_ids_json TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -216,6 +223,7 @@ export const schemaDDL = `
     edges_json TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     builtin INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'planning',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -299,6 +307,36 @@ export const schemaDDL = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  -- ============================================
+  -- agent_context_snapshots: 角色级上下文持久化
+  -- 存储 Web Agent 的短期记忆和滚动摘要
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS agent_context_snapshots (
+    runtime_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+
+    conversation_summary TEXT,
+
+    recent_turns_json TEXT NOT NULL DEFAULT '[]',
+
+    confirmed_decisions_json TEXT NOT NULL DEFAULT '[]',
+    unresolved_questions_json TEXT NOT NULL DEFAULT '[]',
+    pending_actions_json TEXT NOT NULL DEFAULT '[]',
+
+    last_processed_message_id TEXT,
+    summary_revision INTEGER NOT NULL DEFAULT 0,
+
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_agent_context_snapshots_session
+  ON agent_context_snapshots(session_id);
+
+  CREATE INDEX IF NOT EXISTS idx_agent_context_snapshots_agent
+  ON agent_context_snapshots(agent_id);
 
   -- 记录 schema 版本
   INSERT OR IGNORE INTO schema_version (version, applied_at)

@@ -32,7 +32,7 @@ When you have multiple AI clients like Trae, Cursor, and Claude Desktop working 
 
 | Role | Recommended AI | Responsibilities |
 |------|---------------|------------------|
-| **Host** | Trae AI | Task breakdown, distribution, result integration, knowledge base construction and adjudication |
+| **Host** | Trae AI | Architecture design, task breakdown, dispatching, result integration, and knowledge adjudication |
 | **Worker** | Cursor / Claude | Focus on executing specific tasks, submitting structured reports |
 | **Knowledge Keeper** | Any AI | Maintains knowledge base and user profiles on Host's delegation |
 
@@ -42,7 +42,7 @@ When you have multiple AI clients like Trae, Cursor, and Claude Desktop working 
 - **L2 -- Domain Rules**: Module boundaries, protocols, state machines, cross-module collaboration rules
 - **L3 -- Field Alignment**: Fields, interface parameters, data structures, error codes
 
-Host builds and adjudicates the knowledge base. Workers read it and provide candidate updates in their reports. Knowledge references use fragment-level format (`l2/current#message-protocol`) for precise delivery without wasting tokens.
+Host adjudicates knowledge and decides the maintenance strategy. If a Knowledge Keeper exists in the session, Host delegates knowledge maintenance to it; otherwise Host maintains the knowledge base directly. Workers read the knowledge base and provide candidate updates in their reports. Knowledge references use fragment-level format (`l2/current#message-protocol`) for precise delivery without wasting tokens.
 
 ### Collaboration Loop
 
@@ -83,8 +83,7 @@ loopmarshal/
 │   └── vscode-extension/  # VS Code extension adapter
 ├── skills/            # AI behavior constraint templates (soft constraints)
 │   ├── host/          # Host skills (claude/codex/cursor/trae/general)
-│   ├── worker/        # Worker skills (claude/codex/cursor/trae/general)
-│   └── knowledge-keeper/
+│   └── worker/        # Worker skills (claude/codex/cursor/trae/general)
 └── rule/              # Enforced rules (hard constraints, highest priority)
 ```
 
@@ -110,31 +109,64 @@ pnpm run link:cli
 loopmarshal start
 ```
 
-After startup, both the backend service (Fastify, port 42688) and the web dashboard (Vite, port 5173) will be running. Use `--no-web` to skip the frontend, `--daemon` to run in background.
+After startup, both the backend service (Fastify, port 42688) and the web dashboard (Vite, port 5173) will be running. The public startup entry is `loopmarshal start`.
+
+`loopmarshal start` does not start the MCP stdio server directly. The AI IDE/CLI starts it from the MCP config with `loopmarshal mcp serve`.
+
+Next, configure the LoopMarshal MCP server in your AI IDE/CLI and set the host MCP tool timeout according to your workload. One internal LoopMarshal wait chain lasts about 55 minutes by default, so configure a longer host timeout. See [MCP配置与最长等待时间](./MCP配置与最长等待时间.md) for copy-paste examples.
+
+For JSON-based MCP clients:
+
+```json
+{
+  "mcpServers": {
+    "loopmarshal": {
+      "command": "npx",
+      "args": ["loopmarshal", "mcp", "serve"],
+      "timeout": 86400000
+    }
+  }
+}
+```
+
+If your AI IDE/CLI does not support `timeout`, remove that line and keep only `command` and `args`.
 
 ### In Host IDE (e.g., Trae)
 
 ```
-You are the host for this project. Your name is trae. Create and join session demo-collab-01.
+You are the Host for this project. Your name is trae. Create and join session demo-collab-01.
 ```
 
 ### In Worker IDE (e.g., Cursor)
 
 ```
-You are a worker for this project. Your name is cursor. Join session demo-collab-01. Your responsibility is frontend development.
+You are a Worker for this project. Your name is cursor. Join session demo-collab-01.
+Your responsibility is frontend development.
 ```
 
 ### Host Views Session Members
 
 ```
-View current project members
+List current members in session demo-collab-01.
 ```
 
-Then break down tasks based on member capabilities and use `dispatch-many` to distribute.
+### Host Starts Dispatching Tasks
+
+```
+I want to build an e-commerce admin system with product management, order management, user management, and access control. As Host, please drive this goal according to the current session members and their responsibilities.
+```
+
+### Worker Waits, Executes, and Reports
+
+```
+Enter the wait chain.
+```
 
 ### Import Skills
 
-In the `skills/` folder, skills are organized by role (host/worker/knowledge-keeper) and by IDE (claude/codex/cursor/trae/general). Use `general/` if no specific match exists.
+In the `skills/` folder, skills are organized by role (host/worker) and by IDE (claude/codex/cursor/trae/general).
+Each IDE-specific `SKILL.md` is self-contained and already includes both the main role rules and IDE-specific constraints.
+When installing, copy only one `SKILL.md` for the current role and IDE. Use `general/` if no specific match exists.
 
 ### Rule (Optional)
 
@@ -189,47 +221,44 @@ But Rule is a hard law that must not be violated under any circumstances. This i
 ### Service Management
 
 ```bash
-loopmarshal start [--no-web] [--daemon]   # Start service (with web dashboard)
-loopmarshal stop                           # Stop service
-loopmarshal status                         # Check status
-loopmarshal doctor                         # Diagnostic check
-loopmarshal logs                           # View logs
+loopmarshal start    # Start local core service and web dashboard
+loopmarshal stop     # Stop service
+loopmarshal status   # Check status
+loopmarshal doctor   # Diagnostic check
+loopmarshal logs     # View logs
 ```
+
+### MCP Integration
+
+```bash
+loopmarshal mcp status
+```
+
+Configure the MCP server entry and host tool timeout manually in your AI IDE/CLI. See [MCP配置与最长等待时间](./MCP配置与最长等待时间.md).
 
 ### Session & Agent
 
 ```bash
 loopmarshal attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<duty>"
 loopmarshal reset <name> --session <session>
-loopmarshal members --session <session>
+loopmarshal members <hostName> --session <session>
 ```
 
 ### Task Dispatch & Execution
 
 ```bash
-loopmarshal dispatch-many --session <session> --tasks '[...]'
+loopmarshal dispatch-many <hostName> --session <session> --task "<workerName>::<task content>"
 loopmarshal await <name> --session <session>
 loopmarshal submit <name> --session <session> --content "<result>"
-loopmarshal resolve --session <session> --message-id <id> --action <approve|reject|revise>
+loopmarshal resolve <hostName> --session <session> --summary "<processing summary>" --action <completed|failed|delegated>
 ```
 
 ### Knowledge Base
 
 ```bash
-loopmarshal knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
-loopmarshal knowledge list --session <session>
-loopmarshal knowledge judge --session <session> --message-id <id>
-loopmarshal knowledge fulfil-judgement --session <session> --judgement-id <id>
-loopmarshal knowledge read-current --session <session>
-loopmarshal knowledge update-current --session <session>
-```
-
-### User Profile
-
-```bash
-loopmarshal profile get <name> --session <session> [key]
-loopmarshal profile set <name> --session <session> <key> <value>
-loopmarshal profile delete <name> --session <session> <key>
+loopmarshal knowledge read <name> --session <session> --ref "L1/session-direction#current-goal"
+loopmarshal knowledge list <name> --session <session> [--level <l1|l2|l3>] [--query <query>]
+loopmarshal knowledge upsert <name> --session <session> --level <l1|l2|l3> --slug <slug> --title "<title>" --content "<content>"
 ```
 
 ---
@@ -273,8 +302,7 @@ loopmarshal/
 │
 ├── skills/            # AI behavior constraint templates (soft constraints)
 │   ├── host/
-│   ├── worker/
-│   └── knowledge-keeper/
+│   └── worker/
 │
 ├── rule/              # Enforced rules (hard constraints, highest priority)
 │

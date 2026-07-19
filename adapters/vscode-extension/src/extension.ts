@@ -19,7 +19,7 @@ type SessionState = {
   sessionId: string;
   agentId: string;
   agentName: string;
-  role: "host" | "worker" | "observer";
+  role: "host" | "worker" | "observer" | "knowledge_keeper";
   displayName: string;
 };
 

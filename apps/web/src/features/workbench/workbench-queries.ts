@@ -83,26 +83,25 @@ export function useCreateHostSessionMutation() {
       });
 
       // 2. Create web runtime for the host
-      try {
-        const runtime = await api.webRuntimes.create({
-          sessionId: session.id,
-          agentId: agent.id,
-          role: "host",
-          modelConfigId: input.modelConfigId,
-          toolsetId: "host",
-        });
+      const runtime = await api.webRuntimes.create({
+        sessionId: session.id,
+        agentId: agent.id,
+        role: "host",
+        modelConfigId: input.modelConfigId,
+        toolsetId: "host",
+      });
 
-        // 3. Start the runtime
-        try {
-          await api.webRuntimes.start(runtime.id);
-        } catch {
-          // Runtime start failure is non-fatal — user can retry from the panel
-        }
-      } catch {
-        // Runtime creation failure is non-fatal — user can retry from the panel
+      // 3. Start the runtime
+      let runtimeStarted = true;
+      try {
+        await api.webRuntimes.start(runtime.id);
+      } catch (startErr) {
+        // Runtime start failure is non-fatal — session is created but runtime needs manual start
+        runtimeStarted = false;
+        console.warn("Runtime start failed:", startErr);
       }
 
-      return { agent, session };
+      return { agent, session, runtime, runtimeStarted };
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.sessions });
@@ -123,14 +122,22 @@ export function useAddKnowledgeKeeperMutation(sessionId: string | null | undefin
         modelConfigId: input.modelConfigId,
         roleDescription: "Maintain project knowledge and user preferences for this session.",
       });
-      const runtime = await api.webRuntimes.create({
+            const runtime = await api.webRuntimes.create({
         sessionId,
         agentId: joined.agent.id,
         role: "knowledge_keeper",
         modelConfigId: input.modelConfigId,
         toolsetId: "knowledge_keeper",
       });
-      return { agent: joined.agent, runtime };
+      let runtimeStarted = true;
+      try {
+        await api.webRuntimes.start(runtime.id);
+      } catch (startErr) {
+        // Runtime start failure is non-fatal; users can retry from the panel.
+        runtimeStarted = false;
+        console.warn("Runtime start failed:", startErr);
+      }
+      return { agent: joined.agent, runtime, runtimeStarted };
     },
     onSuccess: () => invalidateSession(qc, sessionId),
   });
@@ -191,6 +198,22 @@ export function useDeleteRuntimeMutation(sessionId: string | null | undefined) {
   return useMutation({
     mutationFn: (runtimeId: string) => api.webRuntimes.delete(runtimeId),
     onSuccess: () => invalidateSession(qc, sessionId),
+  });
+}
+
+export function useUpdateRuntimeMutation(sessionId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { runtimeId: string; customDuty?: string | null; customSkillIds?: string[]; modelConfigId?: string }) =>
+      api.webRuntimes.update(input.runtimeId, input),
+    onSuccess: () => invalidateSession(qc, sessionId),
+  });
+}
+
+export function useWorkflowsQuery() {
+  return useQuery({
+    queryKey: ["workflows"] as const,
+    queryFn: () => api.workflows.list(),
   });
 }
 

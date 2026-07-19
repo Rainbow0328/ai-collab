@@ -6,7 +6,8 @@
   "packageManager": "pnpm@10.10.0",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "adapters/*"
   ],
   "devDependencies": {
     "@loopmarshal/core": "workspace:*",
@@ -18,10 +19,6 @@
     "typescript": "^5.9.2"
   },
   "scripts": {
-    "start": "node loopmarshal-start.js",
-    "start:web": "cd apps/web && pnpm dev",
-    "start:core": "cd apps/core && node dist/apps/core/src/index.js",
-    "dev:core": "cd apps/core && pnpm build && node dist/apps/core/src/index.js",
     "build": "npm run build --workspaces --if-present",
     "clean": "node -e \"const{rmSync}=require('fs');for(const p of['apps/cli/dist','apps/core/dist','packages/protocol/dist','packages/shared/dist','packages/sdk/dist','packages/store/dist']){try{rmSync(p,{recursive:true,force:true})}catch{}}\"",
     "link:cli": "npm run build && npm link --workspace apps/cli",

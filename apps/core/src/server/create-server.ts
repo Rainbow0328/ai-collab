@@ -111,7 +111,15 @@ export type ServerServices = {
   collaborationWaitService: CollaborationWaitService;
   webAgentRuntimeService: WebAgentRuntimeService;
   webAgentRuntimeExecutorService: WebAgentRuntimeExecutorService;
+  agentWorkflowRegistry: import("../services/agent-workflow-registry.js").AgentWorkflowRegistry;
+  agentContextService: import("../services/agent-context-service.js").AgentContextService;
   workflowDefinitionService: WorkflowDefinitionService;
+  /** 可选的 LLM 覆盖，用于测试时注入 Fake LLM，替代 createLlmRequest 的 HTTP 调用 */
+  llmOverride?: (
+    systemPrompt: string,
+    userContent: string,
+    tools?: unknown[]
+  ) => Promise<{ content: string; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> }>;
 };
 
 export const createServer = async (
@@ -888,6 +896,9 @@ export const createServer = async (
       modelId: string;
       baseUrl?: string;
       apiKey?: string;
+      contextWindowTokens?: number;
+      maxOutputTokens?: number;
+      contextReserveTokens?: number;
     };
     const timestamp = new Date().toISOString();
     const id = body.id ?? `model-${Date.now()}`;
@@ -898,6 +909,9 @@ export const createServer = async (
       modelId: body.modelId,
       apiKey: body.apiKey ?? null,
       baseUrl: body.baseUrl ?? null,
+      contextWindowTokens: body.contextWindowTokens ?? 128000,
+      maxOutputTokens: body.maxOutputTokens ?? 4096,
+      contextReserveTokens: body.contextReserveTokens ?? 1000,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -1013,10 +1027,32 @@ export const createServer = async (
     );
   });
 
-  server.delete("/api/web-agent-runtimes/:runtimeId", async (request) => {
+  server.delete("/api/web-agent-runtimes/:runtimeId", async (request, reply) => {
     const params = request.params as { runtimeId: string };
+    const runtime = services.webAgentRuntimeService.get(params.runtimeId);
+    // Guard: only knowledge_keeper runtimes can be deleted from the web.
+    // Host runtime is the session core and must not be deleted.
+    // Other roles (worker) are managed by their respective IDEs.
+    if (!runtime) {
+      return successResponse({ deleted: false, error: "Runtime not found" });
+    }
+    if (runtime.role !== "knowledge_keeper") {
+      reply.code(403);
+      return successResponse({
+        deleted: false,
+        error: `Cannot delete runtime with role "${runtime.role}". Only knowledge_keeper runtimes can be deleted from the web.`,
+      });
+    }
     services.webAgentRuntimeExecutorService.stop(params.runtimeId);
-    return successResponse(services.webAgentRuntimeService.delete(params.runtimeId));
+    services.webAgentRuntimeService.delete(params.runtimeId);
+    // Also remove the agent from the session so it disappears from the member list
+    try {
+      services.sessionService.removeAgent(runtime.agentId);
+    } catch {
+      // Agent removal failure is non-fatal — runtime is already deleted
+    }
+    broadcastConsoleUpdate(runtime.sessionId, "member_changed");
+    return successResponse({ deleted: true });
   });
 
   server.post("/api/web-agent-runtimes/:runtimeId/start", async (request) => {

@@ -23,3 +23,4 @@ export * from "./mcp.js";
 export * from "./web-runtime.js";
 export * from "./workflow.js";
 export * from "./user-preferences.js";
+export * from "./agent-context.js";

@@ -29,6 +29,25 @@ import {
   type CliIdentityContext,
   writeCliIdentity
 } from "./context.js";
+import {
+  printJson,
+  buildIdentity,
+  loadRuntimeModule,
+  requireIdentityOption,
+  isTruthyEnvValue,
+  pickDefinedFields
+} from "./utils/shared-helpers.js";
+import {
+  getRuntimeStringField,
+  getRuntimeRecordField,
+  buildWindowDebugResult,
+  parseMessagePayloadView,
+  extractPayloadRecord,
+  buildControlMessageView,
+  appendControlMessageViews,
+  dedupeControlMessageViews,
+  inferClaimedMessageKind
+} from "./utils/runtime-helpers.js";
 import { withLocalLoopLock } from "./local-loop-lock.js";
 import { clearLocalLoopLocksForIdentity } from "./local-loop-lock.js";
 import {
@@ -54,15 +73,6 @@ import {
   createCommandTrace,
   getCommandTraceStorePath
 } from "./command-trace.js";
-import {
-  configureMcpTimeouts,
-  type McpTimeoutConfigureTarget
-} from "./mcp-timeout-config.js";
-import {
-  setupMcp,
-  type McpSetupTarget
-} from "./mcp-setup.js";
-
 import {
   DEFAULT_LOOP_INTERVAL_SECONDS,
   DEFAULT_LOOP_MAX_ROUNDS,
@@ -100,34 +110,6 @@ const runtimeTerminalProgressHints = [
 ] as const;
 const finalRuntimeResultPreamble =
   "INTERNAL: this JSON is the final completed result of the loopmarshal wait command. Ignore any earlier terminal progress text such as running, no output, background status, or streaming command wrappers. ";
-
-const printJson = (value: unknown) => {
-  console.log(JSON.stringify(wrapForDisplay(value), null, 2));
-};
-
-const buildIdentity = (sessionName: string, agentName: string): string => {
-  return `${sessionName}::${agentName}`;
-};
-
-const loadRuntimeModule = async () => {
-  return import("./runtime.js");
-};
-
-const requireIdentityOption = (identity: string | undefined): string => {
-  if (!identity) {
-    throw new Error("必须显式提供 --identity。");
-  }
-
-  return identity;
-};
-
-const isTruthyEnvValue = (value: string | undefined): boolean => {
-  if (!value) {
-    return false;
-  }
-
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-};
 
 
 const requireLiveCliIdentity = async (
@@ -482,7 +464,7 @@ const persistWindowRuntimeState = async (
     sessionName: profile.sessionName,
     windowName: profile.windowName,
     identity: profile.identity,
-    role: profile.role === "host" ? "host" : "worker",
+    role: profile.role === "host" ? "host" : profile.role === "knowledge_keeper" ? "knowledge_keeper" : "worker",
     activeFlow: existing?.activeFlow ?? null,
     activeWaitPid: existing?.activeWaitPid ?? null,
     currentMessageId: existing?.currentMessageId ?? null,
@@ -581,23 +563,6 @@ type TraceStepSink = {
   step: (event: CommandTraceEvent, data: unknown) => void;
 };
 
-const getRuntimeStringField = (
-  record: Record<string, unknown>,
-  key: string
-): string | null => {
-  const value = record[key];
-  return typeof value === "string" ? value : null;
-};
-
-const getRuntimeRecordField = (
-  record: Record<string, unknown>,
-  key: string
-): Record<string, unknown> | null => {
-  const value = record[key];
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-};
 
 const updateWindowStateFromResult = async (
   profile: WindowProfile,
@@ -727,163 +692,7 @@ const updateWindowStateFromResult = async (
   });
 };
 
-const pickDefinedFields = (
-  source: Record<string, unknown>,
-  keys: string[]
-): Record<string, unknown> => {
-  const next: Record<string, unknown> = {};
-  for (const key of keys) {
-    if (source[key] !== undefined) {
-      next[key] = source[key];
-    }
-  }
-  return next;
-};
 
-const buildWindowDebugResult = (
-  profile: WindowProfile,
-  commandName: string,
-  result: Record<string, unknown>,
-  runtimeState: WindowRuntimeState,
-  commandTrace?: {
-    commandRunId: string;
-    tracePath: string;
-  }
-) => {
-  const {
-    intervalSeconds: _ignoredIntervalSeconds,
-    maxRounds: _ignoredMaxRounds,
-    ...sanitizedResult
-  } = result;
-
-  return {
-    command: commandName,
-    window: {
-      name: profile.windowName,
-      sessionName: profile.sessionName,
-      role: profile.role,
-      platform: profile.platform,
-      identity: profile.identity,
-      agentName: profile.agentName
-    },
-    waitPolicy: {
-      ownedByRuntime: true,
-      userConfigurable: false,
-      doNotChooseIntervalOrRounds: true
-    },
-    runtimeState,
-    ...(commandTrace ? { commandTrace } : {}),
-    ...sanitizedResult
-  };
-};
-
-const buildControlMessageView = (record: unknown) => {
-  const messageRecord =
-    record && typeof record === "object" && !Array.isArray(record)
-      ? (record as Record<string, unknown>)
-      : null;
-
-  if (!messageRecord) {
-    return null;
-  }
-
-  const payloadView = parseMessagePayloadView(messageRecord.payload ?? null);
-
-  return {
-    messageId:
-      getRuntimeStringField(messageRecord, "messageId") ??
-      getRuntimeStringField(messageRecord, "id"),
-    correlationId: getRuntimeStringField(messageRecord, "correlationId"),
-    type: getRuntimeStringField(messageRecord, "type"),
-    content:
-      getRuntimeStringField(messageRecord, "content") ?? payloadView.content,
-    result: getRuntimeStringField(messageRecord, "result") ?? payloadView.result,
-    payload: messageRecord.payload ?? null
-  };
-};
-
-const appendControlMessageViews = (
-  items: Array<{
-    messageId: string | null;
-    correlationId: string | null;
-    type: string | null;
-    content: string | null;
-    result: string | null;
-    payload: unknown;
-  }>,
-  candidate: unknown
-) => {
-  if (Array.isArray(candidate)) {
-    for (const item of candidate) {
-      const view = buildControlMessageView(item);
-      if (view) {
-        items.push(view);
-      }
-    }
-    return;
-  }
-
-  const view = buildControlMessageView(candidate);
-  if (view) {
-    items.push(view);
-  }
-};
-
-const dedupeControlMessageViews = (
-  items: Array<{
-    messageId: string | null;
-    correlationId: string | null;
-    type: string | null;
-    content: string | null;
-    result: string | null;
-    payload: unknown;
-  }>
-) => {
-  const seen = new Set<string>();
-  const deduped: typeof items = [];
-
-  for (const item of items) {
-    const key =
-      item.messageId ??
-      `${item.correlationId ?? ""}:${item.type ?? ""}:${item.content ?? ""}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    deduped.push(item);
-  }
-
-  return deduped;
-};
-
-const inferClaimedMessageKind = (result: Record<string, unknown>) => {
-  const messageKind = getRuntimeStringField(result, "messageKind");
-  if (messageKind === "task" || messageKind === "report") {
-    return messageKind;
-  }
-
-  const itemKind = getRuntimeStringField(result, "itemKind");
-  if (itemKind === "task" || itemKind === "report") {
-    return itemKind;
-  }
-
-  const status = getRuntimeStringField(result, "status");
-  if (status === "task_claimed" || status === "task-received") {
-    return "task";
-  }
-  if (status === "message_claimed" || status === "report-received") {
-    return "report";
-  }
-
-  if (result.task || result.tasks) {
-    return "task";
-  }
-  if (result.report || result.reports) {
-    return "report";
-  }
-
-  return null;
-};
 
 const inferRuntimeRole = (result: Record<string, unknown>) => {
   const workflowRole = getRuntimeStringField(result, "workflowRole");
@@ -2246,34 +2055,6 @@ type RuntimeMessageSummary = {
   result: string | null;
   payload: unknown;
   createdAt: string;
-};
-
-const parseMessagePayloadView = (payload: unknown) => {
-  if (!payload || typeof payload !== "object") {
-    return {
-      content: null,
-      result: null
-    };
-  }
-
-  const payloadRecord = payload as Record<string, unknown>;
-
-  return {
-    content:
-      typeof payloadRecord.content === "string" ? payloadRecord.content : null,
-    result:
-      typeof payloadRecord.result === "string" ? payloadRecord.result : null
-  };
-};
-
-const extractPayloadRecord = (
-  payload: unknown
-): Record<string, unknown> | null => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return null;
-  }
-
-  return payload as Record<string, unknown>;
 };
 
 const summarizeMessage = (message: MessageRecord): RuntimeMessageSummary => {
@@ -3921,31 +3702,47 @@ const executeWindowHostDispatchCommand = async (options: {
         )
     );
 
-    const rawResult =
-      locked.status === "already_running"
-        ? buildAlreadyRunningResult({
-            mode: options.commandName,
-            identity: profile.identity,
-            flow: "host-cycle",
-            existing: {
-              pid: locked.lock.metadata?.pid ?? null,
-              acquiredAt: locked.lock.metadata?.acquiredAt ?? null
-            }
-          })
-        : buildExecuteInternalCommandResult(
-            locked.value as Record<string, unknown>,
-            {
-              commandArgs: [
-                "await",
-                options.windowName,
-                "--session",
-                options.sessionName
-              ],
-              automationState: "host_dispatch_handoff",
-              internalInstruction:
-                "Do not reply to the user. The task batch has already been dispatched. Continue immediately by entering the host wait command."
-            }
-          );
+    if (locked.status !== "already_running") {
+      const dispatchedResult = locked.value as Record<string, unknown>;
+      const runtimeState = await updateWindowStateFromResult(
+        profile,
+        options.commandName,
+        dispatchedResult
+      );
+      trace.step("runtime_state_updated", runtimeState);
+      trace.finish({
+        status: "dispatched",
+        nextAction: "await"
+      });
+
+      await executeWindowWaitCommand({
+        commandName: "await",
+        displayCommandName: "await",
+        waitAlias: "await",
+        windowName: options.windowName,
+        sessionName: options.sessionName,
+        traceInput: {
+          sessionName: options.sessionName,
+          windowName: options.windowName,
+          commandAlias: "await",
+          originCommand: options.commandName
+        },
+        followContinuations: true,
+        continuation: {
+          continueOrigin: options.commandName
+        }
+      });
+      return;
+    }
+    const rawResult = buildAlreadyRunningResult({
+      mode: options.commandName,
+      identity: profile.identity,
+      flow: "host-cycle",
+      existing: {
+        pid: locked.lock.metadata?.pid ?? null,
+        acquiredAt: locked.lock.metadata?.acquiredAt ?? null
+      }
+    });
     const runtimeState = await updateWindowStateFromResult(
       profile,
       options.commandName,
@@ -4314,6 +4111,7 @@ program
           windowName: name,
           commandAlias: "await"
         },
+        followContinuations: true,
         continuation: {
           continueSeq: options.continueSeq,
           continueStep: options.continueStep,
@@ -4856,6 +4654,7 @@ const executeWindowWaitCommand = async (options: {
   windowName: string;
   sessionName: string;
   traceInput: Record<string, unknown>;
+  followContinuations?: boolean;
   continuation?: {
     continueSeq?: string | undefined;
     continueStep?: string | undefined;
@@ -4974,6 +4773,24 @@ const executeWindowWaitCommand = async (options: {
         }
       );
       trace.finish(response.debug);
+      trace.finish(response.debug);
+    if (
+        options.followContinuations &&
+        getRuntimeStringField(rawResult as Record<string, unknown>, "resultType") === "execute_cmd" &&
+        continuationState.canContinue
+      ) {
+        return executeWindowWaitCommand({
+          ...options,
+          waitAlias: continuationState.nextAlias,
+          continuation: {
+            continueSeq: continuationState.sequenceId,
+            continueStep: String(continuationState.nextStep),
+            continuePass: String(continuationState.nextPass),
+            continueBudget: String(continuationState.totalSlices),
+            continueOrigin: continuationState.originCommand
+          }
+        });
+      }
       printJson(response.control);
       return;
     }
@@ -5057,6 +4874,23 @@ const executeWindowWaitCommand = async (options: {
       }
     );
     trace.finish(response.debug);
+    if (
+      options.followContinuations &&
+      getRuntimeStringField(rawResult as Record<string, unknown>, "resultType") === "execute_cmd" &&
+      continuationState.canContinue
+    ) {
+      return executeWindowWaitCommand({
+        ...options,
+        waitAlias: continuationState.nextAlias,
+        continuation: {
+          continueSeq: continuationState.sequenceId,
+          continueStep: String(continuationState.nextStep),
+          continuePass: String(continuationState.nextPass),
+          continueBudget: String(continuationState.totalSlices),
+          continueOrigin: continuationState.originCommand
+        }
+      });
+    }
     printJson(response.control);
   } catch (error: unknown) {
     trace.fail(error);
@@ -5074,30 +4908,10 @@ const executeWindowWaitCommand = async (options: {
 program
   .command("start")
   .description("Start the local loopmarshal core service and web dashboard")
-  .option("--daemon", "Start the local core as a background process")
-  .option("--core-only", "Start only the core service without the web dashboard")
-  .action(async (options: { daemon?: boolean; coreOnly?: boolean }) => {
+  .action(async () => {
     const runtime = await loadRuntimeModule();
-    if (options.daemon) {
-      const status = await runtime.startCore(projectRoot);
-      console.log(
-        JSON.stringify(
-          {
-            mode: "daemon",
-            state: status.state,
-            reachable: status.reachable,
-            pid: status.metadata?.pid ?? null,
-            dashboardUrl: runtime.getDashboardUrl(status.metadata)
-          },
-          null,
-          2
-        )
-      );
-      return;
-    }
-
     const webDir = path.resolve(projectRoot, "apps", "web");
-    const startWeb = !options.coreOnly && fs.existsSync(path.join(webDir, "package.json"));
+    const startWeb = fs.existsSync(path.join(webDir, "package.json"));
 
     console.log(
       JSON.stringify(
@@ -5172,7 +4986,7 @@ mcpCommand
       console.log(
         JSON.stringify(
           {
-            error: "loopmarshal core is not running. Start it with 'loopmarshal start --daemon'."
+            error: "loopmarshal core is not running. Start it with 'loopmarshal start'."
           },
           null,
           2
@@ -5239,77 +5053,11 @@ program
   });
 
 mcpCommand
-  .command("configure-timeout")
-  .description("Configure supported AI IDE MCP tool timeouts for loopmarshal")
-  .option("--target <target>", "auto, claude, codex, cursor, or trae", "auto")
-  .option("--timeout <seconds>", "MCP client tool timeout seconds", "3600")
-  .option("--dry-run", "Print planned changes without writing files", false)
-  .action(async (options: {
-    target: string;
-    timeout: string;
-    dryRun?: boolean;
-  }) => {
-    const target = options.target as McpTimeoutConfigureTarget;
-    if (!["auto", "claude", "codex", "cursor", "trae"].includes(target)) {
-      throw new Error(`Unknown MCP timeout target: ${options.target}`);
-    }
-    const timeoutSeconds = Number(options.timeout);
-    if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-      throw new Error(`Invalid timeout seconds: ${options.timeout}`);
-    }
-    const results = await configureMcpTimeouts({
-      projectRoot,
-      target,
-      timeoutSeconds,
-      dryRun: Boolean(options.dryRun)
-    });
-    console.log(JSON.stringify({ results }, null, 2));
-  });
-
-mcpCommand
   .command("serve")
   .description("Start the loopmarshal MCP stdio server (for IDE MCP integration)")
   .action(async () => {
     // The MCP server module self-starts on import.
     await import("./mcp-stdio-server.js");
-  });
-
-mcpCommand
-  .command("setup")
-  .description("One-click setup: configure MCP server entry and timeouts for AI IDEs")
-  .option("--target <target>", "auto, claude, codex, or cursor", "auto")
-  .option("--timeout <seconds>", "MCP tool timeout seconds", "3600")
-  .option("--role <role>", "Pre-declare role for tool isolation: host or worker")
-  .option("--dry-run", "Print planned changes without writing files", false)
-  .action(async (options: {
-    target: string;
-    timeout: string;
-    role?: string;
-    dryRun?: boolean;
-  }) => {
-    const target = options.target as McpSetupTarget;
-    if (!["auto", "claude", "codex", "cursor"].includes(target)) {
-      throw new Error(`Unknown MCP setup target: ${options.target}`);
-    }
-    const timeoutSeconds = Number(options.timeout);
-    if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-      throw new Error(`Invalid timeout seconds: ${options.timeout}`);
-    }
-    let role: "host" | "worker" | undefined;
-    if (options.role) {
-      if (options.role !== "host" && options.role !== "worker") {
-        throw new Error(`Invalid role: ${options.role}. Must be 'host' or 'worker'.`);
-      }
-      role = options.role;
-    }
-    const results = await setupMcp({
-      projectRoot,
-      target,
-      timeoutSeconds,
-      dryRun: Boolean(options.dryRun),
-      ...(role ? { role } : {})
-    });
-    console.log(JSON.stringify({ results }, null, 2));
   });
 
 await program.parseAsync();

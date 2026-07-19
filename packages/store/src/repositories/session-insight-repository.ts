@@ -15,6 +15,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
+  PendingUserInput,
   ReviewStatus,
   SessionInsight,
   UpdateSessionInsightInput
@@ -59,6 +60,25 @@ const parseJsonArray = (value: string): string[] => {
     return Array.isArray(parsed)
       ? parsed.filter((item): item is string => typeof item === "string")
       : [];
+  } catch {
+    return [];
+  }
+};
+
+const parsePendingUserInputArray = (value: string): PendingUserInput[] => {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is PendingUserInput =>
+        item !== null &&
+        typeof item === "object" &&
+        typeof (item as { revision?: unknown }).revision === "number" &&
+        typeof (item as { content?: unknown }).content === "string"
+    ).map((item) => ({
+      revision: (item as { revision: number }).revision,
+      content: (item as { content: string }).content,
+    }));
   } catch {
     return [];
   }
@@ -207,7 +227,7 @@ export class SessionInsightRepository {
         mergeMode,
         12
       ),
-      unappliedUserInputs: this.mergeArray(
+      unappliedUserInputs: this.mergePendingUserInputArray(
         existing?.unappliedUserInputs ?? [],
         input.unappliedUserInputs,
         mergeMode,
@@ -445,6 +465,41 @@ export class SessionInsightRepository {
     return distinct;
   }
 
+  private mergePendingUserInputArray(
+    existing: PendingUserInput[],
+    incoming: PendingUserInput[] | undefined,
+    mergeMode: "replace" | "append",
+    limit?: number
+  ): PendingUserInput[] {
+    if (incoming === undefined) {
+      const normalizedExisting = existing.filter(
+        (item) => item.content.trim().length > 0
+      );
+      if (limit && normalizedExisting.length > limit) {
+        return normalizedExisting.slice(normalizedExisting.length - limit);
+      }
+      return normalizedExisting;
+    }
+
+    const normalized = incoming.filter((item) => item.content.trim().length > 0);
+
+    if (mergeMode === "replace") {
+      const distinct = [...new Map(normalized.map((item) => [item.content, item])).values()];
+      if (limit && distinct.length > limit) {
+        return distinct.slice(distinct.length - limit);
+      }
+      return distinct;
+    }
+
+    // append mode: merge by content dedup
+    const existingContents = new Set(existing.map((item) => item.content));
+    const merged = [...existing, ...normalized.filter((item) => !existingContents.has(item.content))];
+    if (limit && merged.length > limit) {
+      return merged.slice(merged.length - limit);
+    }
+    return merged;
+  }
+
   private mapRow(row: SessionInsightRow): SessionInsight {
     return {
       sessionId: row.sessionId,
@@ -455,7 +510,7 @@ export class SessionInsightRepository {
       latestUserInput: row.latestUserInput,
       latestReportSummary: row.latestReportSummary,
       recentUserInputs: parseJsonArray(row.recentUserInputsJson),
-      unappliedUserInputs: parseJsonArray(row.unappliedUserInputsJson),
+      unappliedUserInputs: parsePendingUserInputArray(row.unappliedUserInputsJson),
       userPreferences: parseJsonArray(row.userPreferencesJson),
       acceptanceCriteria: parseJsonArray(row.acceptanceCriteriaJson),
       constraints: parseJsonArray(row.constraintsJson),

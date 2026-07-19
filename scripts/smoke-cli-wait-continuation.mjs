@@ -149,26 +149,6 @@ const main = async () => {
 
     const firstWorkerWait = await runCliJson({
       args: ["await", workerName, "--session", sessionName],
-      env
-    });
-
-    assert(
-      firstWorkerWait.op === "EXECUTE_INTERNAL_CMD",
-      "await should return an internal execution command when slice budget remains"
-    );
-    assert(
-      typeof firstWorkerWait.cmd === "string",
-      "await continuation should return a runnable internal command string"
-    );
-    assert(
-      firstWorkerWait.cmd.includes(
-        `await ${workerName} --session ${sessionName}`
-      ) && firstWorkerWait.cmd.includes("--continue-seq "),
-      "await should return a fully assembled continuation await command"
-    );
-
-    const continuedWorkerWait = await runCliJson({
-      args: internalCommandToArgs(firstWorkerWait.cmd),
       env,
       delayedActions: [
         {
@@ -180,7 +160,7 @@ const main = async () => {
               toAgentId: workerAgent.id,
               type: "instruction",
               payload: {
-                content: "请确认：续等链已接到任务",
+                content: "请确认：持续等待已接到任务",
                 result: "pending"
               },
               correlationId: `wait-cont-worker-${Date.now()}`,
@@ -191,10 +171,10 @@ const main = async () => {
     });
 
     assert(
-      continuedWorkerWait.op === "PROCESS_CLAIMED_MESSAGE" &&
-        continuedWorkerWait.status === "task_claimed" &&
-        continuedWorkerWait.message?.content === "请确认：续等链已接到任务",
-      "continued wait command should be directly executable and claim the task"
+      firstWorkerWait.op === "PROCESS_CLAIMED_MESSAGE" &&
+        firstWorkerWait.status === "task_claimed" &&
+        firstWorkerWait.message?.content === "请确认：持续等待已接到任务",
+      "await should consume internal continuations and return only after claiming the task"
     );
 
     const hostDispatch = await runCliJson({
@@ -206,21 +186,32 @@ const main = async () => {
         "--task",
         `${workerName}::请处理：host dispatch-many 续等链验证`
       ],
-      env
+      env,
+      delayedActions: [
+        {
+          delayMs: 600,
+          run: () =>
+            client.sendMessage({
+              sessionId: session.id,
+              fromAgentId: workerAgent.id,
+              toAgentId: hostAgent.id,
+              type: "result",
+              payload: {
+                content: "dispatch-many 持续等待已收到 worker 回报",
+                result: "completed"
+              },
+              correlationId: `dispatch-wait-host-${Date.now()}`,
+              idempotencyKey: `dispatch-wait-host:${Date.now()}`
+            })
+        }
+      ]
     });
 
     assert(
-      hostDispatch.op === "EXECUTE_INTERNAL_CMD",
-      "dispatch-many should return an internal execution command when no report arrives yet"
-    );
-    assert(
-      typeof hostDispatch.cmd === "string",
-      "dispatch-many continuation should return a runnable internal command string"
-    );
-    assert(
-      hostDispatch.cmd ===
-        `loopmarshal await ${hostName} --session ${sessionName}`,
-      "dispatch-many should return a fully assembled host await command"
+      hostDispatch.op === "PROCESS_CLAIMED_MESSAGE" &&
+        hostDispatch.status === "message_claimed" &&
+        hostDispatch.message?.content === "dispatch-many 持续等待已收到 worker 回报",
+      "dispatch-many should enter await and return only after claiming a worker report"
     );
 
     console.log(
@@ -228,9 +219,9 @@ const main = async () => {
         {
           sessionName,
           firstWorkerWaitOp: firstWorkerWait.op,
-          continuedWorkerWaitStatus: continuedWorkerWait.status,
+          workerWaitStatus: firstWorkerWait.status,
           hostDispatchOp: hostDispatch.op,
-          hostNextCommand: hostDispatch.cmd
+          hostDispatchStatus: hostDispatch.status
         },
         null,
         2

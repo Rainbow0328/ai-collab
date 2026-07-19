@@ -32,7 +32,7 @@
 
 | 角色 | 推荐人选 | 职责 |
 |-----|---------|-----|
-| **Host** | Trae AI | 任务拆分、派发、结果整合、知识库构建与裁定 |
+| **Host** | Trae AI | 架构设计、任务拆分、派发、结果整合、知识裁定 |
 | **Worker** | Cursor / Claude | 专注执行具体任务、提交结构化回报 |
 | **Knowledge Keeper** | 任意 AI | 受 Host 委托维护知识库与用户习惯 |
 
@@ -42,7 +42,7 @@
 - **L2 — 领域规则**：模块边界、协议、状态机、跨模块协作规则
 - **L3 — 字段对齐**：字段、接口参数、数据结构、错误码
 
-Host 构建和裁定知识库，Worker 读取并在回报中提交候选更新。知识引用使用片段级格式（`l2/current#message-protocol`），精准投递不浪费 token。
+Host 负责知识裁定和维护策略；如果会话中存在 Knowledge Keeper，则由 Host 委托其维护知识库；如果没有，则由 Host 自行维护。Worker 读取知识库，并在回报中提交候选更新。知识引用使用片段级格式（`l2/current#message-protocol`），精准投递不浪费 token。
 
 ### 协作闭环
 
@@ -86,13 +86,34 @@ pnpm run link:cli
 loopmarshal start
 ```
 
-启动后会同时运行后端服务（Fastify, port 42688）和前端管理后台（Vite, port 5173）。用 `--no-web` 可跳过前端，`--daemon` 可后台运行。
+启动后会同时运行后端服务（Fastify, port 42688）和前端管理后台（Vite, port 5173）。公开推荐的启动入口只保留 `loopmarshal start`。
+
+`loopmarshal start` 不会主动启动 MCP stdio server。MCP server 由 AI IDE/CLI 根据配置启动，实际命令是 `loopmarshal mcp serve`。
+
+下一步是在 AI IDE/CLI 中配置 LoopMarshal MCP server，并按业务需要配置 MCP tool timeout。LoopMarshal 单条内部等待链默认持续约 55 分钟；建议把宿主工具的 timeout 配置得更长，具体示例见 [MCP配置与最长等待时间](./MCP配置与最长等待时间.md)。
+
+JSON 类 MCP 配置可以直接复制这个示例：
+
+```json
+{
+  "mcpServers": {
+    "loopmarshal": {
+      "command": "npx",
+      "args": ["loopmarshal", "mcp", "serve"],
+      "timeout": 86400000
+    }
+  }
+}
+```
+
+如果你的 AI IDE/CLI 不支持 `timeout` 字段，就先删除这一行，只保留 `command` 和 `args`。
 
 ### 在 Host IDE/CLI 和 Worker IDE/CLI 中导入 Skill
 
 ```tex
-在本项目的 skills/ 文件夹中，按角色（host/worker/knowledge-keeper）和 IDE（claude/codex/cursor/trae/general）分类。
-如果没有对应 IDE 的 skill，使用 general/ 中的通用版本。
+在本项目的 skills/ 文件夹中，按角色（host/worker）和 IDE（claude/codex/cursor/trae/general）分类。
+每个 IDE 子目录里的 SKILL.md 都是可独立安装的一体化文件，已包含主规则和 IDE 差异约束。
+安装时只复制当前角色、当前 IDE 对应的一个 SKILL.md；如果没有对应 IDE，使用 general/ 中的通用版本。
 ```
 
 ### Rule(可选)
@@ -106,33 +127,32 @@ loopmarshal start
 ### 用Host建立一个协作会话
 
 ```tex
-你是当前项目 host。你的名字是trae,创建并加入会话为demo-collab-01
+你是本项目的 Host，名称为 trae。请创建并加入会话 demo-collab-01。
 ```
 
 ### Worker加入会话
 
 ```tex
-你是当前项目的worker,你得名字是cursor,加入会话demo-collab-01,你的职责是前端开发
+你是本项目的 Worker，名称为 cursor。请加入会话 demo-collab-01。
+你的职责是：前端开发。
 ```
 
 ### Host查看当前会话成员
 
 ```tex
-查看当前项目成员
+查看 demo-collab-01 当前会话成员。
 ```
 
 ### 让 host 开始分发任务
 
-**这部分要在和host定完方案后,可以开始工作了,这边我的示例是定完方案后,让host开始工作,其实也不用那么麻烦,也可以在这步之前和host根据成员规定工作流程,我的这个提示词有点冗余**
-
 ```
-基本流程是,第一次先同时给前端和后端分发任务,然后你进入等待worker的消息,接收到前后端的消息时,再给审查者派发审查任务, 以及给前后端派发新的任务,但是这个是前端结束,前端审查,前端派发任务,后端同理,不要搞混,现在你要将任务查分的细一点,不要一次分发一个大任务,要细化,现在对各个worker开始分发任务
+按照刚才沟通并确认的方案，开始协调 Worker 推进这个方案。
 ```
 
 ### 让 worker 持续等待、执行并回报
 
 ```tex
-进入等代链
+进入等待链。
 ```
 
 ### 为什么 Rule 优先级最高
@@ -182,11 +202,40 @@ Skill 是软约束，AI 可能会"忘记"或者"灵活处理"。
 ### 服务管理
 
 ```bash
-loopmarshal start [--no-web] [--daemon]   # 启动服务（含前端）
-loopmarshal stop                           # 停止服务
-loopmarshal status                         # 查看状态
-loopmarshal doctor                         # 诊断检查
-loopmarshal logs                           # 查看日志
+loopmarshal start    # 启动本地 core 服务和 Web 管理后台
+loopmarshal stop     # 停止服务
+loopmarshal status   # 查看状态
+loopmarshal doctor   # 诊断检查
+loopmarshal logs     # 查看日志
+```
+
+### MCP 接入
+
+```bash
+loopmarshal mcp status
+```
+
+MCP server 和最长等待时间由用户在 AI IDE/CLI 中手动配置，见 [MCP配置与最长等待时间](./MCP配置与最长等待时间.md)。常见 JSON 配置如下：
+
+```json
+{
+  "mcpServers": {
+    "loopmarshal": {
+      "command": "npx",
+      "args": ["loopmarshal", "mcp", "serve"],
+      "timeout": 86400000
+    }
+  }
+}
+```
+
+Codex 常见 TOML 配置如下：
+
+```toml
+[mcp_servers.loopmarshal]
+command = "npx"
+args = ["loopmarshal", "mcp", "serve"]
+tool_timeout_sec = 86400
 ```
 
 ### 会话与 Agent
@@ -194,35 +243,24 @@ loopmarshal logs                           # 查看日志
 ```bash
 loopmarshal attach <name> --session <session> --role <host|worker|knowledge_keeper> --duty "<职责>"
 loopmarshal reset <name> --session <session>
-loopmarshal members --session <session>
+loopmarshal members <hostName> --session <session>
 ```
 
 ### 任务派发与执行
 
 ```bash
-loopmarshal dispatch-many --session <session> --tasks '[...]'
+loopmarshal dispatch-many <hostName> --session <session> --task "<workerName>::<任务内容>"
 loopmarshal await <name> --session <session>
 loopmarshal submit <name> --session <session> --content "<结果>"
-loopmarshal resolve --session <session> --message-id <id> --action <approve|reject|revise>
+loopmarshal resolve <hostName> --session <session> --summary "<处理摘要>" --action <completed|failed|delegated>
 ```
 
 ### 知识库
 
 ```bash
-loopmarshal knowledge read --session <session> --level <l1|l2|l3> --slug <slug>
-loopmarshal knowledge list --session <session>
-loopmarshal knowledge judge --session <session> --message-id <id>
-loopmarshal knowledge fulfil-judgement --session <session> --judgement-id <id>
-loopmarshal knowledge read-current --session <session>
-loopmarshal knowledge update-current --session <session>
-```
-
-### 用户习惯
-
-```bash
-loopmarshal profile get <name> --session <session> [key]
-loopmarshal profile set <name> --session <session> <key> <value>
-loopmarshal profile delete <name> --session <session> <key>
+loopmarshal knowledge read <name> --session <session> --ref "L1/session-direction#current-goal"
+loopmarshal knowledge list <name> --session <session> [--level <l1|l2|l3>] [--query <query>]
+loopmarshal knowledge upsert <name> --session <session> --level <l1|l2|l3> --slug <slug> --title "<标题>" --content "<内容>"
 ```
 
 ---
@@ -269,8 +307,7 @@ loopmarshal/
 │
 ├── skills/            # AI 行为约束模板（软约束）
 │   ├── host/          # Host 技能（claude/codex/cursor/trae/general）
-│   ├── worker/        # Worker 技能（claude/codex/cursor/trae/general）
-│   └── knowledge-keeper/  # 知识管理员技能
+│   └── worker/        # Worker 技能（claude/codex/cursor/trae/general）
 │
 ├── rule/              # 强制执行规则（硬约束，优先级最高）
 │   ├── host/

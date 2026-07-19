@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 import { AgentRepository } from "@loopmarshal/store";
+import type { Agent } from "@loopmarshal/protocol";
 
 import { coreErrors } from "../errors.js";
 import type { SessionService } from "./session-service.js";
@@ -22,6 +23,14 @@ export class AgentService {
     private readonly agents: AgentRepository,
     private readonly sessionService: SessionService
   ) {}
+
+  /**
+   * 查找 agent by id，不存在返回 null。
+   * 用于工具 handler 中的目标验证。
+   */
+  public getAgent(agentId: string): Agent | null {
+    return this.agents.findById(agentId);
+  }
 
   public heartbeat(agentId: string): { agentId: string; heartbeatAt: string } {
     const agent = this.agents.findById(agentId);

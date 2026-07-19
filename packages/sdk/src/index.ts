@@ -920,6 +920,9 @@ export class LoopMarshalClient {
     currentStep?: string | null;
     lastError?: string | null;
     lastTickAt?: string | null;
+    lastSelfMaintenanceAt?: string | null;
+    customDuty?: string | null;
+    customSkillIds?: string[];
   }): Promise<import("@loopmarshal/protocol").WebAgentRuntime> {
     return this.request(`/api/web-agent-runtimes/${encodeURIComponent(runtimeId)}`, {
       method: "PATCH",

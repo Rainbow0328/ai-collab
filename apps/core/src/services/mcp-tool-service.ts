@@ -288,28 +288,49 @@ const builtinTools: BuiltinToolEntry[] = [
   {
     definition: {
       name: "dispatch_task",
-      description: "Dispatch a task message to a worker.",
+      description: "Dispatch a task message to a worker. The toAgentId is REQUIRED — tasks without a target worker will be rejected.",
       parameters: objectSchema(
         {
           content: { type: "string", description: "Task content." },
-          toAgentId: { type: "string", description: "Target worker id." },
-          correlationId: { type: "string", description: "Correlation id." }
+          toAgentId: { type: "string", description: "Target worker agent ID. REQUIRED — the task will be rejected if this is missing." },
+          correlationId: { type: "string", description: "Correlation id for tracking." }
         },
-        ["content"]
+        ["content", "toAgentId"]
       )
     },
     allowedRoles: ["host"],
-    handler: async (args, services) =>
-      services.messageService.sendMessage({
+    handler: async (args, services) => {
+      if (!args.toAgentId) {
+        return {
+          success: false,
+          error: "dispatch_task requires a toAgentId. Tasks without a target worker cannot be claimed and will be rejected."
+        };
+      }
+      // 验证目标 Agent 存在且 role === "worker"
+      const targetAgent = services.agentService.getAgent(String(args.toAgentId));
+      if (!targetAgent) {
+        return {
+          success: false,
+          error: `dispatch_task target agent not found: ${String(args.toAgentId)}`
+        };
+      }
+      if (targetAgent.role !== "worker") {
+        return {
+          success: false,
+          error: `dispatch_task target agent must have role "worker", but got role "${targetAgent.role}". Only workers can receive implementation tasks.`
+        };
+      }
+      return services.messageService.sendMessage({
         sessionId: String(args.sessionId),
         fromAgentId: String(args.agentId),
+        toAgentId: String(args.toAgentId),
         type: "task",
         payload: String(args.content ?? ""),
-        ...(args.toAgentId ? { toAgentId: String(args.toAgentId) } : {}),
         ...(args.correlationId
           ? { correlationId: String(args.correlationId) }
           : {})
-      })
+      });
+    }
   },
   {
     definition: {
@@ -394,16 +415,36 @@ const builtinTools: BuiltinToolEntry[] = [
       )
     },
     allowedRoles: ["knowledge_keeper"],
-    handler: async (args, services) =>
-      services.knowledgeService.upsert({
-        level: String(args.level) as KnowledgeLevel,
-        slug: String(args.slug),
-        title: String(args.title),
-        content: String(args.content),
-        ...(args.summary ? { summary: String(args.summary) } : {}),
+    handler: async (args, services) => {
+      // 运行时参数校验：不依赖 JSON Schema，防止 String(undefined) 和无效 enum
+      const VALID_LEVELS = ["l1", "l2", "l3"] as const;
+      const normalizedLevel = typeof args.level === "string" ? args.level.trim().toLowerCase() : "";
+      if (!VALID_LEVELS.includes(normalizedLevel as typeof VALID_LEVELS[number])) {
+        return {
+          success: false as const,
+          error: `Invalid level: expected one of l1/l2/l3, got "${String(args.level)}"`,
+          result: null
+        };
+      }
+      if (typeof args.slug !== "string" || args.slug.trim().length === 0) {
+        return { success: false as const, error: "Missing or empty slug", result: null };
+      }
+      if (typeof args.title !== "string" || args.title.trim().length === 0) {
+        return { success: false as const, error: "Missing or empty title", result: null };
+      }
+      if (typeof args.content !== "string" || args.content.trim().length === 0) {
+        return { success: false as const, error: "Missing or empty content", result: null };
+      }
+      return services.knowledgeService.upsert({
+        level: normalizedLevel as KnowledgeLevel,
+        slug: args.slug.trim().toLowerCase(),
+        title: args.title,
+        content: args.content,
+        ...(typeof args.summary === "string" && args.summary.length > 0 ? { summary: args.summary } : {}),
         sourceKind: "host_update",
         sourceAgentId: String(args.agentId)
-      })
+      });
+    }
   },
   {
     definition: {
@@ -719,6 +760,41 @@ export class McpToolService {
       .filter((tool): tool is McpToolDefinition => Boolean(tool));
   }
 
+  /**
+   * 合并内置工具集和外部 MCP Server 工具。
+   * 用户在 Web 端创建 Agent 时选择的外部 MCP Server 工具会与角色默认工具集合并。
+   */
+  public async getMergedToolDefinitions(
+    toolsetId: McpToolsetId,
+    externalMcpServerIds: string[],
+    services: ServerServices
+  ): Promise<McpToolDefinition[]> {
+    const builtin = this.getToolsetDefinitions(toolsetId);
+    if (!externalMcpServerIds || externalMcpServerIds.length === 0) {
+      return builtin;
+    }
+    const externalMcpService = services.externalMcpService;
+    if (!externalMcpService) {
+      return builtin;
+    }
+    const externalTools: McpToolDefinition[] = [];
+    for (const serverId of externalMcpServerIds) {
+      try {
+        const tools = await externalMcpService.listTools(serverId);
+        for (const tool of tools) {
+          externalTools.push({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema as McpToolParameterSchema
+          });
+        }
+      } catch {
+        // 跳过失败的 server
+      }
+    }
+    return [...builtin, ...externalTools];
+  }
+
   public getToolDefinitionsByNames(toolNames: string[]): McpToolDefinition[] {
     return toolNames
       .map((name) => this.toolsByName.get(name)?.definition)
@@ -762,6 +838,22 @@ export class McpToolService {
           { ...args, agentId, sessionId },
           services
         );
+        // 如果 handler 自身返回了 { success: false, error } 格式（如 dispatch_task 验证失败），
+        // 向外透传失败状态，不被外层 success: true 掩盖
+        if (
+          result !== null &&
+          typeof result === "object" &&
+          "success" in result &&
+          result.success === false
+        ) {
+          return {
+            success: false,
+            result: null,
+            error: "error" in result && typeof result.error === "string"
+              ? result.error
+              : "Tool handler returned failure."
+          };
+        }
         return { success: true, result };
       } catch (error: unknown) {
         return {

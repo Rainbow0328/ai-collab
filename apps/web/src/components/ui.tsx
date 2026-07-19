@@ -254,7 +254,7 @@ export function PageLoading() {
 
 /* ==================== Toast ==================== */
 
-type Toast = { id: number; message: string; type: "success" | "error" | "info" };
+type Toast = { id: number; message: string; type: "success" | "error" | "info" | "warning" };
 let toastCounter = 0;
 const toastListeners: ((toasts: Toast[]) => void)[] = [];
 let toasts: Toast[] = [];
@@ -293,7 +293,7 @@ export function ToastContainer() {
             display: "flex", alignItems: "center", gap: "var(--sp-2)",
             fontSize: "var(--fs-sm)", fontWeight: 500,
             boxShadow: "var(--shadow-lg)",
-            borderLeft: `3px solid var(--c-${t.type === "success" ? "success" : t.type === "error" ? "error" : "info"})`,
+            borderLeft: `3px solid var(--c-${t.type === "success" ? "success" : t.type === "error" ? "error" : t.type === "warning" ? "warning" : "info"})`,
             pointerEvents: "auto",
           }}
         >

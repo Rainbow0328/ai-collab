@@ -14,6 +14,7 @@
  */
 import {
   AgentRepository,
+  AgentContextRepository,
   DatabaseManager,
   ExternalMcpServerRepository,
   IdentityLeaseRepository,
@@ -52,7 +53,9 @@ import {
   WebSocketService,
   WindowBindingService,
   WorkflowDefinitionService,
-  StdioMcpRegistryService
+  StdioMcpRegistryService,
+  AgentWorkflowRegistry,
+  AgentContextService
 } from "./services/index.js";
 
 export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) => {
@@ -70,19 +73,24 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
   const sessionInsightRepository = new SessionInsightRepository(
     databaseManager.connection
   );
+  const agentContextRepository = new AgentContextRepository(databaseManager.connection);
+  const agentContextService = new AgentContextService(agentContextRepository);
   const modelConfigRepository = new ModelConfigRepository(databaseManager.connection);
   if (modelConfigRepository.list().length === 0) {
     const timestamp = new Date().toISOString();
-    modelConfigRepository.upsert({
-      id: "default-model",
-      name: "Default Model",
-      provider: process.env.LOOPMARSHAL_LLM_PROVIDER ?? "openai",
-      modelId: process.env.LOOPMARSHAL_LLM_MODEL ?? "gpt-4o-mini",
-      apiKey: null,
-      baseUrl: null,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    });
+modelConfigRepository.upsert({
+id: "default-model",
+name: "Default Model",
+provider: process.env.LOOPMARSHAL_LLM_PROVIDER ?? "openai",
+modelId: process.env.LOOPMARSHAL_LLM_MODEL ?? "gpt-4o-mini",
+apiKey: null,
+baseUrl: null,
+contextWindowTokens: 128000,
+maxOutputTokens: 4096,
+contextReserveTokens: 1000,
+createdAt: timestamp,
+updatedAt: timestamp
+});
   }
 
   // Load persisted API keys and base URLs into process.env for runtime use.
@@ -175,6 +183,7 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
   const webAgentRuntimeExecutorService = new WebAgentRuntimeExecutorService(
     () => services
   );
+  const agentWorkflowRegistry = new AgentWorkflowRegistry();
 
   services = {
     sessionService,
@@ -198,6 +207,8 @@ export const startCoreServer = async (config: CoreConfig = defaultCoreConfig) =>
     collaborationWaitService,
     webAgentRuntimeService,
     webAgentRuntimeExecutorService,
+    agentWorkflowRegistry,
+    agentContextService,
     workflowDefinitionService
   };
 

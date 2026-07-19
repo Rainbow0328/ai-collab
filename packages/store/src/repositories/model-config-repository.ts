@@ -7,6 +7,9 @@ export interface ModelConfigRecord {
   modelId: string;
   apiKey: string | null;
   baseUrl: string | null;
+  contextWindowTokens: number;
+  maxOutputTokens: number;
+  contextReserveTokens: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -16,6 +19,9 @@ export interface ModelConfigWithSecret extends ModelConfigRecord {
   baseUrl: string;
   apiKeyEncrypted: string | null;
   timeoutSeconds: number;
+  contextWindowTokens: number;
+  maxOutputTokens: number;
+  contextReserveTokens: number;
 }
 
 const CREATE_TABLE = `
@@ -41,7 +47,7 @@ export class ModelConfigRepository {
 
   public findById(id: string): ModelConfigRecord | null {
     const statement = this.db.prepare(
-      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, created_at AS createdAt, updated_at AS updatedAt FROM model_configs WHERE id = ?"
+      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, context_window_tokens AS contextWindowTokens, max_output_tokens AS maxOutputTokens, context_reserve_tokens AS contextReserveTokens, created_at AS createdAt, updated_at AS updatedAt FROM model_configs WHERE id = ?"
     );
     const row = statement.get(id) as Record<string, string | null> | undefined;
     return row ? (row as unknown as ModelConfigRecord) : null;
@@ -57,13 +63,16 @@ export class ModelConfigRepository {
       modelName: record.modelId,
       baseUrl: record.baseUrl ?? resolveModelBaseUrl(record.provider),
       apiKeyEncrypted: record.apiKey ?? resolveModelApiKey(record.provider),
-      timeoutSeconds: 60
+      timeoutSeconds: 60,
+      contextWindowTokens: record.contextWindowTokens ?? 128000,
+      maxOutputTokens: record.maxOutputTokens ?? 4096,
+      contextReserveTokens: record.contextReserveTokens ?? 1000
     };
   }
 
   public list(): ModelConfigRecord[] {
     const statement = this.db.prepare(
-      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, created_at AS createdAt, updated_at AS updatedAt FROM model_configs ORDER BY name"
+      "SELECT id, name, provider, model_id AS modelId, api_key AS apiKey, base_url AS baseUrl, context_window_tokens AS contextWindowTokens, max_output_tokens AS maxOutputTokens, context_reserve_tokens AS contextReserveTokens, created_at AS createdAt, updated_at AS updatedAt FROM model_configs ORDER BY name"
     );
     const rows = statement.all() as Record<string, string | null>[];
     return rows as unknown as ModelConfigRecord[];
@@ -71,14 +80,17 @@ export class ModelConfigRepository {
 
   public upsert(record: ModelConfigRecord): void {
     const statement = this.db.prepare(`
-      INSERT INTO model_configs (id, name, provider, model_id, api_key, base_url, created_at, updated_at)
-      VALUES (@id, @name, @provider, @modelId, @apiKey, @baseUrl, @createdAt, @updatedAt)
+      INSERT INTO model_configs (id, name, provider, model_id, api_key, base_url, context_window_tokens, max_output_tokens, context_reserve_tokens, created_at, updated_at)
+      VALUES (@id, @name, @provider, @modelId, @apiKey, @baseUrl, @contextWindowTokens, @maxOutputTokens, @contextReserveTokens, @createdAt, @updatedAt)
       ON CONFLICT (id) DO UPDATE SET
         name = excluded.name,
         provider = excluded.provider,
         model_id = excluded.model_id,
         api_key = excluded.api_key,
         base_url = excluded.base_url,
+        context_window_tokens = excluded.context_window_tokens,
+        max_output_tokens = excluded.max_output_tokens,
+        context_reserve_tokens = excluded.context_reserve_tokens,
         updated_at = excluded.updated_at
     `);
     statement.run({
@@ -88,6 +100,9 @@ export class ModelConfigRepository {
       modelId: record.modelId,
       apiKey: record.apiKey,
       baseUrl: record.baseUrl,
+      contextWindowTokens: record.contextWindowTokens,
+      maxOutputTokens: record.maxOutputTokens,
+      contextReserveTokens: record.contextReserveTokens,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });

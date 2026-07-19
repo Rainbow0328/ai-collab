@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = "0.1.0";
 export const sessionStatuses = ["active", "paused", "closed"] as const;
 export type SessionStatus = (typeof sessionStatuses)[number];
 
-export const agentPlatforms = ["generic"] as const;
+export const agentPlatforms = ["generic", "vscode", "codex", "claude", "cursor"] as const;
 export type AgentPlatform = string;
 
 export const agentRoles = ["host", "worker", "observer", "knowledge_keeper"] as const;
@@ -381,6 +381,13 @@ export type CompleteTaskInput = {
   summary?: string | undefined;
 };
 
+export type PendingUserInput = {
+  /** 用户输入关联的 directive revision，用于并发安全地清除 */
+  revision: number;
+  /** 用户输入内容 */
+  content: string;
+};
+
 export type SessionInsight = {
   sessionId: string;
   objective: string | null;
@@ -390,7 +397,7 @@ export type SessionInsight = {
   latestUserInput: string | null;
   latestReportSummary: string | null;
   recentUserInputs: string[];
-  unappliedUserInputs: string[];
+  unappliedUserInputs: PendingUserInput[];
   userPreferences: string[];
   acceptanceCriteria: string[];
   constraints: string[];
@@ -424,7 +431,7 @@ export type UpdateSessionInsightInput = {
   latestUserInput?: string | null | undefined;
   latestReportSummary?: string | null | undefined;
   recentUserInputs?: string[] | undefined;
-  unappliedUserInputs?: string[] | undefined;
+  unappliedUserInputs?: PendingUserInput[] | undefined;
   userPreferences?: string[] | undefined;
   acceptanceCriteria?: string[] | undefined;
   constraints?: string[] | undefined;

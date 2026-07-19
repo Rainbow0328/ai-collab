@@ -7,10 +7,10 @@ export class WorkflowDefinitionRepository {
   public upsert(workflow: WorkflowDefinitionRecord): void {
     this.database.prepare(`
       INSERT INTO workflow_definitions (
-        id, name, description, role, nodes_json, edges_json, enabled, builtin, created_at, updated_at
+        id, name, description, role, nodes_json, edges_json, enabled, builtin, status, created_at, updated_at
       )
       VALUES (
-        @id, @name, @description, @role, @nodesJson, @edgesJson, @enabled, @builtin, @createdAt, @updatedAt
+        @id, @name, @description, @role, @nodesJson, @edgesJson, @enabled, @builtin, @status, @createdAt, @updatedAt
       )
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
@@ -20,6 +20,7 @@ export class WorkflowDefinitionRepository {
         edges_json = excluded.edges_json,
         enabled = excluded.enabled,
         builtin = excluded.builtin,
+        status = excluded.status,
         updated_at = excluded.updated_at
     `).run({
       id: workflow.id,
@@ -30,6 +31,7 @@ export class WorkflowDefinitionRepository {
       edgesJson: JSON.stringify(workflow.edges),
       enabled: workflow.enabled ? 1 : 0,
       builtin: workflow.builtin ? 1 : 0,
+      status: workflow.status ?? "planning",
       createdAt: workflow.createdAt,
       updatedAt: workflow.updatedAt
     });
@@ -38,7 +40,7 @@ export class WorkflowDefinitionRepository {
   public findById(id: string): WorkflowDefinitionRecord | null {
     const row = this.database.prepare(`
       SELECT id, name, description, role, nodes_json AS nodesJson, edges_json AS edgesJson,
-        enabled, builtin, created_at AS createdAt, updated_at AS updatedAt
+        enabled, builtin, status, created_at AS createdAt, updated_at AS updatedAt
       FROM workflow_definitions WHERE id = ?
     `).get(id) as Record<string, unknown> | undefined;
     return row ? this.mapRow(row) : null;
@@ -47,7 +49,7 @@ export class WorkflowDefinitionRepository {
   public listAll(): WorkflowDefinitionRecord[] {
     const rows = this.database.prepare(`
       SELECT id, name, description, role, nodes_json AS nodesJson, edges_json AS edgesJson,
-        enabled, builtin, created_at AS createdAt, updated_at AS updatedAt
+        enabled, builtin, status, created_at AS createdAt, updated_at AS updatedAt
       FROM workflow_definitions ORDER BY role ASC, builtin DESC, updated_at DESC
     `).all() as Record<string, unknown>[];
     return rows.map((row) => this.mapRow(row));
@@ -84,6 +86,7 @@ export class WorkflowDefinitionRepository {
       edges: parseJsonArray(row.edgesJson),
       enabled: Boolean(row.enabled),
       builtin: Boolean(row.builtin),
+      status: (typeof row.status === "string" ? row.status : "planning") as WorkflowDefinitionRecord["status"],
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt)
     };

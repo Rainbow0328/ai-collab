@@ -39,6 +39,10 @@ export class WebAgentRuntimeService {
       currentStep: existing?.currentStep ?? null,
       lastError: null,
       lastTickAt: existing?.lastTickAt ?? null,
+      lastSelfMaintenanceAt: existing?.lastSelfMaintenanceAt ?? null,
+      externalMcpServerIds: input.externalMcpServerIds ?? existing?.externalMcpServerIds ?? [],
+      customDuty: input.customDuty ?? existing?.customDuty ?? null,
+      customSkillIds: input.customSkillIds ?? existing?.customSkillIds ?? [],
       createdAt: existing?.createdAt ?? timestamp,
       updatedAt: timestamp
     };
@@ -74,8 +78,12 @@ export class WebAgentRuntimeService {
       ...(input.enabled !== undefined ? { enabled: input.enabled ? 1 : 0 } : {}),
       ...(input.currentStep !== undefined ? { currentStep: input.currentStep } : {}),
       ...(input.lastError !== undefined ? { lastError: input.lastError } : {}),
-      ...(input.lastTickAt !== undefined ? { lastTickAt: input.lastTickAt } : {})
-    });
+      ...(input.lastTickAt !== undefined ? { lastTickAt: input.lastTickAt } : {}),
+      ...(input.lastSelfMaintenanceAt !== undefined ? { lastSelfMaintenanceAt: input.lastSelfMaintenanceAt } : {}),
+      ...(input.externalMcpServerIds !== undefined ? { externalMcpServerIds: input.externalMcpServerIds } : {}),
+      ...(input.customDuty !== undefined ? { customDuty: input.customDuty } : {}),
+      ...(input.customSkillIds !== undefined ? { customSkillIds: input.customSkillIds } : {})
+    } as Record<string, unknown> as Record<string, never>);
     return this.get(existing.id);
   }
 

@@ -278,6 +278,11 @@ export const completeTaskInputSchema = z.object({
   summary: z.string().min(1).optional()
 });
 
+export const pendingUserInputSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  content: z.string().min(1)
+});
+
 export const sessionInsightSchema = z.object({
   sessionId: z.string().min(1),
   objective: z.string().nullable(),
@@ -287,7 +292,7 @@ export const sessionInsightSchema = z.object({
   latestUserInput: z.string().nullable(),
   latestReportSummary: z.string().nullable(),
   recentUserInputs: z.array(z.string()),
-  unappliedUserInputs: z.array(z.string()),
+  unappliedUserInputs: z.array(pendingUserInputSchema),
   userPreferences: z.array(z.string()),
   acceptanceCriteria: z.array(z.string()),
   constraints: z.array(z.string()),
@@ -321,7 +326,7 @@ export const updateSessionInsightInputSchema = z.object({
   latestUserInput: z.string().nullable().optional(),
   latestReportSummary: z.string().nullable().optional(),
   recentUserInputs: z.array(z.string()).optional(),
-  unappliedUserInputs: z.array(z.string()).optional(),
+  unappliedUserInputs: z.array(pendingUserInputSchema).optional(),
   userPreferences: z.array(z.string()).optional(),
   acceptanceCriteria: z.array(z.string()).optional(),
   constraints: z.array(z.string()).optional(),

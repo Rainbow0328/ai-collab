@@ -91,8 +91,16 @@ export const api = {
       modelConfigId?: string;
       agentProfileId?: string | null;
       toolsetId?: string | null;
+      customDuty?: string | null;
+      customSkillIds?: string[];
     }) => getApiClient().createWebAgentRuntime(input),
     get: (runtimeId: string) => getApiClient().getWebAgentRuntime(runtimeId),
+    update: (runtimeId: string, input: {
+      modelConfigId?: string;
+      customDuty?: string | null;
+      customSkillIds?: string[];
+      status?: string;
+    }) => getApiClient().updateWebAgentRuntime(runtimeId, input),
     delete: (runtimeId: string) => getApiClient().deleteWebAgentRuntime(runtimeId),
     start: (runtimeId: string) => getApiClient().startWebAgentRuntime(runtimeId),
     pause: (runtimeId: string) => getApiClient().pauseWebAgentRuntime(runtimeId),
@@ -136,6 +144,10 @@ export const api = {
       apiKey?: string;
     }) => getApiClient().createModel(input),
     delete: (modelId: string) => getApiClient().deleteModel(modelId),
+  },
+
+  workflows: {
+    list: () => getApiClient().listWorkflows(),
   },
 
   mcpServers: {

@@ -21,7 +21,7 @@ export type WindowRuntimeState = {
   sessionName: string;
   windowName: string;
   identity: string;
-  role: "host" | "worker";
+  role: "host" | "worker" | "knowledge_keeper";
   activeFlow: string | null;
   activeWaitPid: number | null;
   currentMessageId: string | null;
@@ -72,7 +72,7 @@ const mapBindingToRuntimeState = (
     sessionName: binding.sessionName,
     windowName: binding.windowName,
     identity: binding.identity,
-    role: binding.role === "host" ? "host" : "worker",
+    role: binding.role === "host" ? "host" : binding.role === "knowledge_keeper" ? "knowledge_keeper" : "worker",
     activeFlow: binding.runtimeState.activeFlow,
     activeWaitPid: null,
     currentMessageId: binding.runtimeState.currentMessageId,

@@ -33,7 +33,8 @@ const builtinWorkflows: Array<Omit<WorkflowDefinitionRecord, "createdAt" | "upda
       { from: "process", to: "complete" }
     ],
     enabled: true,
-    builtin: true
+    builtin: true,
+    status: "planning"
   },
   {
     id: "worker-message-loop",
@@ -58,7 +59,8 @@ const builtinWorkflows: Array<Omit<WorkflowDefinitionRecord, "createdAt" | "upda
       { from: "process", to: "complete" }
     ],
     enabled: true,
-    builtin: true
+    builtin: true,
+    status: "planning"
   },
   {
     id: "knowledge-keeper-loop",
@@ -83,7 +85,8 @@ const builtinWorkflows: Array<Omit<WorkflowDefinitionRecord, "createdAt" | "upda
       { from: "process", to: "complete" }
     ],
     enabled: true,
-    builtin: true
+    builtin: true,
+    status: "planning"
   }
 ];
 
@@ -132,6 +135,7 @@ export class WorkflowDefinitionService {
       edges: input.edges,
       enabled: true,
       builtin: false,
+      status: "planning",
       createdAt: now,
       updatedAt: now
     };

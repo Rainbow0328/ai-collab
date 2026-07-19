@@ -2,6 +2,7 @@ import type {
   McpToolDefinition,
   McpToolResult,
   WebAgentRuntime,
+  MessageType,
 } from "@loopmarshal/protocol";
 import type { ServerServices } from "../server/create-server.js";
 import { createLlmRequest, type LlmChatMessage } from "./llm-provider-client.js";
@@ -60,11 +61,17 @@ export class WebAgentRuntimeExecutorService {
         lastTickAt: new Date().toISOString(),
       });
 
+      const claimTypes: MessageType[] = runtime.role === "host"
+        ? ["task", "instruction", "result"]
+        : ["task", "instruction"];
       const message = services.messageService.claimNext(runtime.agentId, {
-        types: ["task", "instruction"],
+        types: claimTypes,
       });
 
       if (!message) {
+        if (runtime.role === "knowledge_keeper") {
+          await this.checkSelfTrigger(runtime, services);
+        }
         this.schedule(runtimeId, pollMs);
         return;
       }
@@ -79,25 +86,34 @@ export class WebAgentRuntimeExecutorService {
         lastTickAt: new Date().toISOString(),
       });
 
-      const result = await this.runToolLoop(runtime, [
-        { role: "user", content: payload },
-      ]);
+      const { result, sentDirectedResult, continueAwaiting } = await services.agentWorkflowRegistry.runWorkflow(
+        runtime,
+        services,
+        payload,
+        await this.getTools(runtime),
+        message.type,
+        message.correlationId ?? null
+      );
 
       services.messageService.completeMessage(message.id, runtime.agentId, {});
-      services.messageService.sendMessage({
-        sessionId: runtime.sessionId,
-        fromAgentId: runtime.agentId,
-        type: "result",
-        payload: result || "completed",
-        ...(message.correlationId ? { correlationId: message.correlationId } : {}),
-      });
+      // 只有当 workflow 没有自己发送定向 result 时，executor 才发广播 result
+      //（Keeper 的 report_to_host 已发定向 result，不需要再广播）
+      if (!sentDirectedResult && !continueAwaiting) {
+        services.messageService.sendMessage({
+          sessionId: runtime.sessionId,
+          fromAgentId: runtime.agentId,
+          type: "result",
+          payload: result || "completed",
+          ...(message.correlationId ? { correlationId: message.correlationId } : {}),
+        });
+      }
 
       services.webAgentRuntimeService.update(runtimeId, {
         currentStep: "Waiting...",
         lastError: null,
         lastTickAt: new Date().toISOString(),
       });
-      this.schedule(runtimeId, pollMs);
+      this.schedule(runtimeId, continueAwaiting ? 0 : pollMs);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown runtime error";
       if (claimedMessageId) {
@@ -180,6 +196,13 @@ export class WebAgentRuntimeExecutorService {
     runtime: WebAgentRuntime
   ): Promise<McpToolDefinition[]> {
     const services = this.getServices();
+    if (runtime.externalMcpServerIds && runtime.externalMcpServerIds.length > 0) {
+      return services.mcpToolService.getMergedToolDefinitions(
+        runtime.toolsetId,
+        runtime.externalMcpServerIds,
+        services
+      );
+    }
     return services.mcpToolService.getToolsetDefinitions(runtime.toolsetId);
   }
 
@@ -197,6 +220,9 @@ export class WebAgentRuntimeExecutorService {
     }
     if (runtime.role === "knowledge_keeper") {
       parts.push("You are the Knowledge Keeper. Maintain project knowledge through knowledge tools, and maintain cross-project user habits through user preference tools.");
+    }
+    if (runtime.customDuty) {
+      parts.push(`# Custom Duty\n${runtime.customDuty}`);
     }
     const preferences = this.getGlobalUserPreferences(runtime);
     if (preferences) {
@@ -244,6 +270,74 @@ export class WebAgentRuntimeExecutorService {
       result: result.result,
       ...(result.error !== undefined ? { error: result.error } : {}),
     };
+  }
+
+  /**
+   * 知识库维护者自主触发机制。
+   * 当 tick 中没有待处理消息时，检查是否有需要自主维护的条件：
+   * - session insight 有更新（用户偏好变更、Host 更新了 insight 等）
+   * - 距离上次知识库更新超过冷却时间
+   * 如果触发条件满足，给自己发一条 self_maintenance instruction 消息，下一轮 tick 会 claim 到。
+   */
+  private async checkSelfTrigger(
+    runtime: WebAgentRuntime,
+    services: ServerServices
+  ): Promise<void> {
+    try {
+      const insight = services.sessionInsightService?.getSessionInsight(runtime.sessionId);
+      if (!insight) return;
+
+      // 条件1：用户输入有变更但知识库未同步
+      const hasUnappliedUserInputs =
+        insight.unappliedUserInputs && insight.unappliedUserInputs.length > 0;
+
+      // 条件2：session insight 的 directive revision 与已应用的 revision 不同步
+      const directiveOutOfSync =
+        insight.latestUserDirectiveRevision > insight.appliedUserDirectiveRevision;
+
+      // 冷却：距离上次自主维护不足 60 秒时不触发
+      // 使用独立的 lastSelfMaintenanceAt 字段，不用 lastTickAt（后者每次 tick 都更新）
+      if (runtime.lastSelfMaintenanceAt) {
+        const elapsed = Date.now() - new Date(runtime.lastSelfMaintenanceAt).getTime();
+        if (elapsed < 60_000) return;
+      }
+
+      if (hasUnappliedUserInputs || directiveOutOfSync) {
+        // 更新 lastSelfMaintenanceAt，标记本次自主维护触发时间
+        services.webAgentRuntimeService.update(runtime.id, {
+          lastSelfMaintenanceAt: new Date().toISOString(),
+        });
+        // 构造 insight 快照，携带 Keeper 需要的实际维护内容
+        const targetRevision = insight.latestUserDirectiveRevision;
+        const insightSnapshot = {
+          unappliedUserInputs: insight.unappliedUserInputs ?? [],
+          latestUserDirectiveRevision: insight.latestUserDirectiveRevision,
+          appliedUserDirectiveRevision: insight.appliedUserDirectiveRevision,
+          objective: insight.objective ?? null,
+          activePlanSummary: insight.activePlanSummary ?? null,
+          currentProjectUnderstanding: insight.currentProjectUnderstanding ?? null,
+          projectSummary: insight.projectSummary ?? null,
+        };
+        services.messageService.sendMessage({
+          sessionId: runtime.sessionId,
+          fromAgentId: runtime.agentId,
+          toAgentId: runtime.agentId,
+          type: "instruction",
+          payload: {
+            kind: "self_maintenance",
+            reason: hasUnappliedUserInputs
+              ? "unapplied_user_inputs"
+              : "directive_out_of_sync",
+            targetRevision,
+            insightSnapshot,
+            content: "Session insight has changed. Review the insight snapshot and update knowledge base accordingly.",
+            source: "self_trigger",
+          },
+        });
+      }
+    } catch {
+      // 自主触发失败不应影响 tick 循环
+    }
   }
 
   private schedule(runtimeId: string, delayMs: number): void {

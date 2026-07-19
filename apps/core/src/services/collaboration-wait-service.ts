@@ -11,8 +11,8 @@ import type {
 import type { MessageService } from "./message-service.js";
 import type { WindowBindingService } from "./window-binding-service.js";
 
-const DEFAULT_MCP_BUSINESS_WAIT_SECONDS = 3300;
-const MAX_MCP_BUSINESS_WAIT_SECONDS = 3500;
+const DEFAULT_MCP_BUSINESS_WAIT_SECONDS = 24 * 60 * 60;
+const MAX_MCP_BUSINESS_WAIT_SECONDS = 24 * 60 * 60;
 const DEFAULT_POLL_INTERVAL_SECONDS = 10;
 
 type AwaitRole = Extract<AgentRole, "host" | "worker" | "knowledge_keeper">;

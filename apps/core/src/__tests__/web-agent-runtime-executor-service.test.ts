@@ -19,6 +19,10 @@ describe("WebAgentRuntimeExecutorService", () => {
       currentStep: null,
       lastError: null,
       lastTickAt: null,
+      lastSelfMaintenanceAt: null,
+      externalMcpServerIds: [],
+      customDuty: null,
+      customSkillIds: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -68,6 +72,7 @@ describe("WebAgentRuntimeExecutorService", () => {
         },
       },
       modelConfigService: {
+        findById: () => ({ id: "model-1", provider: "openai" }),
         getFull: () => ({ id: "model-1", provider: "openai", baseUrl: "http://127.0.0.1:1", modelName: "x" }),
       },
       mcpToolService: {

@@ -34,6 +34,7 @@ const main = async () => {
       displayName: "Smoke Worker",
       platform: "claude",
       role: "worker",
+      roleDescription: "Backend implementation worker for smoke testing",
       capabilities: ["backend"],
       connectionMode: "skill-bridge"
     });
@@ -55,7 +56,7 @@ const main = async () => {
         })
       : null;
 
-    const task = await client.createTask({
+    const taskResult = await client.createTask({
       sessionId: host.session.id,
       title: "Smoke Task",
       description: "Ensure the end-to-end flow succeeds",
@@ -64,7 +65,7 @@ const main = async () => {
       priority: "normal"
     });
 
-    const completed = await client.completeTask(task.id, {
+    const completed = await client.completeTask(taskResult.task.id, {
       completedByAgentId: worker.agent.id,
       summary: "Smoke validation completed"
     });

@@ -22,6 +22,8 @@ import {
   useRuntimesQuery,
   useSendHostMessageMutation,
   useSessionsQuery,
+  useUpdateRuntimeMutation,
+  useWorkflowsQuery,
 } from "./workbench-queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge, StatusBadge, RoleBadge, Dialog, Field, EmptyState, Loading, pushToast, ConfirmDialog } from "@/components/ui";
@@ -142,6 +144,7 @@ export function WorkbenchPage() {
             hostRuntime={hostRuntime}
             messages={hostMessages}
             sessionId={sessionId}
+            models={models}
             onOpenDetail={setDetailMessage}
           />
 
@@ -192,15 +195,18 @@ function HostPanel({
   hostRuntime,
   messages,
   sessionId,
+  models,
   onOpenDetail,
 }: {
   host: ConsoleMember | null;
   hostRuntime: WebAgentRuntime | null;
   messages: MessageRecord[];
   sessionId: string;
+  models: Array<{ id: string; name: string; modelId: string }>;
   onOpenDetail: (m: MessageRecord) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
   const runtimeCommand = useRuntimeCommandMutation(sessionId);
   const sendMessage = useSendHostMessageMutation(sessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -224,6 +230,7 @@ function HostPanel({
   };
 
   return (
+    <>
     <section style={{ background: "var(--c-bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Panel header */}
       <div style={{
@@ -243,6 +250,12 @@ function HostPanel({
             <>
               <StatusBadge status={hostRuntime.status} label={hostRuntime.status} />
               <RuntimeControls runtime={hostRuntime} onCommand={(c) => runtimeCommand.mutate({ runtimeId: hostRuntime.id, command: c })} compact />
+              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowSettings(true)} title="运行时设置">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+              </button>
             </>
           )}
         </div>
@@ -335,6 +348,15 @@ function HostPanel({
         </div>
       )}
     </section>
+
+      <RuntimeSettingsDialog
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        runtime={hostRuntime}
+        models={models}
+        sessionId={sessionId}
+      />
+    </>
   );
 }
 
@@ -357,6 +379,7 @@ function WorkersPanel({
 }) {
   const [modelConfigId, setModelConfigId] = useState("");
   const [showDeleteId, setShowDeleteId] = useState<string | null>(null);
+  const [showSettingsId, setShowSettingsId] = useState<string | null>(null);
   const addKeeper = useAddKnowledgeKeeperMutation(sessionId);
   const runtimeCommand = useRuntimeCommandMutation(sessionId);
   const deleteRuntime = useDeleteRuntimeMutation(sessionId);
@@ -477,6 +500,12 @@ function WorkersPanel({
                         {worker.role === "knowledge_keeper" ? (
                           <div style={{ display: "flex", gap: "var(--sp-1)" }}>
                             <RuntimeControls runtime={runtime} onCommand={(c) => runtimeCommand.mutate({ runtimeId: runtime.id, command: c })} compact />
+                            <button className="btn btn-ghost btn-icon btn-sm" onClick={(e) => { e.stopPropagation(); setShowSettingsId(runtime.id); }} title="运行时设置">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                <circle cx="12" cy="12" r="3" />
+                                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                              </svg>
+                            </button>
                             <button className="btn btn-ghost btn-icon btn-sm" onClick={(e) => { e.stopPropagation(); setShowDeleteId(runtime.id); }} title="删除运行时">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                 <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -497,7 +526,6 @@ function WorkersPanel({
           )}
         </div>
 
-        {/* Add Keeper */}
         <div style={{
           padding: "var(--sp-3)",
           borderTop: "1px solid var(--c-border)",
@@ -514,7 +542,12 @@ function WorkersPanel({
               className="btn btn-secondary"
               disabled={!modelConfigId || addKeeper.isPending || hasKeeper}
               onClick={() => addKeeper.mutate({ modelConfigId }, {
-                onSuccess: () => pushToast("Knowledge Keeper 已添加", "success"),
+                onSuccess: (data) => pushToast(
+                  data.runtimeStarted
+                    ? "Knowledge Keeper 已添加并启动"
+                    : "Knowledge Keeper 已添加，但启动失败，请从面板手动启动",
+                  data.runtimeStarted ? "success" : "warning"
+                ),
                 onError: (e) => pushToast(e.message, "error"),
               })}
             >
@@ -537,6 +570,14 @@ function WorkersPanel({
         message="确定要删除此运行时吗？此操作不可撤销。"
         confirmText="删除"
         danger
+      />
+
+      <RuntimeSettingsDialog
+        open={showSettingsId !== null}
+        onClose={() => setShowSettingsId(null)}
+        runtime={showSettingsId ? runtimes.find((r) => r.id === showSettingsId) ?? null : null}
+        models={models}
+        sessionId={sessionId}
       />
     </>
   );
@@ -945,7 +986,12 @@ function CreateSessionDialog({
       { sessionName: sessionName.trim(), modelConfigId },
       {
         onSuccess: (data) => {
-          pushToast("会话已创建，Web Host 已启动", "success");
+          pushToast(
+            data.runtimeStarted
+              ? "会话已创建，Web Host 已启动"
+              : "会话已创建，但 Web Host 启动失败，请从面板手动启动",
+            data.runtimeStarted ? "success" : "warning"
+          );
           onCreated(data.session.id);
           onClose();
         },
@@ -994,6 +1040,213 @@ function CreateSessionDialog({
             onClick={handleCreate}
           >
             {createHost.isPending ? "创建中…" : "创建会话"}
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/* ==================== Runtime Settings Dialog ==================== */
+
+function RuntimeSettingsDialog({
+  open,
+  onClose,
+  runtime,
+  models,
+  sessionId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  runtime: WebAgentRuntime | null;
+  models: Array<{ id: string; name: string; modelId: string }>;
+  sessionId: string;
+}) {
+  const [customDuty, setCustomDuty] = useState("");
+  const [customSkillIds, setCustomSkillIds] = useState<string[]>([]);
+  const [modelConfigId, setModelConfigId] = useState("");
+  const [skillIdInput, setSkillIdInput] = useState("");
+  const workflowsQuery = useWorkflowsQuery();
+  const updateRuntime = useUpdateRuntimeMutation(sessionId);
+
+  useEffect(() => {
+    if (open && runtime) {
+      setCustomDuty(runtime.customDuty ?? "");
+      setCustomSkillIds(runtime.customSkillIds ?? []);
+      setModelConfigId(runtime.modelConfigId ?? "");
+      setSkillIdInput("");
+    }
+  }, [open, runtime]);
+
+  if (!runtime) return null;
+
+  const workflows = workflowsQuery.data ?? [];
+  const availableSkills = workflows.filter((w) => w.enabled && w.role === runtime.role);
+
+  const handleAddSkill = () => {
+    const id = skillIdInput.trim();
+    if (id && !customSkillIds.includes(id)) {
+      setCustomSkillIds([...customSkillIds, id]);
+      setSkillIdInput("");
+    }
+  };
+
+  const handleRemoveSkill = (id: string) => {
+    setCustomSkillIds(customSkillIds.filter((s) => s !== id));
+  };
+
+  const handleSave = () => {
+    updateRuntime.mutate(
+      {
+        runtimeId: runtime.id,
+        customDuty: customDuty.trim() || null,
+        customSkillIds,
+        modelConfigId: modelConfigId || undefined,
+      },
+      {
+        onSuccess: () => {
+          pushToast("运行时设置已保存", "success");
+          onClose();
+        },
+        onError: (e) => pushToast(e.message, "error"),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="运行时设置" width={520}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+        {/* Model config */}
+        <Field label="模型配置" hint="选择该运行时使用的模型配置">
+          <select className="input" value={modelConfigId} onChange={(e) => setModelConfigId(e.target.value)}>
+            <option value="">使用默认模型</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.modelId})</option>)}
+          </select>
+        </Field>
+
+        {/* Custom Duty */}
+        <Field label="自定义职责" hint="注入到 system prompt 的额外职责描述（可选）">
+          <textarea
+            className="input"
+            style={{ minHeight: 80, resize: "vertical" }}
+            value={customDuty}
+            onChange={(e) => setCustomDuty(e.target.value)}
+            placeholder="例如：负责前端 React 组件开发，关注可访问性和性能"
+          />
+        </Field>
+
+        {/* Custom Skills */}
+        <div>
+          <div style={{
+            fontSize: "var(--fs-sm)", fontWeight: 500,
+            color: "var(--c-text-secondary)", marginBottom: "var(--sp-1)",
+            display: "flex", alignItems: "center", gap: "var(--sp-1)",
+          }}>
+            自定义 Skill
+            <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)" }}>
+              （注入到 system prompt 的额外指令）
+            </span>
+          </div>
+
+          {/* Available skills from workflow definitions */}
+          {availableSkills.length > 0 && (
+            <div style={{ marginBottom: "var(--sp-2)", display: "flex", flexWrap: "wrap", gap: "var(--sp-1)" }}>
+              {availableSkills.map((w) => {
+                const isSelected = customSkillIds.includes(w.id);
+                return (
+                  <button
+                    key={w.id}
+                    className={`btn btn-sm ${isSelected ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => isSelected ? handleRemoveSkill(w.id) : setCustomSkillIds([...customSkillIds, w.id])}
+                  >
+                    {isSelected ? "✓ " : "+ "}{w.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Manual skill ID input */}
+          <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+            <input
+              className="input"
+              value={skillIdInput}
+              onChange={(e) => setSkillIdInput(e.target.value)}
+              placeholder="输入 Skill ID 手动添加…"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddSkill();
+                }
+              }}
+            />
+            <button className="btn btn-secondary" onClick={handleAddSkill} disabled={!skillIdInput.trim()}>
+              添加
+            </button>
+          </div>
+
+          {/* Selected skill list */}
+          {customSkillIds.length > 0 && (
+            <div style={{ marginTop: "var(--sp-2)", display: "flex", flexDirection: "column", gap: "var(--sp-1)" }}>
+              {customSkillIds.map((id) => {
+                const wf = workflows.find((w) => w.id === id);
+                return (
+                  <div key={id} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "var(--sp-2) var(--sp-3)",
+                    borderRadius: "var(--r-sm)",
+                    background: "var(--c-bg-subtle)",
+                    border: "1px solid var(--c-border-subtle)",
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <span style={{ fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--c-text-primary)" }}>
+                        {wf?.name ?? id}
+                      </span>
+                      {wf?.description && (
+                        <span style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-tertiary)", marginLeft: "var(--sp-2)" }}>
+                          {wf.description}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      className="btn btn-ghost btn-icon btn-sm"
+                      onClick={() => handleRemoveSkill(id)}
+                      title="移除 Skill"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Error message */}
+        {updateRuntime.error && (
+          <div style={{
+            padding: "var(--sp-2) var(--sp-3)",
+            borderRadius: "var(--r-sm)",
+            background: "var(--c-error-subtle)",
+            border: "1px solid var(--c-error-subtle)",
+            fontSize: "var(--fs-sm)", color: "var(--c-error)",
+            lineHeight: 1.5,
+          }}>
+            {updateRuntime.error.message}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--sp-2)", marginTop: "var(--sp-2)" }}>
+          <button className="btn btn-secondary" onClick={onClose}>取消</button>
+          <button
+            className="btn btn-primary"
+            disabled={updateRuntime.isPending}
+            onClick={handleSave}
+          >
+            {updateRuntime.isPending ? "保存中…" : "保存设置"}
           </button>
         </div>
       </div>

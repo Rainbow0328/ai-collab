@@ -35,6 +35,13 @@ export type WorkflowDefinitionRecord = {
   edges: WorkflowEdgeDefinition[];
   enabled: boolean;
   builtin: boolean;
+  /**
+   * 'active' = connected to the execution path (AgentWorkflowRegistry)
+   * 'planning' = stored in DB but not yet connected to execution
+   * Builtin workflows are currently 'planning' — the actual execution
+   * path uses the hardcoded LangGraph StateGraph in AgentWorkflowRegistry.
+   */
+  status: "active" | "planning";
   createdAt: string;
   updatedAt: string;
 };

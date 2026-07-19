@@ -241,6 +241,78 @@ const parseCmdString = (cmd: string): string[] => {
   return tokens;
 };
 
+const normalizeInternalContinuationArgs = (cmd: string): string[] => {
+  const args = parseCmdString(cmd);
+  const command = args[0];
+
+  if (command !== "await") {
+    throw new Error(
+      `Refusing to execute unsupported internal continuation command: ${cmd}`
+    );
+  }
+
+  return args;
+};
+
+const runCliCommandFollowingInternalCommands = async (
+  initialArgs: string[],
+  options: {
+    progressToken?: string | number;
+    progressLabel?: string;
+    maxIterations?: number;
+  } = {}
+): Promise<unknown> => {
+  const maxIterations = options.maxIterations ?? 1000;
+  let currentArgs = initialArgs;
+  let iterations = 0;
+
+  let progressTimer: NodeJS.Timeout | null = null;
+  let totalElapsed = 0;
+  const progressIntervalMs = 30_000;
+
+  if (options.progressToken !== undefined) {
+    progressTimer = setInterval(() => {
+      totalElapsed += progressIntervalMs;
+      const seconds = Math.floor(totalElapsed / 1000);
+      sendProgress(
+        options.progressToken!,
+        `${options.progressLabel ?? "Waiting for next actionable item"} (${seconds}s)`,
+        totalElapsed,
+        undefined
+      );
+    }, progressIntervalMs);
+  }
+
+  try {
+    while (iterations < maxIterations) {
+      const result = await runCliCommand(currentArgs, {});
+
+      if (result.exitCode !== 0) {
+        const errorOutput = result.stderr.trim() || result.stdout.trim();
+        throw new Error(
+          `loopmarshal ${currentArgs.join(" ")} failed (exit ${result.exitCode}): ${errorOutput}`
+        );
+      }
+
+      const parsed = parseCliOutput(result.stdout);
+
+      if (isExecuteInternalCmd(parsed)) {
+        currentArgs = normalizeInternalContinuationArgs(parsed.cmd);
+        iterations++;
+        continue;
+      }
+
+      return parsed;
+    }
+
+    throw new Error(
+      `loopmarshal internal continuation exceeded maximum iterations (${maxIterations})`
+    );
+  } finally {
+    if (progressTimer) clearInterval(progressTimer);
+  }
+};
+
 /**
  * Run multiple CLI commands sequentially and return combined output.
  * Used by the `resume` tool to restore compact session context.
@@ -281,7 +353,7 @@ const HOST_ONLY_TOOLS = new Set(["dispatch_many", "resolve", "knowledge_upsert"]
  *
  * Priority:
  * 1. Runtime role set by `attach` call (dynamic — covers role changes across sessions)
- * 2. LOOPMARSHAL_ROLE env var (static — set by mcp-setup for pre-connection isolation)
+ * 2. LOOPMARSHAL_ROLE env var (static — set by the user's MCP config)
  * 3. undefined (no filtering — all tools exposed)
  */
 let runtimeRole: "host" | "worker" | undefined;
@@ -629,90 +701,13 @@ const handleToolCall = async (
   }
 
   const cliArgs = buildArgs();
-  const isLongRunning = toolName === "await";
-
-  // -----------------------------------------------------------------------
-  // await: long-running loop with internal EXECUTE_INTERNAL_CMD handling
-  // -----------------------------------------------------------------------
-  //
-  // The CLI `await` command uses a wait-slice mechanism: each invocation
-  // waits for a short period, then either:
-  //   - Returns a final result (PROCESS_CLAIMED_MESSAGE, END_TURN_SILENTLY, etc.)
-  //   - Returns EXECUTE_INTERNAL_CMD with a `cmd` to continue waiting
-  //
-  // In CLI mode, the AI model reads the cmd and re-executes it in a terminal.
-  // In MCP mode, the server must handle this loop internally — re-running
-  // the continuation command and only returning the final result to the
-  // model. Progress notifications are sent every 30s across all iterations.
-
-  if (isLongRunning) {
-    const MAX_ITERATIONS = 1000; // safety limit
-    let currentArgs = cliArgs;
-    let iterations = 0;
-
-    // External progress timer — runs continuously across all wait slices
-    let progressTimer: NodeJS.Timeout | null = null;
-    let totalElapsed = 0;
-    const progressIntervalMs = 30_000;
-
-    if (progressToken !== undefined) {
-      progressTimer = setInterval(() => {
-        totalElapsed += progressIntervalMs;
-        const seconds = Math.floor(totalElapsed / 1000);
-        sendProgress(
-          progressToken,
-          `Waiting for next actionable item (${seconds}s)`,
-          totalElapsed,
-          undefined
-        );
-      }, progressIntervalMs);
-    }
-
-    try {
-      while (iterations < MAX_ITERATIONS) {
-        // Run CLI without internal progress — progress is managed externally
-        const result = await runCliCommand(currentArgs, {});
-
-        if (result.exitCode !== 0) {
-          const errorOutput = result.stderr.trim() || result.stdout.trim();
-          throw new Error(
-            `loopmarshal ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`
-          );
-        }
-
-        const parsed = parseCliOutput(result.stdout);
-
-        // If the CLI returned a continue command, extract the args and loop
-        if (isExecuteInternalCmd(parsed)) {
-          currentArgs = parseCmdString(parsed.cmd);
-          iterations++;
-          continue;
-        }
-
-        // Final result — return to the model
-        return parsed;
-      }
-
-      throw new Error(
-        `loopmarshal await exceeded maximum continuation iterations (${MAX_ITERATIONS})`
-      );
-    } finally {
-      if (progressTimer) clearInterval(progressTimer);
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Non-await tools: single CLI call
-  // -----------------------------------------------------------------------
-
-  const result = await runCliCommand(cliArgs, {});
-
-  if (result.exitCode !== 0) {
-    const errorOutput = result.stderr.trim() || result.stdout.trim();
-    throw new Error(`loopmarshal ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`);
-  }
-
-  return parseCliOutput(result.stdout);
+  return runCliCommandFollowingInternalCommands(cliArgs, {
+    ...(progressToken !== undefined ? { progressToken } : {}),
+    progressLabel:
+      toolName === "await"
+        ? "Waiting for next actionable item"
+        : "Continuing collaboration workflow"
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -932,7 +927,7 @@ const main = async (): Promise<void> => {
   const coreHealthy = await checkCoreHealth();
   if (!coreHealthy) {
     process.stderr.write(
-      "loopmarshal core service is not running. Start it with `loopmarshal start --daemon` first.\n"
+      "loopmarshal core service is not running. Start it with `loopmarshal start` first.\n"
     );
     process.exit(1);
   }

@@ -14,6 +14,7 @@
  */
 export * from "./database.js";
 export * from "./schema.js";
+export * from "./migrations.js";
 export * from "./repositories/session-repository.js";
 export * from "./repositories/agent-repository.js";
 export * from "./repositories/message-repository.js";
@@ -25,3 +26,4 @@ export * from "./repositories/web-agent-runtime-repository.js";
 export * from "./repositories/workflow-definition-repository.js";
 export * from "./repositories/model-config-repository.js";
 export * from "./repositories/external-mcp-server-repository.js";
+export * from "./repositories/agent-context-repository.js";

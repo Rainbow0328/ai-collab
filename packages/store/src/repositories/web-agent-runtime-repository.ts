@@ -14,9 +14,34 @@ type WebAgentRuntimeRow = {
   currentStep: string | null;
   lastError: string | null;
   lastTickAt: string | null;
+  lastSelfMaintenanceAt: string | null;
+  externalMcpServerIds: string | null;
+  customDuty: string | null;
+  customSkillIds: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+const SELECT_COLUMNS = `
+  id,
+  session_id AS sessionId,
+  agent_id AS agentId,
+  role,
+  model_config_id AS modelConfigId,
+  agent_profile_id AS agentProfileId,
+  toolset_id AS toolsetId,
+  status,
+  enabled,
+  current_step AS currentStep,
+  last_error AS lastError,
+  last_tick_at AS lastTickAt,
+  last_self_maintenance_at AS lastSelfMaintenanceAt,
+  external_mcp_server_ids_json AS externalMcpServerIds,
+  custom_duty AS customDuty,
+  custom_skill_ids_json AS customSkillIds,
+  created_at AS createdAt,
+  updated_at AS updatedAt
+`;
 
 export class WebAgentRuntimeRepository {
   public constructor(private readonly database: DatabaseSync) {}
@@ -25,12 +50,14 @@ export class WebAgentRuntimeRepository {
     const statement = this.database.prepare(`
       INSERT INTO web_agent_runtimes (
         id, session_id, agent_id, role, model_config_id, agent_profile_id,
-        toolset_id, status, enabled, current_step, last_error, last_tick_at,
+        toolset_id, status, enabled, current_step, last_error, last_tick_at, last_self_maintenance_at,
+        external_mcp_server_ids_json, custom_duty, custom_skill_ids_json,
         created_at, updated_at
       )
       VALUES (
         @id, @sessionId, @agentId, @role, @modelConfigId, @agentProfileId,
-        @toolsetId, @status, @enabled, @currentStep, @lastError, @lastTickAt,
+        @toolsetId, @status, @enabled, @currentStep, @lastError, @lastTickAt, @lastSelfMaintenanceAt,
+        @externalMcpServerIdsJson, @customDuty, @customSkillIdsJson,
         @createdAt, @updatedAt
       )
       ON CONFLICT(agent_id) DO UPDATE SET
@@ -44,31 +71,37 @@ export class WebAgentRuntimeRepository {
         current_step = excluded.current_step,
         last_error = excluded.last_error,
         last_tick_at = excluded.last_tick_at,
+        last_self_maintenance_at = excluded.last_self_maintenance_at,
+        external_mcp_server_ids_json = excluded.external_mcp_server_ids_json,
+        custom_duty = excluded.custom_duty,
+        custom_skill_ids_json = excluded.custom_skill_ids_json,
         updated_at = excluded.updated_at
     `);
     statement.run({
-      ...runtime,
-      enabled: runtime.enabled ? 1 : 0
+      id: runtime.id,
+      sessionId: runtime.sessionId,
+      agentId: runtime.agentId,
+      role: runtime.role,
+      modelConfigId: runtime.modelConfigId,
+      agentProfileId: runtime.agentProfileId,
+      toolsetId: runtime.toolsetId,
+      status: runtime.status,
+      enabled: runtime.enabled ? 1 : 0,
+      currentStep: runtime.currentStep,
+      lastError: runtime.lastError,
+      lastTickAt: runtime.lastTickAt,
+      lastSelfMaintenanceAt: runtime.lastSelfMaintenanceAt,
+      externalMcpServerIdsJson: JSON.stringify(runtime.externalMcpServerIds ?? []),
+      customDuty: runtime.customDuty,
+      customSkillIdsJson: JSON.stringify(runtime.customSkillIds ?? []),
+      createdAt: runtime.createdAt,
+      updatedAt: runtime.updatedAt
     });
   }
 
   public findById(id: string): WebAgentRuntime | null {
     const row = this.database.prepare(`
-      SELECT
-        id,
-        session_id AS sessionId,
-        agent_id AS agentId,
-        role,
-        model_config_id AS modelConfigId,
-        agent_profile_id AS agentProfileId,
-        toolset_id AS toolsetId,
-        status,
-        enabled,
-        current_step AS currentStep,
-        last_error AS lastError,
-        last_tick_at AS lastTickAt,
-        created_at AS createdAt,
-        updated_at AS updatedAt
+      SELECT ${SELECT_COLUMNS}
       FROM web_agent_runtimes
       WHERE id = ?
     `).get(id) as WebAgentRuntimeRow | undefined;
@@ -77,21 +110,7 @@ export class WebAgentRuntimeRepository {
 
   public findByAgentId(agentId: string): WebAgentRuntime | null {
     const row = this.database.prepare(`
-      SELECT
-        id,
-        session_id AS sessionId,
-        agent_id AS agentId,
-        role,
-        model_config_id AS modelConfigId,
-        agent_profile_id AS agentProfileId,
-        toolset_id AS toolsetId,
-        status,
-        enabled,
-        current_step AS currentStep,
-        last_error AS lastError,
-        last_tick_at AS lastTickAt,
-        created_at AS createdAt,
-        updated_at AS updatedAt
+      SELECT ${SELECT_COLUMNS}
       FROM web_agent_runtimes
       WHERE agent_id = ?
     `).get(agentId) as WebAgentRuntimeRow | undefined;
@@ -100,21 +119,7 @@ export class WebAgentRuntimeRepository {
 
   public listBySessionId(sessionId: string): WebAgentRuntime[] {
     const rows = this.database.prepare(`
-      SELECT
-        id,
-        session_id AS sessionId,
-        agent_id AS agentId,
-        role,
-        model_config_id AS modelConfigId,
-        agent_profile_id AS agentProfileId,
-        toolset_id AS toolsetId,
-        status,
-        enabled,
-        current_step AS currentStep,
-        last_error AS lastError,
-        last_tick_at AS lastTickAt,
-        created_at AS createdAt,
-        updated_at AS updatedAt
+      SELECT ${SELECT_COLUMNS}
       FROM web_agent_runtimes
       WHERE session_id = ?
       ORDER BY updated_at DESC
@@ -124,21 +129,7 @@ export class WebAgentRuntimeRepository {
 
   public listRunningEnabled(): WebAgentRuntime[] {
     const rows = this.database.prepare(`
-      SELECT
-        id,
-        session_id AS sessionId,
-        agent_id AS agentId,
-        role,
-        model_config_id AS modelConfigId,
-        agent_profile_id AS agentProfileId,
-        toolset_id AS toolsetId,
-        status,
-        enabled,
-        current_step AS currentStep,
-        last_error AS lastError,
-        last_tick_at AS lastTickAt,
-        created_at AS createdAt,
-        updated_at AS updatedAt
+      SELECT ${SELECT_COLUMNS}
       FROM web_agent_runtimes
       WHERE status = 'running' AND enabled = 1
     `).all() as WebAgentRuntimeRow[];
@@ -153,7 +144,16 @@ export class WebAgentRuntimeRepository {
       if (value === undefined) continue;
       const column = key.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`);
       fields.push(`${column} = @${key}`);
-      values[key] = key === "enabled" ? (value ? 1 : 0) : value;
+
+      if (key === "enabled") {
+        values[key] = value ? 1 : 0;
+      } else if (key === "externalMcpServerIds") {
+        values[key] = JSON.stringify(value);
+      } else if (key === "customSkillIds") {
+        values[key] = JSON.stringify(value);
+      } else {
+        values[key] = value;
+      }
     }
 
     if (fields.length === 0) return;
@@ -184,8 +184,22 @@ export class WebAgentRuntimeRepository {
       currentStep: row.currentStep,
       lastError: row.lastError,
       lastTickAt: row.lastTickAt,
+      lastSelfMaintenanceAt: row.lastSelfMaintenanceAt,
+      externalMcpServerIds: parseJsonArray(row.externalMcpServerIds),
+      customDuty: row.customDuty,
+      customSkillIds: parseJsonArray(row.customSkillIds),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt
     };
+  }
+}
+
+function parseJsonArray(json: string | null): string[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
