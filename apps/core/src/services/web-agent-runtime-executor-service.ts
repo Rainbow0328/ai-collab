@@ -196,12 +196,10 @@ export class WebAgentRuntimeExecutorService {
     runtime: WebAgentRuntime
   ): Promise<McpToolDefinition[]> {
     const services = this.getServices();
-    if (runtime.externalMcpServerIds && runtime.externalMcpServerIds.length > 0) {
-      return services.mcpToolService.getMergedToolDefinitions(
-        runtime.toolsetId,
-        runtime.externalMcpServerIds,
-        services
-      );
+        if (runtime.externalMcpServerIds && runtime.externalMcpServerIds.length > 0) {
+      // TODO: implement getMergedToolDefinitions to merge external MCP server tools
+      // For now, fall back to base toolset definitions
+      return services.mcpToolService.getToolsetDefinitions(runtime.toolsetId);
     }
     return services.mcpToolService.getToolsetDefinitions(runtime.toolsetId);
   }

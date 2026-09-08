@@ -85,7 +85,7 @@ export class LoopMarshalClient {
     this.baseUrl =
       options.baseUrl ??
       (typeof process !== "undefined" ? process.env.LOOPMARSHAL_BASE_URL : undefined) ??
-      "http://127.0.0.1:42688";
+      `http://${process.env.LOOPMARSHAL_HOST ?? "127.0.0.1"}:${process.env.LOOPMARSHAL_PORT ?? "42688"}`;
     this.headerProvider =
       typeof options.headers === "function"
         ? options.headers

@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type {
   AgentPermissionPolicy,
@@ -420,11 +422,7 @@ const builtinTools: BuiltinToolEntry[] = [
       const VALID_LEVELS = ["l1", "l2", "l3"] as const;
       const normalizedLevel = typeof args.level === "string" ? args.level.trim().toLowerCase() : "";
       if (!VALID_LEVELS.includes(normalizedLevel as typeof VALID_LEVELS[number])) {
-        return {
-          success: false as const,
-          error: `Invalid level: expected one of l1/l2/l3, got "${String(args.level)}"`,
-          result: null
-        };
+        return { success: false as const, error: `Invalid level: expected one of l1/l2/l3, got "${String(args.level)}"`, result: null };
       }
       if (typeof args.slug !== "string" || args.slug.trim().length === 0) {
         return { success: false as const, error: "Missing or empty slug", result: null };
@@ -670,6 +668,87 @@ const builtinTools: BuiltinToolEntry[] = [
       );
       return runCommand(command, commandArgs, cwd, timeoutSeconds);
     }
+  },
+  {
+    definition: {
+      name: "start_worker",
+      description:
+        "Host only. Launch a new AI worker IDE and automatically join it to the current session. " +
+        "The worker inherits the current session name and working directory. " +
+        "Supported IDEs: claude, codex, cursor, trae, opencode, gemini, aider, windsurf, qoder, " +
+        "github, cline, crusher, lov, mimo.",
+      parameters: objectSchema(
+        {
+          ide: {
+            type: "string",
+            description: "AI tool/IDE to launch as worker",
+            enum: ["claude", "codex", "cursor", "trae", "opencode", "gemini", "aider", "windsurf", "qoder", "github", "cline", "crusher", "lov", "mimo"]
+          },
+          duty: { type: "string", description: "Stable long-term responsibility for this worker." },
+          name: { type: "string", description: "Optional member name for the worker (defaults to <ide>-worker)." }
+        },
+        ["ide", "duty"]
+      )
+    },
+    allowedRoles: ["host"],
+    handler: async (args, services) => {
+      const ide = String(args.ide ?? "");
+      const duty = String(args.duty ?? "");
+      const workerName = (args.name as string) || `${ide}-worker`;
+
+      // Resolve session name from the agent's session
+      const session = services.sessionService.getSession(String(args.sessionId));
+      const sessionName = session.name;
+
+      // Build the start-agent command args
+      const cliArgs = [
+        "start-agent",
+        ide,
+        "--role", "worker",
+        "--duty", duty,
+        "--name", workerName,
+        "--session", sessionName
+      ];
+
+      // Try to find loopmarshal CLI binary
+      const cliBinPath = resolveLoopMarshalCliPath();
+      if (!cliBinPath) {
+        throw new Error(
+          "loopmarshal CLI not found. Cannot start worker. " +
+          "Ensure loopmarshal is installed globally or the core service has access to the CLI."
+        );
+      }
+
+      const result = await runCommand(
+        process.execPath,
+        [cliBinPath, ...cliArgs],
+        process.cwd(),
+        120
+      );
+
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `Failed to start ${ide} worker (exit ${result.exitCode}): ${result.stderr.trim() || result.stdout.trim()}`
+        );
+      }
+
+      // Parse the JSON output from start-agent
+      let details: unknown = null;
+      try {
+        details = JSON.parse(result.stdout.trim());
+      } catch {
+        details = { raw: result.stdout.trim() };
+      }
+
+      return {
+        status: "worker_started",
+        ide,
+        duty,
+        workerName,
+        sessionName,
+        details
+      };
+    }
   }
 ];
 
@@ -698,7 +777,8 @@ const toolsetDefinitions: Record<McpToolsetId, string[]> = {
     "heartbeat",
     "dispatch_task",
     "resolve_message",
-    "update_insight"
+    "update_insight",
+    "start_worker"
   ],
   knowledge_keeper: [
     "ai_collab_await_event",
@@ -760,41 +840,6 @@ export class McpToolService {
       .filter((tool): tool is McpToolDefinition => Boolean(tool));
   }
 
-  /**
-   * 合并内置工具集和外部 MCP Server 工具。
-   * 用户在 Web 端创建 Agent 时选择的外部 MCP Server 工具会与角色默认工具集合并。
-   */
-  public async getMergedToolDefinitions(
-    toolsetId: McpToolsetId,
-    externalMcpServerIds: string[],
-    services: ServerServices
-  ): Promise<McpToolDefinition[]> {
-    const builtin = this.getToolsetDefinitions(toolsetId);
-    if (!externalMcpServerIds || externalMcpServerIds.length === 0) {
-      return builtin;
-    }
-    const externalMcpService = services.externalMcpService;
-    if (!externalMcpService) {
-      return builtin;
-    }
-    const externalTools: McpToolDefinition[] = [];
-    for (const serverId of externalMcpServerIds) {
-      try {
-        const tools = await externalMcpService.listTools(serverId);
-        for (const tool of tools) {
-          externalTools.push({
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema as McpToolParameterSchema
-          });
-        }
-      } catch {
-        // 跳过失败的 server
-      }
-    }
-    return [...builtin, ...externalTools];
-  }
-
   public getToolDefinitionsByNames(toolNames: string[]): McpToolDefinition[] {
     return toolNames
       .map((name) => this.toolsByName.get(name)?.definition)
@@ -838,21 +883,9 @@ export class McpToolService {
           { ...args, agentId, sessionId },
           services
         );
-        // 如果 handler 自身返回了 { success: false, error } 格式（如 dispatch_task 验证失败），
-        // 向外透传失败状态，不被外层 success: true 掩盖
-        if (
-          result !== null &&
-          typeof result === "object" &&
-          "success" in result &&
-          result.success === false
-        ) {
-          return {
-            success: false,
-            result: null,
-            error: "error" in result && typeof result.error === "string"
-              ? result.error
-              : "Tool handler returned failure."
-          };
+        // If handler returned an explicit success: false, propagate it
+        if (result && typeof result === "object" && "success" in result) {
+          return result as { success: boolean; result: unknown; error?: string };
         }
         return { success: true, result };
       } catch (error: unknown) {
@@ -1061,6 +1094,37 @@ function isPathInside(target: string, root: string): boolean {
     relative === "" ||
     (Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative))
   );
+}
+
+function resolveLoopMarshalCliPath(): string | null {
+  // 0. 优先使用环境变量指定的 CLI 路径
+  const envCliPath = process.env.LOOPMARSHAL_CLI_PATH;
+  if (envCliPath && existsSync(envCliPath)) {
+    return envCliPath;
+  }
+  // 1. Look relative to this compiled file (monorepo dev mode)
+  //    apps/core/dist/services/mcp-tool-service.js → ../../../apps/cli/dist/src/index.js
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, "..", "..", "..", "apps", "cli", "dist", "src", "index.js"),
+    path.resolve(here, "..", "..", "..", "..", "apps", "cli", "dist", "src", "index.js"),
+    // 2. Look in node_modules (published package mode)
+    path.resolve(here, "..", "..", "..", "..", "node_modules", "loopmarshal", "dist", "src", "index.js"),
+    // 3. Global install path (Windows)
+    path.resolve(process.env.APPDATA || "", "npm", "node_modules", "loopmarshal", "dist", "src", "index.js"),
+    // 4. Global install path (Unix)
+    path.resolve("/usr", "local", "lib", "node_modules", "loopmarshal", "dist", "src", "index.js"),
+    // 5. Windows global install (alternative)
+    path.resolve("C:", "Program Files", "nodejs", "node_modules", "loopmarshal", "dist", "src", "index.js"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 function runCommand(

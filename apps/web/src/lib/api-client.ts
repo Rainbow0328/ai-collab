@@ -19,7 +19,7 @@ let clientInstance: LoopMarshalClient | null = null;
 export const getApiClient = (baseUrl?: string): LoopMarshalClient => {
   if (!clientInstance) {
     clientInstance = createLoopMarshalClient({
-      baseUrl: baseUrl ?? (typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:42688"),
+      baseUrl: baseUrl ?? (typeof window !== "undefined" ? window.location.origin : `http://${import.meta.env.VITE_LOOPMARSHAL_HOST ?? "127.0.0.1"}:${import.meta.env.VITE_LOOPMARSHAL_PORT ?? "42688"}`),
     });
   }
   return clientInstance;
