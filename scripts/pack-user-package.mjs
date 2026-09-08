@@ -12,10 +12,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { cp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -84,171 +83,123 @@ const sanitizePackageJson = (pkg, overrides = {}) => {
 
 const packageNameToPathParts = (name) => name.split("/");
 
-const resolveInstalledPackage = async (packageName, issuerPackageJsonPath) => {
-  let searchDir = dirname(issuerPackageJsonPath);
-  while (searchDir !== dirname(searchDir)) {
-    const candidates = [
-      join(searchDir, "node_modules", ...packageNameToPathParts(packageName)),
-      ...(basename(searchDir) === "node_modules"
-        ? [join(searchDir, ...packageNameToPathParts(packageName))]
-        : [])
-    ];
-    for (const packageDir of candidates) {
-      const linkedPackageJsonPath = join(packageDir, "package.json");
-      if (!existsSync(linkedPackageJsonPath)) continue;
-      const resolvedPackageDir = await realpath(packageDir);
-      const packageJsonPath = join(resolvedPackageDir, "package.json");
-      const packageJson = await readJson(packageJsonPath);
-      if (packageJson.name === packageName) {
-        return {
-          name: packageName,
-          packageDir: resolvedPackageDir,
-          packageJson,
-          packageJsonPath
-        };
+const getInstalledPackageDir = (packageName) => {
+  return join(repoRoot, "node_modules", ...packageNameToPathParts(packageName));
+};
+
+const collectExternalDependencies = async () => {
+  const collected = new Set();
+  const visited = new Set();
+  const queue = [];
+
+  const enqueueDependencies = (pkg) => {
+    for (const dependencyName of Object.keys(pkg.dependencies ?? {})) {
+      if (!internalPackageNames.has(dependencyName)) {
+        queue.push(dependencyName);
       }
     }
-    searchDir = dirname(searchDir);
+  };
+
+  enqueueDependencies(await readJson(rootPackage.packageJsonPath));
+
+  for (const item of bundledPackages) {
+    enqueueDependencies(await readJson(item.packageJsonPath));
   }
 
-  const requireFromIssuer = createRequire(issuerPackageJsonPath);
-  let resolvedEntry;
-  try {
-    resolvedEntry = requireFromIssuer.resolve(packageName);
-  } catch {
-    throw new Error(
-      `Unable to resolve external dependency '${packageName}' from '${issuerPackageJsonPath}'.`
+  while (queue.length > 0) {
+    const dependencyName = queue.shift();
+
+    if (!dependencyName || visited.has(dependencyName)) {
+      continue;
+    }
+
+    visited.add(dependencyName);
+    collected.add(dependencyName);
+
+    const dependencyPackageJson = await readJson(
+      join(getInstalledPackageDir(dependencyName), "package.json")
     );
-  }
 
-  let currentDir = dirname(resolvedEntry);
-  while (currentDir !== dirname(currentDir)) {
-    const packageJsonPath = join(currentDir, "package.json");
-    if (existsSync(packageJsonPath)) {
-      const packageJson = await readJson(packageJsonPath);
-      if (packageJson.name === packageName) {
-        return { name: packageName, packageDir: currentDir, packageJson, packageJsonPath };
+    for (const childDependencyName of Object.keys(
+      dependencyPackageJson.dependencies ?? {}
+    )) {
+      if (!internalPackageNames.has(childDependencyName)) {
+        queue.push(childDependencyName);
       }
     }
-    currentDir = dirname(currentDir);
   }
-  throw new Error(
-    `Resolved '${packageName}' from '${issuerPackageJsonPath}', but could not locate its package.json.`
-  );
+
+  return [...collected].sort((left, right) => left.localeCompare(right));
 };
 
-const bundledExternalDependencyNames = new Set();
-const copiedExternalTargets = new Set();
-
-const copyExternalDependencyTree = async ({ packageName, issuerPackageJsonPath, targetIssuerDir }) => {
-  const dependency = await resolveInstalledPackage(packageName, issuerPackageJsonPath);
-  const targetDir = join(targetIssuerDir, "node_modules", ...packageNameToPathParts(packageName));
-  if (copiedExternalTargets.has(targetDir)) return;
-  copiedExternalTargets.add(targetDir);
-  bundledExternalDependencyNames.add(packageName);
-  await mkdir(dirname(targetDir), { recursive: true });
-  await cp(dependency.packageDir, targetDir, { recursive: true, dereference: true });
-  for (const childName of Object.keys(dependency.packageJson.dependencies ?? {})) {
-    if (internalPackageNames.has(childName)) continue;
-    await copyExternalDependencyTree({
-      packageName: childName,
-      issuerPackageJsonPath: dependency.packageJsonPath,
-      targetIssuerDir: targetDir
-    });
-  }
-};
-
-const copyExternalDependenciesForPackage = async ({ packageJson, packageJsonPath, targetPackageDir }) => {
-  for (const dependencyName of Object.keys(packageJson.dependencies ?? {})) {
-    if (internalPackageNames.has(dependencyName)) continue;
-    await copyExternalDependencyTree({
-      packageName: dependencyName,
-      issuerPackageJsonPath: packageJsonPath,
-      targetIssuerDir: targetPackageDir
-    });
-  }
-};
-
-const normalizeWorkspaceDependencies = (pkg, internalVersions) => {
-  const dependencies = { ...(pkg.dependencies ?? {}) };
-  for (const [name, version] of internalVersions) {
-    if (typeof dependencies[name] === "string" && dependencies[name].startsWith("workspace:")) {
-      dependencies[name] = version;
-    }
-  }
-  return { ...pkg, dependencies };
-};
-
-const copyPackage = async (
-  { packageJsonPath, distPath, name },
-  targetRoot,
-  internalVersions
-) => {
-  const sourcePackageJson = await readJson(packageJsonPath);
-  const packageJson = sanitizePackageJson(
-    normalizeWorkspaceDependencies(sourcePackageJson, internalVersions)
-  );
+const copyPackage = async ({ packageJsonPath, distPath, name }, targetRoot) => {
+  const packageJson = sanitizePackageJson(await readJson(packageJsonPath));
   const packageDir = join(targetRoot, "node_modules", ...name.split("/"));
 
   await mkdir(packageDir, { recursive: true });
   await writeJson(join(packageDir, "package.json"), packageJson);
   await cp(distPath, join(packageDir, "dist"), { recursive: true });
-  return { packageDir, packageJson: sourcePackageJson, packageJsonPath };
+};
+
+const copyExternalDependency = async (name, targetRoot) => {
+  const sourceDir = getInstalledPackageDir(name);
+  const targetDir = join(targetRoot, "node_modules", ...packageNameToPathParts(name));
+
+  await mkdir(dirname(targetDir), { recursive: true });
+  await cp(sourceDir, targetDir, { recursive: true, dereference: true });
 };
 
 const main = async () => {
   await rm(releaseRoot, { recursive: true, force: true });
   await mkdir(releaseRoot, { recursive: true });
-  const bundledSources = await Promise.all(
-    bundledPackages.map(async (item) => ({ item, packageJson: await readJson(item.packageJsonPath) }))
-  );
-  const internalVersions = new Map(
-    bundledSources.map(({ item, packageJson }) => [item.name, packageJson.version])
-  );
-  const sourceRootPackageJson = await readJson(rootPackage.packageJsonPath);
-  const rootExternalDependencies = Object.keys(sourceRootPackageJson.dependencies ?? {})
-    .filter((name) => !internalPackageNames.has(name));
+
+  const externalDependencies = await collectExternalDependencies();
+
   const rootPackageJson = sanitizePackageJson(
-    normalizeWorkspaceDependencies(sourceRootPackageJson, internalVersions),
+    await readJson(rootPackage.packageJsonPath),
     {
       bundledDependencies: [
         ...bundledPackages.map((item) => item.name),
-        ...rootExternalDependencies
+        ...externalDependencies
       ]
     }
   );
+
   await writeJson(join(releaseRoot, "package.json"), rootPackageJson);
   await cp(rootPackage.distPath, join(releaseRoot, "dist"), { recursive: true });
-  const bundledTargets = new Map();
-  for (const { item } of bundledSources) {
-    const copied = await copyPackage(item, releaseRoot, internalVersions);
-    bundledTargets.set(item.name, copied);
+
+  // Copy skills directory (used by start-agent for IDE skill injection)
+  const skillsSourcePath = join(repoRoot, "skills");
+  if (existsSync(skillsSourcePath)) {
+    await cp(skillsSourcePath, join(releaseRoot, "skills"), { recursive: true });
   }
+
+  for (const item of bundledPackages) {
+    await copyPackage(item, releaseRoot);
+  }
+
   if (existsSync(join(webDistPath, "index.html"))) {
-    await cp(webDistPath, join(releaseRoot, "node_modules", "@loopmarshal", "core", "web"), { recursive: true });
+    await cp(
+      webDistPath,
+      join(releaseRoot, "node_modules", "@loopmarshal", "core", "web"),
+      { recursive: true }
+    );
   }
-  await copyExternalDependenciesForPackage({
-    packageJson: sourceRootPackageJson,
-    packageJsonPath: rootPackage.packageJsonPath,
-    targetPackageDir: releaseRoot
-  });
-  for (const { item, packageJson } of bundledSources) {
-    await copyExternalDependenciesForPackage({
-      packageJson,
-      packageJsonPath: item.packageJsonPath,
-      targetPackageDir: bundledTargets.get(item.name).packageDir
-    });
+
+  for (const dependencyName of externalDependencies) {
+    await copyExternalDependency(dependencyName, releaseRoot);
   }
+
   process.stdout.write(
-    JSON.stringify(
+    `${JSON.stringify(
       {
         releaseRoot,
-        bundledExternalDependencies: [...bundledExternalDependencyNames].sort(),
+        bundledExternalDependencies: externalDependencies,
         nextCommand: "npm pack ./release/loopmarshal --json --cache .npm-cache"
       },
       null,
       2
-    ) + "\n"
+    )}\n`
   );
 };
 

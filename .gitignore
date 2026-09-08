@@ -18,10 +18,14 @@ coverage/
 *.sqlite-wal
 .loopmarshal/
 .loopmarshal-test
+
+# Docs (not for public repo)
+docs/
+loopmarshal-start.js
 .ai-collab/
 .ai-collab-test
 .idea
-/docs/
+
 .npm-cache/
 
 # Environment
@@ -30,8 +34,10 @@ coverage/
 
 # Logs
 log/
+apps/core/log/
+apps/web/log/
 
-# IDE
+# IDE config directories
 .vscode/
 .trae/
 .qoder/
@@ -49,17 +55,47 @@ log/
 .kilocode/
 .gemini/
 .catpaw/
+.mimo/
+.crusher/
+.lovable/
 
-# Data
+# IDE config files (root level)
+.cursorrules
+.windsurfrules
+.lovable
+.mcp.json
+AGENTS.md
+CLAUDE.md
+DEV.md
+
+# Runtime data
 .knowledge/
 release/
+skills-src/
 
 # Lockfile (project uses pnpm)
 package-lock.json
+apps/web/apps/
+
+# Build artifacts and debug output
+*.tsbuildinfo
+build-output.txt
+core-error.txt
+core-output.txt
 
 # Internal docs (not for public repo)
+*PROBLEM_ANALYSIS.md
+*REFACTOR_PLAN.md
+*REFACTOR_SUMMARY.md
+*SOLUTION_SUMMARY.md
+*PLAN.md
+*ANALYSIS.md
+apps/web/docs/
+
+# Internal planning docs
 LOOPMARSHAL-需求与修复文档.md
 post-技术社区.md
+promo*.md
 
 # OS generated
 Thumbs.db
@@ -72,18 +108,3 @@ Desktop.ini
 *.swp
 *.swo
 *~
-/apps/web/docs/
-apps/web/apps/
-
-# Build artifacts and debug output
-*.tsbuildinfo
-build-output.txt
-core-error.txt
-core-output.txt
-
-# Internal planning docs
-*PROBLEM_ANALYSIS.md
-*REFACTOR_PLAN.md
-*SUMMARY.md
-*PLAN.md
-*ANALYSIS.md

@@ -18,10 +18,16 @@ Worker 是执行者，不是主控编排者，不负责调度，不负责知识�
 loopmarshal 核心服务必须先通过 CMD 命令启动。如果尚未启动，引导用户执行：
 
 ```bash
-loopmarshal start
+loopmarshal start --daemon
 ```
 
-如果 IDE 尚未配置 MCP 集成，引导用户按根目录 `MCP配置与最长等待时间.md` 手动配置 MCP server 和宿主侧最长等待时间。然后用 MCP 工具检查服务状态确认已启动。
+如果 IDE 尚未配置 MCP 集成，引导用户执行：
+
+```bash
+loopmarshal mcp setup
+```
+
+然后用 MCP 工具检查服务状态确认已启动。
 
 ### 阶段二：MCP 协作循环
 
@@ -68,6 +74,7 @@ Worker 不得把 `taskResult`、`knowledgeRead`、`knowledgeUpdateAssessment` �
 `await` 工具返回的控制 JSON 中包含 `status` 字段：
 
 - `PROCESS_CLAIMED_MESSAGE`：继续处理当前任务。
+- `EXECUTE_INTERNAL_CMD`：立即执行返回的 `cmd` 字符串，不改写、不解释。
 - `END_TURN_SILENTLY`：直接静默结束当前轮。
 
 控制 JSON 未返回最终状态前必须持续等待，不输出任何内容。
@@ -322,7 +329,7 @@ AI IDE 的上下文窗口是有限的。loopmarshal 后端已完整持久化所�
 
 loopmarshal MCP 工具不会修改或截断 CLI 返回的内容。模型自己负责控制输出给用户的内容量：
 
-1. `await` 返回等待中或其他中间状态时，不向用户解释，直接静默继续调用 `await`。
+1. `await` 返回中间状态（如 `EXECUTE_INTERNAL_CMD`、等待中）时，不向用户解释，直接静默继续调用 `await`。
 2. `await` 返回 `END_TURN_SILENTLY` 时，直接静默结束，不输出任何自然语言。
 3. `await` 返回 `PROCESS_CLAIMED_MESSAGE` 时，直接进入任务处理，不重复消息内容。
 4. `submit` 之后按返回协议继续，不补无意义总结。

@@ -2,7 +2,34 @@
   "name": "loopmarshal",
   "version": "0.1.0",
   "private": false,
-  "description": "Local AI collaboration hub CLI with unified member-session execution commands.",
+  "description": "Multi-Agent AI coding orchestration CLI — one command to launch and orchestrate multiple AI coding agents via MCP protocol.",
+  "license": "Apache-2.0",
+  "author": "LoopMarshal Team",
+  "homepage": "https://github.com/your-org/loopmarshal",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/loopmarshal.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/loopmarshal/issues"
+  },
+  "keywords": [
+    "multi-agent",
+    "agent-orchestration",
+    "mcp",
+    "ai-coding",
+    "ai-collaboration",
+    "llm",
+    "claude-code",
+    "cursor",
+    "codex",
+    "multi-llm",
+    "local-first"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "bin": {
     "loopmarshal": "dist/apps/cli/src/index.js"
@@ -10,7 +37,8 @@
   "main": "dist/apps/cli/src/index.js",
   "types": "dist/apps/cli/src/index.d.ts",
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "skills/**/*"
   ],
   "bundledDependencies": [
     "@loopmarshal/core",
@@ -21,8 +49,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --dir src"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@loopmarshal/core": "workspace:*",
@@ -31,7 +58,5 @@
     "@loopmarshal/sdk": "workspace:*",
     "commander": "^13.1.0"
   },
-  "devDependencies": {
-    "vitest": "^4.1.5"
-  }
+  "skillsDir": "skills"
 }

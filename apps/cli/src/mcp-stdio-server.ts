@@ -8,6 +8,7 @@
 
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -89,6 +90,12 @@ const sendProgress = (
 // ---------------------------------------------------------------------------
 
 const getCliBinPath = (): string => {
+  // 1. 优先使用环境变量指定的 CLI 路径
+  const envCliPath = process.env.LOOPMARSHAL_CLI_PATH;
+  if (envCliPath && existsSync(envCliPath)) {
+    return envCliPath;
+  }
+  // 2. 从当前文件位置推导 CLI 入口（monorepo 开发模式）
   const here = dirname(fileURLToPath(import.meta.url));
   // dist/apps/cli/src/mcp-stdio-server.js → dist/apps/cli/src/index.js
   return join(here, "index.js");
@@ -97,9 +104,9 @@ const getCliBinPath = (): string => {
 const runCliCommand = (
   args: string[],
   options: {
-    progressToken?: string | number;
-    progressLabel?: string;
-    progressIntervalMs?: number;
+    progressToken?: string | number | undefined;
+    progressLabel?: string | undefined;
+    progressIntervalMs?: number | undefined;
   } = {}
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
   return new Promise((resolve, reject) => {
@@ -241,78 +248,6 @@ const parseCmdString = (cmd: string): string[] => {
   return tokens;
 };
 
-const normalizeInternalContinuationArgs = (cmd: string): string[] => {
-  const args = parseCmdString(cmd);
-  const command = args[0];
-
-  if (command !== "await") {
-    throw new Error(
-      `Refusing to execute unsupported internal continuation command: ${cmd}`
-    );
-  }
-
-  return args;
-};
-
-const runCliCommandFollowingInternalCommands = async (
-  initialArgs: string[],
-  options: {
-    progressToken?: string | number;
-    progressLabel?: string;
-    maxIterations?: number;
-  } = {}
-): Promise<unknown> => {
-  const maxIterations = options.maxIterations ?? 1000;
-  let currentArgs = initialArgs;
-  let iterations = 0;
-
-  let progressTimer: NodeJS.Timeout | null = null;
-  let totalElapsed = 0;
-  const progressIntervalMs = 30_000;
-
-  if (options.progressToken !== undefined) {
-    progressTimer = setInterval(() => {
-      totalElapsed += progressIntervalMs;
-      const seconds = Math.floor(totalElapsed / 1000);
-      sendProgress(
-        options.progressToken!,
-        `${options.progressLabel ?? "Waiting for next actionable item"} (${seconds}s)`,
-        totalElapsed,
-        undefined
-      );
-    }, progressIntervalMs);
-  }
-
-  try {
-    while (iterations < maxIterations) {
-      const result = await runCliCommand(currentArgs, {});
-
-      if (result.exitCode !== 0) {
-        const errorOutput = result.stderr.trim() || result.stdout.trim();
-        throw new Error(
-          `loopmarshal ${currentArgs.join(" ")} failed (exit ${result.exitCode}): ${errorOutput}`
-        );
-      }
-
-      const parsed = parseCliOutput(result.stdout);
-
-      if (isExecuteInternalCmd(parsed)) {
-        currentArgs = normalizeInternalContinuationArgs(parsed.cmd);
-        iterations++;
-        continue;
-      }
-
-      return parsed;
-    }
-
-    throw new Error(
-      `loopmarshal internal continuation exceeded maximum iterations (${maxIterations})`
-    );
-  } finally {
-    if (progressTimer) clearInterval(progressTimer);
-  }
-};
-
 /**
  * Run multiple CLI commands sequentially and return combined output.
  * Used by the `resume` tool to restore compact session context.
@@ -346,14 +281,14 @@ const str = (description: string) => ({
  * Tools that are only available to the host role.
  * Workers never see these in tools/list and cannot call them.
  */
-const HOST_ONLY_TOOLS = new Set(["dispatch_many", "resolve", "knowledge_upsert"]);
+const HOST_ONLY_TOOLS = new Set(["dispatch_many", "resolve", "knowledge_upsert", "start_worker"]);
 
 /**
  * Resolve the effective role for tool filtering.
  *
  * Priority:
  * 1. Runtime role set by `attach` call (dynamic — covers role changes across sessions)
- * 2. LOOPMARSHAL_ROLE env var (static — set by the user's MCP config)
+ * 2. LOOPMARSHAL_ROLE env var (static — set by mcp-setup for pre-connection isolation)
  * 3. undefined (no filtering — all tools exposed)
  */
 let runtimeRole: "host" | "worker" | undefined;
@@ -557,6 +492,33 @@ const tools: ToolDef[] = [
       },
       required: ["name", "session"]
     }
+  },
+  {
+    name: "start_worker",
+    description:
+      "Host only. Launch a new AI worker IDE and automatically join it to the current session. " +
+      "The worker inherits the current session name and working directory. " +
+      "Supported IDEs: claude, codex, cursor, trae, opencode, gemini, aider, windsurf, qoder, " +
+      "github, cline, crusher, lov, mimo. " +
+      "The worker will be started in the background and will attach to the session automatically.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ide: {
+          type: "string",
+          description: "AI tool/IDE to launch as worker: claude, codex, cursor, trae, opencode, gemini, aider, windsurf, qoder, github, cline, crusher, lov, mimo",
+          enum: ["claude", "codex", "cursor", "trae", "opencode", "gemini", "aider", "windsurf", "qoder", "github", "cline", "crusher", "lov", "mimo"]
+        },
+        duty: str("Stable long-term responsibility for this worker (e.g. 'frontend development', 'backend API', 'database layer')"),
+        name: str("Optional member name for the worker (defaults to <ide>-worker)"),
+        session: str("Session name (inherits current session if omitted)"),
+        timeout: {
+          type: "number",
+          description: "MCP tool timeout seconds (default 3600)"
+        }
+      },
+      required: ["ide", "duty"]
+    }
   }
 ];
 
@@ -641,6 +603,9 @@ const handleToolCall = async (
       case "status":
         // status is handled separately — it runs multiple CLI commands
         return [];
+      case "start_worker":
+        // start_worker is handled separately — it spawns start-agent directly
+        return [];
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }
@@ -700,14 +665,138 @@ const handleToolCall = async (
     return runMultiCliCommands(commands);
   }
 
+  // -----------------------------------------------------------------------
+  // start_worker: Host spawns a new AI worker and joins it to the session
+  // -----------------------------------------------------------------------
+  if (toolName === "start_worker") {
+    const ide = String(args.ide);
+    const duty = String(args.duty);
+    const workerName = (args.name as string) || `${ide}-worker`;
+    const sessionName = (args.session as string) || process.env.LOOPMARSHAL_SESSION || "";
+    const timeoutSeconds = (args.timeout as number) || 3600;
+
+    const cliArgs = [
+      "start-agent",
+      ide,
+      "--role", "worker",
+      "--duty", duty,
+      "--name", workerName,
+      "--timeout", String(timeoutSeconds)
+    ];
+
+    if (sessionName) {
+      cliArgs.push("--session", sessionName);
+    }
+
+    const result = await runCliCommand(cliArgs, {
+      progressToken,
+      progressLabel: `Starting ${ide} worker`,
+      progressIntervalMs: 10_000
+    });
+
+    if (result.exitCode !== 0) {
+      const errorOutput = result.stderr.trim() || result.stdout.trim();
+      throw new Error(
+        `Failed to start ${ide} worker (exit ${result.exitCode}): ${errorOutput}`
+      );
+    }
+
+    const parsed = parseCliOutput(result.stdout);
+    return {
+      status: "worker_started",
+      ide,
+      duty,
+      workerName,
+      sessionName: sessionName || undefined,
+      details: parsed
+    };
+  }
+
   const cliArgs = buildArgs();
-  return runCliCommandFollowingInternalCommands(cliArgs, {
-    ...(progressToken !== undefined ? { progressToken } : {}),
-    progressLabel:
-      toolName === "await"
-        ? "Waiting for next actionable item"
-        : "Continuing collaboration workflow"
-  });
+  const isLongRunning = toolName === "await";
+
+  // -----------------------------------------------------------------------
+  // await: long-running loop with internal EXECUTE_INTERNAL_CMD handling
+  // -----------------------------------------------------------------------
+  //
+  // The CLI `await` command uses a wait-slice mechanism: each invocation
+  // waits for a short period, then either:
+  //   - Returns a final result (PROCESS_CLAIMED_MESSAGE, END_TURN_SILENTLY, etc.)
+  //   - Returns EXECUTE_INTERNAL_CMD with a `cmd` to continue waiting
+  //
+  // In CLI mode, the AI model reads the cmd and re-executes it in a terminal.
+  // In MCP mode, the server must handle this loop internally — re-running
+  // the continuation command and only returning the final result to the
+  // model. Progress notifications are sent every 30s across all iterations.
+
+  if (isLongRunning) {
+    const MAX_ITERATIONS = 1000; // safety limit
+    let currentArgs = cliArgs;
+    let iterations = 0;
+
+    // External progress timer — runs continuously across all wait slices
+    let progressTimer: NodeJS.Timeout | null = null;
+    let totalElapsed = 0;
+    const progressIntervalMs = 30_000;
+
+    if (progressToken !== undefined) {
+      progressTimer = setInterval(() => {
+        totalElapsed += progressIntervalMs;
+        const seconds = Math.floor(totalElapsed / 1000);
+        sendProgress(
+          progressToken,
+          `Waiting for next actionable item (${seconds}s)`,
+          totalElapsed,
+          undefined
+        );
+      }, progressIntervalMs);
+    }
+
+    try {
+      while (iterations < MAX_ITERATIONS) {
+        // Run CLI without internal progress — progress is managed externally
+        const result = await runCliCommand(currentArgs, {});
+
+        if (result.exitCode !== 0) {
+          const errorOutput = result.stderr.trim() || result.stdout.trim();
+          throw new Error(
+            `loopmarshal ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`
+          );
+        }
+
+        const parsed = parseCliOutput(result.stdout);
+
+        // If the CLI returned a continue command, extract the args and loop
+        if (isExecuteInternalCmd(parsed)) {
+          currentArgs = parseCmdString(parsed.cmd);
+          iterations++;
+          continue;
+        }
+
+        // Final result — return to the model
+        return parsed;
+      }
+
+      throw new Error(
+        `loopmarshal await exceeded maximum continuation iterations (${MAX_ITERATIONS})`
+      );
+    } finally {
+      if (progressTimer) clearInterval(progressTimer);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Non-await tools: single CLI call
+  // -----------------------------------------------------------------------
+
+  const result = await runCliCommand(cliArgs, {});
+
+  if (result.exitCode !== 0) {
+    const errorOutput = result.stderr.trim() || result.stdout.trim();
+    throw new Error(`loopmarshal ${toolName} failed (exit ${result.exitCode}): ${errorOutput}`);
+  }
+
+  return parseCliOutput(result.stdout);
 };
 
 // ---------------------------------------------------------------------------
@@ -816,9 +905,10 @@ const handleMessage = async (message: JsonRpcRequest): Promise<void> => {
 // Core service health check and lifecycle binding
 // ---------------------------------------------------------------------------
 
-const CORE_HOST = "127.0.0.1";
-const CORE_PORT = 42688;
+const CORE_HOST = process.env.LOOPMARSHAL_HOST ?? "127.0.0.1";
+const CORE_PORT = Number(process.env.LOOPMARSHAL_PORT ?? "42688");
 const CORE_BASE_URL = `http://${CORE_HOST}:${CORE_PORT}`;
+
 const HEALTH_CHECK_TIMEOUT_MS = 3_000;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
@@ -927,7 +1017,7 @@ const main = async (): Promise<void> => {
   const coreHealthy = await checkCoreHealth();
   if (!coreHealthy) {
     process.stderr.write(
-      "loopmarshal core service is not running. Start it with `loopmarshal start` first.\n"
+      "loopmarshal core service is not running. Start it with `loopmarshal start --daemon` first.\n"
     );
     process.exit(1);
   }

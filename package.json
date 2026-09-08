@@ -2,7 +2,36 @@
   "name": "loopmarshal",
   "version": "0.1.0",
   "private": true,
-  "description": "Local AI collaboration hub with TypeScript core and unified CLI collaboration flow.",
+  "description": "Multi-Agent AI coding orchestration framework — one command to orchestrate multiple AI coding agents via MCP protocol.",
+  "license": "Apache-2.0",
+  "author": "LoopMarshal Team",
+  "homepage": "https://github.com/your-org/loopmarshal",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/loopmarshal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/loopmarshal/issues"
+  },
+  "keywords": [
+    "multi-agent",
+    "agent-orchestration",
+    "mcp",
+    "ai-coding",
+    "ai-collaboration",
+    "llm",
+    "claude-code",
+    "cursor",
+    "codex",
+    "multi-llm",
+    "agent-to-agent",
+    "local-first",
+    "knowledge-base",
+    "ai-workflow"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "packageManager": "pnpm@10.10.0",
   "workspaces": [
     "apps/*",
@@ -19,6 +48,10 @@
     "typescript": "^5.9.2"
   },
   "scripts": {
+    "start": "node loopmarshal-start.js",
+    "dev": "node loopmarshal-start.js",
+    "start:web": "cd apps/web && pnpm dev",
+    "start:core": "cd apps/core && node dist/apps/core/src/index.js",
     "build": "npm run build --workspaces --if-present",
     "clean": "node -e \"const{rmSync}=require('fs');for(const p of['apps/cli/dist','apps/core/dist','packages/protocol/dist','packages/shared/dist','packages/sdk/dist','packages/store/dist']){try{rmSync(p,{recursive:true,force:true})}catch{}}\"",
     "link:cli": "npm run build && npm link --workspace apps/cli",

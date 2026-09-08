@@ -37,9 +37,10 @@ export type CoreStatus =
       reachable: boolean;
     };
 
-const defaultHost = "127.0.0.1";
-const defaultPort = 42688;
+export const defaultHost = process.env.LOOPMARSHAL_HOST ?? "127.0.0.1";
+export const defaultPort = Number(process.env.LOOPMARSHAL_PORT ?? "42688");
 const windowsPowerShellPath =
+  process.env.LOOPMARSHAL_POWERSHELL_PATH ??
   "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
 
 export const getDashboardUrl = (metadata?: RuntimeMetadata | null): string => {
@@ -211,7 +212,7 @@ export const runCoreForeground = async (
 
   const running = await isCoreReachable();
   if (running) {
-    throw new Error("loopmarshal core is already running on 127.0.0.1:42688.");
+    throw new Error(`loopmarshal core is already running on ${defaultHost}:${defaultPort}.`);
   }
 
   // Spawn the web dev server (vite) if a web directory is provided.

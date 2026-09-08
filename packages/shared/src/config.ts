@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 export type CoreConfig = {
   host: string;
   port: number;
@@ -33,11 +36,24 @@ export type AppConfig = {
   logging: LoggingConfig;
 };
 
+// 数据库固定存放在用户目录下，所有项目共享同一个数据库
+// Windows: %LOCALAPPDATA%\loopmarshal\loopmarshal.sqlite
+// macOS/Linux: ~/.local/share/loopmarshal/loopmarshal.sqlite
+const getUserDataDir = (): string => {
+  if (process.platform === "win32") {
+    return join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "loopmarshal");
+  }
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support", "loopmarshal");
+  }
+  return join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "loopmarshal");
+};
+
 export const defaultConfig: AppConfig = {
   core: {
-    host: "127.0.0.1",
-    port: 42688,
-    databasePath: ".loopmarshal/loopmarshal.sqlite"
+    host: process.env.LOOPMARSHAL_HOST ?? "127.0.0.1",
+    port: Number(process.env.LOOPMARSHAL_PORT ?? "42688"),
+    databasePath: process.env.LOOPMARSHAL_DATABASE_PATH ?? join(getUserDataDir(), "loopmarshal.sqlite")
   },
   websocket: {
     enabled: false,
